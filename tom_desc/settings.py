@@ -34,6 +34,7 @@ ALLOWED_HOSTS = []
 # Application definition
 
 INSTALLED_APPS = [
+    'whitenoise.runserver_nostatic',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -106,8 +107,8 @@ DATABASES = {
         'NAME': os.getenv('DB_NAME', 'tom_desc'),
         'USER': os.getenv('DB_USER', 'postgres'),
         'PASSWORD': os.getenv('DB_PASS', ''),
-        # 'HOST': os.getenv('DB_HOST', 'tom-desc-postgres'),
-        'HOST': os.getenv('DB_HOST', 'localhost'),
+        'HOST': os.getenv('DB_HOST', 'tom-desc-postgres'),
+        # 'HOST': os.getenv('DB_HOST', 'localhost'),
         'PORT': os.getenv('DB_PORT', '5432'),
     }
 }
