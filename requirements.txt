@@ -7,3 +7,5 @@ tom-superevents>=0.1
 django-webpack-loader==0.6.0
 tomtoolkit>=2.6.5
 whitenoise~=5.2
+tom-antares
+tom-fink
