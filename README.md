@@ -1,10 +1,14 @@
 ## Local setup
 
+The toolkit github repository is at https://github.com/LSSTDESC/tom_desc
+
 TOM Postgres recommends the use of a virutal environment.
 
-Download the TOM Toolkit and enter that directory
+TOM Toolkit and enter that directory
 
+```bash
 pip install -r requirements.txt
+```
 
 ## Local Database Server
 export DB_HOST=127.0.0.1
@@ -19,14 +23,20 @@ exit                                         # leave the container, back to your
 
 If creating the database for the first time
 
+```bash
+# make sure you are in your virtual environment, then
 ./manage.py migrate           # create the tables
 ./manage.py collectstatic     # gather up the static files for serving
+```
 
 ## Local Docker Recipe
 
+```bash
 docker build -t tom-desc .
+```
 
 ## Send to NERSC
-
+```bash
 docker tag tom-desc registry.nersc.gov/m1727/tom-desc-app
 docker push registry.nersc.gov/m1727/tom-desc-app
+```
