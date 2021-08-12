@@ -11,8 +11,10 @@ pip install -r requirements.txt
 ```
 
 ## Local Database Server
-export DB_HOST=127.0.0.1
 
+Getting a dockerized  database up and running is a pre-requisite to all of the local development methods. Here's how:
+```bash
+export DB_HOST=127.0.0.1
 
 docker run --name tom-desc-postgres -v /var/lib/postgresql/data -p 5432:5432 -d postgres:11.1
 
@@ -20,14 +22,16 @@ docker exec -it tom-desc-postgres /bin/bash  # start a shell inside the postgres
 
 createdb -U postgres tom_desc                # create the tom_demo database
 exit                                         # leave the container, back to your shell
+```
 
-If creating the database for the first time
-
+If this is your first time creating the `tom_demo` database, you must create the tables and put
+some data in the database that you just created.
 ```bash
 # make sure you are in your virtual environment, then
 ./manage.py migrate           # create the tables
 ./manage.py collectstatic     # gather up the static files for serving
 ```
+#
 
 ## Local Docker Recipe
 
