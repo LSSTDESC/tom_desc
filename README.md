@@ -55,6 +55,7 @@ Now that you have a database server up and running on your local machine, consid
 
 ### Alternative 2: Running `tom-desc` dockerized, via `docker run`
 <details>
+
 ```bash
 docker build -t tom-desc .
 ```
