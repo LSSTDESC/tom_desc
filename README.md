@@ -1,6 +1,6 @@
 ## Local setup
 
-The toolkit github repository is at https://github.com/LSSTDESC/tom_desc
+The toolkit github repository is at https://github.com/LSSTDESC/tom_desc.
 
 TOM Postgres recommends the use of a virutal environment.
 
@@ -24,7 +24,7 @@ createdb -U postgres tom_desc                # create the tom_demo database
 exit                                         # leave the container, back to your shell
 ```
 
-If this is your first time creating the `tom_demo` database, you must create the tables and put
+If this is your first time creating the `tom_desc` database, you must create the tables and put
 some data in the database that you just created.
 ```bash
 # make sure you are in your virtual environment, then
@@ -33,11 +33,39 @@ some data in the database that you just created.
 ```
 #
 
-## Local Docker Recipe
+Now that you have a database server up and running on your local machine, consider these alternatives for local development your TOM:
 
+### Aternative 1: Running `tom-desc` in your virtual environment, via `./manage.py runserver`
+<details>
+<summary>Click to expand.</summary>
+
+```bash
+./manage.py runserver &
+# see the output "Starting development server at <URL>" for where to point your browser.
+```
+</details>
+
+### Alternative 2: Running `tom-desc` dockerized, via `docker run`
+<details>
 ```bash
 docker build -t tom-desc .
 ```
+
+According to TOM instructions this works but it didn't on my Mac.
+```bash
+docker build -t tom-desc .                     # build a docker image of your current sandbox
+docker run --network="host" tom-desc &
+# point your browser at localhost 
+```
+
+To get it working on my Mac I had to do the following
+```bast
+docker network create tom-net
+docker network connect tom-net tom-desc-postgres
+docker run -p 8080:8080 --network=tom-net tom-desc &
+# point your browser at localhost:8080
+```
+</details>
 
 ## Send to NERSC
 ```bash
