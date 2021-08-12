@@ -1,10 +1,18 @@
-## Local setup
+## Installing the TOM Toolkit locally
 
-The toolkit github repository is at https://github.com/LSSTDESC/tom_desc.
+The toolkit github repository is at https://github.com/LSSTDESC/tom_desc.  Install it locally.
 
-TOM Postgres recommends the use of a virutal environment.
+The use of a virutal environment is recommended.
 
-TOM Toolkit and enter that directory
+```bash
+python3 -m venv tom_env/
+```
+Now that we have created the virtual environment, we can activate it:
+```bash
+source tom_env/bin/activate
+```
+
+Install the requisite packages into the virtual environment
 
 ```bash
 pip install -r requirements.txt
@@ -38,7 +46,6 @@ Now that you have a database server up and running on your local machine, consid
 
 ### Aternative 1: Running `tom-desc` in your virtual environment, via `./manage.py runserver`
 <details>
-<summary>Click to expand.</summary>
 
 ```bash
 ./manage.py runserver &
@@ -60,7 +67,7 @@ docker run --network="host" tom-desc &
 ```
 
 To get it working on my Mac I had to do the following
-```bast
+```bash
 docker network create tom-net
 docker network connect tom-net tom-desc-postgres
 docker run -p 8080:8080 --network=tom-net tom-desc &
