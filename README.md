@@ -33,6 +33,7 @@ some data in the database that you just created.
 ```
 #
 
+## Running the TOM
 Now that you have a database server up and running on your local machine, consider these alternatives for local development your TOM:
 
 ### Aternative 1: Running `tom-desc` in your virtual environment, via `./manage.py runserver`
