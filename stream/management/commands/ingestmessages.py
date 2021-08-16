@@ -68,10 +68,19 @@ class Command(BaseCommand):
 
                     topic_name = metadata.topic
                     topic, _ = Topic.objects.get_or_create(name=topic_name)
+                    alert = Alert.objects.create(topic=topic, parsed_message=kafka_message.asdict())
 
-                    print(kafka_message, metadata.topic)
+                    # alert = Alert.objects.create(topic=topic, raw_message=message)
+                    # for parser_class in get_parser_classes(topic.name):
+                    #     with transaction.atomic():
+                    #         # Get the parser class, instantiate it, parse the alert, and save it
+                    #         parser = parser_class(alert)
+                    #         alert.parsed = parser.parse()
+                    #         if alert.parsed is True:
+                    #             alert.save()
+                    #             break
 
-                    23r23r
+                    # print(kafka_message, metadata.topic)
 
 
             # kafka_message = self.consumer.poll(HOPSKOTCH_CONSUMER_POLLING_TIMEOUT)
