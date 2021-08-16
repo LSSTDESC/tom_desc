@@ -10,6 +10,9 @@ __pycache__/
 helm-chart/charts/
 *secrets*.yaml
 
+
+.DS_Store
+
 # Distribution / packaging
 .Python
 build/
@@ -60,6 +63,7 @@ coverage.xml
 local_settings.py
 db.sqlite3
 _static/
+static/
 
 # DB dumps
 *.pg_dump
@@ -98,6 +102,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+tom_env/
 
 # Spyder project settings
 .spyderproject

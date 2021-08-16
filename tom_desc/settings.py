@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'django.contrib.sites',
+    'django.contrib.postgres',
     'django_extensions',
     'guardian',
     'tom_common',
@@ -56,6 +57,7 @@ INSTALLED_APPS = [
     'tom_catalogs',
     'tom_observations',
     'tom_dataproducts',
+    'stream.apps.StreamConfig',
 ]
 
 SITE_ID = 1
@@ -103,7 +105,8 @@ DATABASES = {
     'default': {
        # 'ENGINE': 'django.db.backends.sqlite3',
        # 'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
-        'ENGINE': os.getenv('DB_ENGINE', 'django.db.backends.postgresql'),
+        'ENGINE': os.getenv('DB_ENGINE', 'django.contrib.gis.db.backends.postgis'),
+        # 'ENGINE': os.getenv('DB_ENGINE', 'django.db.backends.postgresql'),
         'NAME': os.getenv('DB_NAME', 'tom_desc'),
         'USER': os.getenv('DB_USER', 'postgres'),
         'PASSWORD': os.getenv('DB_PASS', ''),
@@ -183,6 +186,47 @@ LOGGING = {
         }
     }
 }
+
+# Hopskotch Consumer Configuration
+
+HOPSKOTCH_SERVER = os.getenv('HOPSKOTCH_SERVER', 'dev.hop.scimma.org')
+HOPSKOTCH_PORT = os.getenv('HOPSKOTCH_PORT', '9092')
+HOPSKOTCH_CONSUMER_POLLING_TIMEOUT = 10
+
+HOPSKOTCH_CONSUMER_CONFIGURATION = {
+    'bootstrap.servers': f'{HOPSKOTCH_SERVER}:{HOPSKOTCH_PORT}',
+    'group.id': os.getenv('HOPSKOTCH_GROUP', 'skip-test'),
+    'auto.offset.reset': 'latest',
+    'security.protocol': 'sasl_ssl',
+    'sasl.mechanism': 'SCRAM-SHA-512',
+    'sasl.username': os.getenv('HOPSKOTCH_USER',''),
+    'sasl.password': os.getenv('HOPSKOTCH_PASSWORD', ''),
+
+    # system dependency: ssl.ca.location may need to be set
+    # this does not seem to be necessary on Ubuntu. However,
+    # for example on centos7: 'ssl.ca.location': '/etc/ssl/certs/ca-bundle.crt',
+}
+
+HOPSKOTCH_TOPICS = [
+    'gcn',
+    'gcn-circular',
+    'sys-heartbeat',
+#    'lvc.gcn-test',
+#    'lvc.gcn-circular-test',
+#    'lvc.lvc-counterpart',
+#    'TOMToolkit.test'
+]
+
+HOPSKOTCH_PARSERS = {
+    'gcn': ['tom_desc.parsers.gcn_lvc_notice_plaintext_parser.GCNLVCNoticeParser'],
+    'gcn-circular': ['tom_desc.parsers.gcn_circular_parser.GCNCircularParser'],
+#    'lvc.gcn-test': ['tom_desc.parsers.gcn_lvc_notice_plaintext_parser.GCNLVCNoticeParser'],
+#    'lvc.gcn-circular-test': ['tom_desc.parsers.gcn_circular_parser.GCNCircularParser'],
+#    'lvc.lvc-counterpart': ['tom_desc.parsers.gcn_lvc_counterpart_notice_parser.GCNLVCCounterpartNoticeParser'],
+    # 'tomtoolkit-test': ['tom_desc.parsers.tomtoolkit_parser.TOMToolkitParser'],
+    'default': ['tom_desc.parsers.base_parser.DefaultParser']
+}
+
 
 # Caching
 # https://docs.djangoproject.com/en/dev/topics/cache/#filesystem-caching
