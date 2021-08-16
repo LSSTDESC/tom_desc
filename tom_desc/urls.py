@@ -17,6 +17,7 @@ from django.contrib.staticfiles.urls import staticfiles_urlpatterns
 
 urlpatterns = [
     path('', include('tom_common.urls')),
+    path('stream/', include('stream.urls')),
 ]
 
 # this is to serve static file from a debug Dockerfile environment (with collectstatic)

@@ -1,7 +1,7 @@
 from astropy.coordinates import Angle
 from astropy import units
 
-from skip.models import Alert, Topic
+from stream.models import Alert, Topic
 from rest_framework import serializers
 
 

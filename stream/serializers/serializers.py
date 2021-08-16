@@ -1,7 +1,7 @@
 from astropy.coordinates import Angle
 from astropy import units
 
-from skip.models import Alert, Event, EventAttributes, Target, Topic
+from stream.models import Alert, Event, EventAttributes, Target, Topic
 from rest_framework import serializers
 
 
@@ -73,7 +73,7 @@ class EventAttributesSerializer(serializers.ModelSerializer):
 
 class EventSerializer(serializers.HyperlinkedModelSerializer):
     event_attributes = serializers.SerializerMethodField()
-    event_detail = serializers.HyperlinkedIdentityField(view_name='skip:event-detail', read_only=True)
+    event_detail = serializers.HyperlinkedIdentityField(view_name='stream:event-detail', read_only=True)
 
     class Meta:
         model = Event

@@ -71,6 +71,8 @@ class Command(BaseCommand):
 
                     print(kafka_message, metadata.topic)
 
+                    23r23r
+
 
             # kafka_message = self.consumer.poll(HOPSKOTCH_CONSUMER_POLLING_TIMEOUT)
             # if kafka_message is None:
