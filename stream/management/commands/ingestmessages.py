@@ -7,6 +7,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.db import transaction
 from hop import Stream
+from hop.auth import Auth
 from hop.io import StartPosition
 
 
@@ -51,12 +52,14 @@ class Command(BaseCommand):
 
         # self.consumer.subscribe(HOPSKOTCH_TOPICS)
 
+        auth = Auth(settings.HOPSKOTCH_CONSUMER_CONFIGURATION['sasl.username'], settings.HOPSKOTCH_CONSUMER_CONFIGURATION['sasl.password'])
+
         while True:
             # logger.info(
             #     f'Polling topics {HOPSKOTCH_TOPICS} with timeout of {HOPSKOTCH_CONSUMER_POLLING_TIMEOUT} seconds'
             # )
 
-            with Stream(persist=True,start_at=StartPosition.EARLIEST).open("kafka://kafka.scimma.org/gcn.circular", "r") as src:
+            with Stream(persist=True,start_at=StartPosition.EARLIEST,auth=auth).open("kafka://kafka.scimma.org/gcn.circular", "r") as src:
                 for kafka_message, metadata in src.read(metadata=True):
 
                     if kafka_message is None:

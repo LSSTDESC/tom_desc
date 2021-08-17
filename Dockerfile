@@ -5,6 +5,9 @@ WORKDIR /tom_desc
 
 COPY requirements.txt .
 
+RUN apt-get update &&\
+   apt-get install -y gdal-bin
+
 RUN pip install \
 	--no-cache \
 	--disable-pip-version-check \
@@ -17,3 +20,6 @@ ENTRYPOINT [ "/usr/local/bin/gunicorn", "tom_desc.wsgi", "-b", "0.0.0.0:8080", "
 
 RUN mkdir -p /.astropy
 RUN chmod -R 777 /.astropy
+
+# RUN mkdir -p /.config/hop
+# RUN chmod -R 777 /.config/hop
