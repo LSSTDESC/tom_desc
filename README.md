@@ -23,6 +23,7 @@ pip install -r requirements.txt
 Getting a dockerized  database up and running is a pre-requisite to all of the local development methods. Here's how:
 ```bash
 export DB_HOST=127.0.0.1
+export DB_PASS=<password>
 
 docker run --name tom-desc-postgres -v /var/lib/postgresql/data -p 5432:5432 -e POSTGRES_PASSWORD=<password> -d postgis/postgis:11-2.5-alpine
 
