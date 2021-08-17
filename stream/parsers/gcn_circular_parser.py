@@ -3,8 +3,8 @@ import re
 
 from dateutil.parser import parse, parserinfo
 
-from skip.models import Event
-from skip.parsers.base_parser import BaseParser
+from stream.models import Event
+from stream.parsers.base_parser import BaseParser
 
 
 logger = logging.getLogger(__name__)

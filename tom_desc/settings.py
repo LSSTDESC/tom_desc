@@ -218,13 +218,13 @@ HOPSKOTCH_TOPICS = [
 ]
 
 HOPSKOTCH_PARSERS = {
-    'gcn': ['tom_desc.parsers.gcn_lvc_notice_plaintext_parser.GCNLVCNoticeParser'],
-    'gcn-circular': ['tom_desc.parsers.gcn_circular_parser.GCNCircularParser'],
-#    'lvc.gcn-test': ['tom_desc.parsers.gcn_lvc_notice_plaintext_parser.GCNLVCNoticeParser'],
-#    'lvc.gcn-circular-test': ['tom_desc.parsers.gcn_circular_parser.GCNCircularParser'],
-#    'lvc.lvc-counterpart': ['tom_desc.parsers.gcn_lvc_counterpart_notice_parser.GCNLVCCounterpartNoticeParser'],
-    # 'tomtoolkit-test': ['tom_desc.parsers.tomtoolkit_parser.TOMToolkitParser'],
-    'default': ['tom_desc.parsers.base_parser.DefaultParser']
+    'gcn': ['stream.parsers.gcn_lvc_notice_plaintext_parser.GCNLVCNoticeParser'],
+    'gcn.circular': ['stream.parsers.gcn_circular_parser.GCNCircularParser'],
+#    'lvc.gcn-test': ['stream.parsers.gcn_lvc_notice_plaintext_parser.GCNLVCNoticeParser'],
+#    'lvc.gcn-circular-test': ['stream.parsers.gcn_circular_parser.GCNCircularParser'],
+#    'lvc.lvc-counterpart': ['stream.parsers.gcn_lvc_counterpart_notice_parser.GCNLVCCounterpartNoticeParser'],
+    # 'tomtoolkit-test': ['stream.parsers.tomtoolkit_parser.TOMToolkitParser'],
+    'default': ['stream.parsers.base_parser.DefaultParser']
 }
 
 
