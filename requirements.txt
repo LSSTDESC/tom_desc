@@ -10,3 +10,5 @@ tomtoolkit>=2.6.5
 whitenoise~=5.2
 tom-antares
 tom-fink
+antares-client==1.1
+fink-client~=2.0

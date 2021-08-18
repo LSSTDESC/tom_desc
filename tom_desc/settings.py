@@ -227,6 +227,19 @@ HOPSKOTCH_PARSERS = {
     'default': ['stream.parsers.base_parser.DefaultParser']
 }
 
+ANTARES_CONSUMER_CONFIGURATION = {
+    'key': os.getenv('ANTARES_KEY',''),
+    'secret': os.getenv('ANTARES_SECRET', ''),
+}
+
+
+FINK_CONSUMER_CONFIGURATION = {
+    'sasl.username': os.getenv('FINK_USERNAME',''),
+    'sasl.password': os.getenv('FINK_PASSWORD', ''),
+    'group_id': os.getenv('FINK_GROUP_ID', ''),
+    'bootstrap.servers': os.getenv('FINK_SERVER', ''),
+    }
+
 
 # Caching
 # https://docs.djangoproject.com/en/dev/topics/cache/#filesystem-caching
