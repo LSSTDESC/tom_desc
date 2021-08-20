@@ -41,9 +41,9 @@ FINK_TOPIC
 
 ## Local Database Server
 
-Getting a dockerized  database up and running is a pre-requisite to all of the local development methods. Here's how:
+Getting a dockerized  database up and running is a required. Here's how:
 ```bash
-docker run --name tom-desc-postgres -v /var/lib/postgresql/data -p 5432:5432 -e POSTGRES_PASSWORD=<password> -d postgis/postgis:11-2.5-alpine
+docker run --name tom-desc-postgres -v /var/lib/postgresql/data -p 5432:5432 -e POSTGRES_PASSWORD=<PG_PASS> -d postgis/postgis:11-2.5-alpine
 
 docker exec -it tom-desc-postgres /bin/bash  # start a shell inside the postgres container
 
