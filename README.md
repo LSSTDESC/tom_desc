@@ -17,6 +17,26 @@ Install the requisite packages into the virtual environment
 ```bash
 pip install -r requirements.txt
 ```
+## Local deployment environment variables
+
+Authentication is handled by environment variables.  These are read in by
+`tom_desc/settings.py`.  The variable that can be set are
+
+```
+ANTARES_KEY
+ANTARES_SECRET
+
+HOPSKOTCH_USER
+HOPSKOTCH_PASSWORD
+
+FINK_USERNAME
+FINK_GROUP_ID
+FINK_SERVER
+FINK_TOPIC
+
+DB_PASS
+DB_HOST=localhost
+```
 
 ## Local Database Server
 
