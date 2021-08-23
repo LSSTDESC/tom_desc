@@ -1,9 +1,11 @@
 #!/bin/bash
 TOMBASE=tom_desc
-TOMBASEFOLDER=/home/cohen/lsst/alerts/
+TOMBASEFOLDER=<dir where the tom_desc dir repo is located>
 NIGHT=`date +"%Y%m%d"`
 
+#this assumes that the tom_desc has been installed in a python venv
 source ${TOMBASEFOLDER}/tom_env/bin/activate
+
 export DB_HOST=<see tom settings.py>
 export DB_PASS=<this needs to be set in the postgres config of the running machine>
 export DJANGO_SECRET_KEY=<this cannot be empty; generate a random one with an online django key generator>
