@@ -16,6 +16,7 @@ from stream.models import Alert, Topic
 logger = logging.getLogger(__name__)
 
 FINK_CONSUMER_CONFIGURATION = settings.FINK_CONSUMER_CONFIGURATION
+FINK_TOPICS = settings.FINK_TOPICS
 # HOPSKOTCH_PARSERS = settings.HOPSKOTCH_PARSERS
 
 
@@ -52,11 +53,20 @@ class Command(BaseCommand):
         while True:
 
             # Instantiate a consumer
-            consumer = AlertConsumer(["fink_early_sn_candidates_ztf"], FINK_CONSUMER_CONFIGURATION)
+            consumer = AlertConsumer(FINK_TOPICS, FINK_CONSUMER_CONFIGURATION)
 
             # Poll the servers
-            topic, alert, key = consumer.poll(maxtimeout)
-            print(topic,alert,key)
+            finktopic, finkalert, key = consumer.poll(maxtimeout)
+            for key in finkalert.keys():
+                print(key,type(finkalert[key]))
+                if type(finkalert[key]) is dict:
+                    for key2 in finkalert[key].keys():
+                        print(key, key2, type(finkalert[key][key2]))
+            wef
+
+            topic, _ = Topic.objects.get_or_create(name=finktopic)
+
+            alert = Alert.objects.create(topic=topic, raw_message=finkalert)
             wef
 
 
