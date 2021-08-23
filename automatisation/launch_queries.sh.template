@@ -4,9 +4,9 @@ TOMBASEFOLDER=/home/cohen/lsst/alerts/
 NIGHT=`date +"%Y%m%d"`
 
 source ${TOMBASEFOLDER}/tom_env/bin/activate
-export DB_HOST=localhost
-export DB_PASS=postgres
-
+export DB_HOST=<see tom settings.py>
+export DB_PASS=<this needs to be set in the postgres config of the running machine>
+export DJANGO_SECRET_KEY=<this cannot be empty; generate a random one with an online django key generator>
 cd $TOMBASEFOLDER/${TOMBASE}
 
 # Fink
@@ -17,7 +17,7 @@ python manage.py run_broker_query $QUERYNAME $LISTNAME
 
 QUERYNAME=pseudo_sn
 LISTNAME=antares_${QUERYNAME}_${NIGHT}
-python $TOMBASEFOLDER/manage.py run_broker_query $QUERYNAME $LISTNAME
+python $TOMBASEFOLDER/${TOMBASE}/manage.py run_broker_query $QUERYNAME $LISTNAME
 
 # Add more queries here
 # The query_list does not need to exist
