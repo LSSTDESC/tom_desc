@@ -43,7 +43,8 @@ FINK_TOPIC
 
 Getting a dockerized  database up and running is a required. Here's how:
 ```bash
-docker run --name tom-desc-postgres -v /var/lib/postgresql/data -p 5432:5432 -e POSTGRES_PASSWORD=<PG_PASS> -d postgis/postgis:11-2.5-alpine
+ export DB_HOST=127.0.0.1
+ docker run --name tom-desc-postgres -v /var/lib/postgresql/data -p 5432:5432 -e POSTGRES_PASSWORD=<PG_PASS> -d postgis/postgis:11-2.5-alpine
 
 docker exec -it tom-desc-postgres /bin/bash  # start a shell inside the postgres container
 
