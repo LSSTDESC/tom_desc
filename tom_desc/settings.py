@@ -57,6 +57,7 @@ INSTALLED_APPS = [
     'tom_observations',
     'tom_dataproducts',
     'stream.apps.StreamConfig',
+    'automatisation.apps.AutomatisationConfig',
 ]
 
 SITE_ID = 1
