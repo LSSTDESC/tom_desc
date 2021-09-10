@@ -17,15 +17,34 @@ Install the requisite packages into the virtual environment
 ```bash
 pip install -r requirements.txt
 ```
+## Local deployment environment variables
+
+Authentication is handled by environment variables.  These are consumed by
+`tom_desc/settings.py`.  The `DB` variables are required for the database.
+The other variables are needed if you want to access streams.
+
+```
+DB_PASS
+DB_HOST=localhost
+
+ANTARES_KEY
+ANTARES_SECRET
+
+HOPSKOTCH_USER
+HOPSKOTCH_PASSWORD
+
+FINK_USERNAME
+FINK_GROUP_ID
+FINK_SERVER
+FINK_TOPIC
+```
 
 ## Local Database Server
 
-Getting a dockerized  database up and running is a pre-requisite to all of the local development methods. Here's how:
+Getting a dockerized  database up and running is a required. Here's how:
 ```bash
-export DB_HOST=127.0.0.1
-export DB_PASS=<password>
-
-docker run --name tom-desc-postgres -v /var/lib/postgresql/data -p 5432:5432 -e POSTGRES_PASSWORD=<password> -d postgis/postgis:11-2.5-alpine
+ export DB_HOST=127.0.0.1
+ docker run --name tom-desc-postgres -v /var/lib/postgresql/data -p 5432:5432 -e POSTGRES_PASSWORD=<PG_PASS> -d postgis/postgis:11-2.5-alpine
 
 docker exec -it tom-desc-postgres /bin/bash  # start a shell inside the postgres container
 
