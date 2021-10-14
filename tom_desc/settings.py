@@ -244,6 +244,14 @@ FINK_CONSUMER_CONFIGURATION = {
 FINK_TOPICS = os.getenv('FINK_TOPIC','').split()
 
 
+PITTGOOGLE_CONSUMER_CONFIGURATION = {
+    # TODO
+}
+
+PITTGOOGLE_PARSERS = {
+    # TODO
+}
+
 # Caching
 # https://docs.djangoproject.com/en/dev/topics/cache/#filesystem-caching
 
@@ -316,6 +324,7 @@ TOM_ALERT_CLASSES = [
     'tom_alerts.brokers.scout.ScoutBroker',
     'tom_alerts.brokers.tns.TNSBroker',
     'tom_fink.fink.FinkBroker',
+    'tom_pittgoogle.pittgoogle.PittGoogleBroker',
 ]
 
 BROKERS = {
