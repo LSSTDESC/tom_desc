@@ -13,92 +13,72 @@ from fink_client.configuration import load_credentials
 
 from stream.models import Alert, Topic
 
+from tom_alerts.alerts import get_service_class, GenericAlert
+from tom_targets.models import Target, TargetList
+
 logger = logging.getLogger(__name__)
 
 FINK_CONSUMER_CONFIGURATION = settings.FINK_CONSUMER_CONFIGURATION
 FINK_TOPICS = settings.FINK_TOPICS
-# HOPSKOTCH_PARSERS = settings.HOPSKOTCH_PARSERS
-
-
-def get_parser_classes(topic):
-    parser_classes = []
-
-    try:
-        parsers = HOPSKOTCH_PARSERS[topic]
-    except KeyError:
-        logger.log(msg=f'HOPSKOTCH_PARSER not found for topic: {topic}.', level=logging.WARNING)
-        return parser_classes
-
-    for parser in parsers:
-        mod_name, class_name = parser.rsplit('.', 1)
-        try:
-            mod = import_module(mod_name)
-            clazz = getattr(mod, class_name)
-        except (ImportError, AttributeError):
-            raise ImportError(f'Unable to import parser {parser}')
-        parser_classes.append(clazz)
-
-    return parser_classes
-
 
 class Command(BaseCommand):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # self.consumer = Consumer(HOPSKOTCH_CONSUMER_CONFIGURATION)
+
+    def to_target_from_generic(self, alert: GenericAlert) -> Target:
+        """ Redirect query result to a Target using GenericAlert attributes
+
+        We currently just use the name, position (ra, dec), and type.
+
+        Parameters
+        ----------
+        alert: dict
+            GenericAlert instance
+
+        """
+        target, created = Target.objects.get_or_create(
+            name=alert.name
+        )
+        if created:
+            target.ra = alert.ra
+            target.dec = alert.dec
+            target.type = 'SIDEREAL'
+        else:
+            # you could check if target.ra & alert.ra match etc.
+            # and create a new alert is needed
+            pass
+        return target, created
 
     def handle(self, *args, **options):
 
+        broker_class = get_service_class('Fink')
+        broker = broker_class()
+        
+        # Instantiate a consumer
+        consumer = AlertConsumer(FINK_TOPICS, FINK_CONSUMER_CONFIGURATION)
+        
         maxtimeout = 5
         while True:
-
-            # Instantiate a consumer
-            consumer = AlertConsumer(FINK_TOPICS, FINK_CONSUMER_CONFIGURATION)
+            finkalert = None
 
             # Poll the servers
             finktopic, finkalert, key = consumer.poll(maxtimeout)
-            for key in finkalert.keys():
-                print(key,type(finkalert[key]))
-                if type(finkalert[key]) is dict:
-                    for key2 in finkalert[key].keys():
-                        print(key, key2, type(finkalert[key][key2]))
-            wef
-
-            topic, _ = Topic.objects.get_or_create(name=finktopic)
-
-            alert = Alert.objects.create(topic=topic, raw_message=finkalert)
-            wef
-
-
-        # self.consumer.subscribe(HOPSKOTCH_TOPICS)
-
-        auth = Auth(settings.HOPSKOTCH_CONSUMER_CONFIGURATION['sasl.username'], settings.HOPSKOTCH_CONSUMER_CONFIGURATION['sasl.password'])
-
-        while True:
-            # logger.info(
-            #     f'Polling topics {HOPSKOTCH_TOPICS} with timeout of {HOPSKOTCH_CONSUMER_POLLING_TIMEOUT} seconds'
-            # )
-
-            with Stream(persist=True,start_at=StartPosition.EARLIEST,auth=auth).open("kafka://kafka.scimma.org/gcn.circular", "r") as src:
-                for kafka_message, metadata in src.read(metadata=True):
-
-                    if kafka_message is None:
-                        continue
-                    # if kafka_message.error():
-                    #     logger.warn(f'Error consuming message: {kafka_message.error()}')
-                    #     # continue
-                    #     return  # TODO: maybe don't completely stop ingesting if this happens
-
-                    topic_name = metadata.topic
-                    topic, _ = Topic.objects.get_or_create(name=topic_name)
-                    alert = Alert.objects.create(topic=topic, raw_message=kafka_message.serialize())
-
-                    for parser_class in get_parser_classes(topic.name):
-                        with transaction.atomic():
-                            # Get the parser class, instantiate it, parse the alert, and save it
-                            parser = parser_class(alert)
-                            alert.parsed = parser.parse()
-                            if alert.parsed is True:
-                                alert.save()
-                                break
-
+            if finkalert is not None:
+                print(finkalert['objectId'])
+                finkalert['i:objectId'] = finkalert['objectId']
+                finkalert['i:candid'] = finkalert['candid']
+                finkalert['d:rfscore'] = finkalert['rfscore']
+                finkalert['i:jd'] = finkalert['candidate']['jd']
+                finkalert['i:ra'] = finkalert['candidate']['ra']
+                finkalert['i:dec'] = finkalert['candidate']['dec']
+                finkalert['i:magpsf'] = finkalert['candidate']['magpsf']
+                generic_alert = broker.to_generic_alert(finkalert)
+                target, created = self.to_target_from_generic(generic_alert)
+                if created:
+                    target.save()
+                    #tl.targets.add(target)
+                    self.stdout.write('Created target: {}'.format(target))
+                else:
+                    self.stdout.write('Target with the name {} already created - skipping'.format(generic_alert.name))
+                
