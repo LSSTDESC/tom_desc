@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class PittGoogleAlertParser(BaseParser):
+    # TODO: write this
 
     def parse(self):
-        # TODO
         pass
