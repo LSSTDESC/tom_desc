@@ -10,7 +10,6 @@ from django.db import transaction
 
 from stream.models import Alert, Topic
 
-# I will write a Consumer that you can simply import here
 from pittgoogle import Consumer
 
 
@@ -64,11 +63,6 @@ class Command(BaseCommand):
             callback=self.parse_and_save,
             stop_conditions=PITTGOOGLE_CONSUMER_CONFIGURATION['stop_conditions'],
         )
-
-        # If you'd prefer to iterate over the alerts, it would look like this:
-        # alert_list = self.consumer.stream_alerts(stop_conditions=stop_conditions)
-        # for alert in alert_list:
-        #     self.parse_and_save(alert, self.consumer.topic_name)
 
     def parse_and_save(alert, topic_name):
         """Parse the alert and save to the database."""
