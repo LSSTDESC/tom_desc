@@ -59,6 +59,7 @@ INSTALLED_APPS = [
     'tom_dataproducts',
     'stream.apps.StreamConfig',
     'automatisation.apps.AutomatisationConfig',
+    'rest_framework.authtoken'
 ]
 
 SITE_ID = 1
