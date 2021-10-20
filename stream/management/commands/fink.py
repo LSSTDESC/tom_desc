@@ -15,6 +15,7 @@ from stream.models import Alert, Topic
 
 from tom_alerts.alerts import get_service_class, GenericAlert
 from tom_targets.models import Target, TargetList
+from django.contrib.auth.models import Group
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +53,8 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
 
+        desc_group = Group.objects.get(name='DESC')
+        
         broker_class = get_service_class('Fink')
         broker = broker_class()
         
@@ -77,6 +80,7 @@ class Command(BaseCommand):
                 target, created = self.to_target_from_generic(generic_alert)
                 if created:
                     target.save()
+                    assign_perm('tom_targets.view_target', desc_group, target)
                     #tl.targets.add(target)
                     self.stdout.write('Created target: {}'.format(target))
                 else:
