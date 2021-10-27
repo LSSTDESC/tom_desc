@@ -243,9 +243,15 @@ FINK_CONSUMER_CONFIGURATION = {
 
 FINK_TOPICS = os.getenv('FINK_TOPIC','').split()
 
-
+GOOGLE_CLOUD_PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT")
+GOOGLE_APPLICATION_CREDENTIALS = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
 PITTGOOGLE_CONSUMER_CONFIGURATION = {
-    # TODO
+    # pull a small number of alerts, for testing
+    "subscription_name": "ztf-loop",
+    "max_results": 10,
+    "timeout": 30,
+    "max_backlog": 10,
+    "save_metadata": "yes",
 }
 
 PITTGOOGLE_PARSERS = {

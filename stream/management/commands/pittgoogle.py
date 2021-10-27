@@ -8,9 +8,9 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
-from stream.models import Alert, Topic
+# from stream.models import Alert, Topic
 
-from pittgoogle import Consumer
+from tom_pittgoogle.consumer_stream_python import ConsumerStreamPython as Consumer
 
 
 logger = logging.getLogger(__name__)
@@ -59,21 +59,20 @@ class Command(BaseCommand):
 
         -   Block until the processing is complete and the connection has been closed.
         """
-        self.consumer.stream_alerts(
-            callback=self.parse_and_save,
-            stop_conditions=PITTGOOGLE_CONSUMER_CONFIGURATION['stop_conditions'],
+        _ = self.consumer.stream_alerts(
+            user_filter=self.parse_and_save,  # callback to process alerts
+            parameters=PITTGOOGLE_CONSUMER_CONFIGURATION,  # stopping conditions
         )
 
-    def parse_and_save(alert, topic_name):
-        """Parse the alert and save to the database."""
-        topic, _ = Topic.objects.get_or_create(name=topic_name)
-        alert = Alert.objects.create(topic=topic, raw_message=alert.data)
+    @staticmethod
+    def parse_and_save(alert, parameters):
+        """Parse the alert and save to the database.
 
-        for parser_class in get_parser_classes(topic.name):
-            with transaction.atomic():
-                # Get the parser class, instantiate it, parse the alert, and save it
-                parser = parser_class(alert)
-                alert.parsed = parser.parse()
-                if alert.parsed is True:
-                    alert.save()
-                    break
+        Used as the callback in `self.consumer.stream_alerts`.
+        """
+        mylogger = logging.getLogger(__name__)
+        mylogger.info("Success! We have pulled an alert.")
+
+        # TODO: write the parse and save
+        success = True
+        return success
