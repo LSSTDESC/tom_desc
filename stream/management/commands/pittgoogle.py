@@ -59,20 +59,15 @@ class Command(BaseCommand):
 
         -   Block until the processing is complete and the connection has been closed.
         """
-        _ = self.consumer.stream_alerts(
-            user_filter=self.parse_and_save,  # callback to process alerts
+        self.consumer.stream_alerts(
+            # callback=self.parse_and_save,
+            user_filter=self.parse_and_save,
             parameters=PITTGOOGLE_CONSUMER_CONFIGURATION,  # stopping conditions
         )
 
     @staticmethod
     def parse_and_save(alert, parameters):
-        """Parse the alert and save to the database.
-
-        Used as the callback in `self.consumer.stream_alerts`.
-        """
+        """Parse the alert and save to the database."""
         mylogger = logging.getLogger(__name__)
         mylogger.info("Success! We have pulled an alert.")
-
-        # TODO: write the parse and save
-        success = True
-        return success
+        return alert
