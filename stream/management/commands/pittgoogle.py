@@ -16,29 +16,6 @@ from tom_pittgoogle.consumer_stream_python import ConsumerStreamPython as Consum
 logger = logging.getLogger(__name__)
 
 PITTGOOGLE_CONSUMER_CONFIGURATION = settings.PITTGOOGLE_CONSUMER_CONFIGURATION
-PITTGOOGLE_PARSERS = settings.PITTGOOGLE_PARSERS
-
-
-def get_parser_classes(topic):
-    """."""
-    parser_classes = []
-
-    try:
-        parsers = PITTGOOGLE_PARSERS[topic]
-    except KeyError:
-        logger.log(msg=f'PITTGOOGLE_PARSERS not found for topic: {topic}.', level=logging.WARNING)
-        return parser_classes
-
-    for parser in parsers:
-        mod_name, class_name = parser.rsplit('.', 1)
-        try:
-            mod = import_module(mod_name)
-            clazz = getattr(mod, class_name)
-        except (ImportError, AttributeError):
-            raise ImportError(f'Unable to import parser {parser}')
-        parser_classes.append(clazz)
-
-    return parser_classes
 
 
 class Command(BaseCommand):

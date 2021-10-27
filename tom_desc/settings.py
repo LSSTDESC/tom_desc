@@ -254,10 +254,6 @@ PITTGOOGLE_CONSUMER_CONFIGURATION = {
     "save_metadata": "yes",
 }
 
-PITTGOOGLE_PARSERS = {
-    # TODO
-}
-
 # Caching
 # https://docs.djangoproject.com/en/dev/topics/cache/#filesystem-caching
 
