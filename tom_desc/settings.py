@@ -325,7 +325,7 @@ TOM_ALERT_CLASSES = [
     'tom_alerts.brokers.scout.ScoutBroker',
     'tom_alerts.brokers.tns.TNSBroker',
     'tom_fink.fink.FinkBroker',
-    'tom_pittgoogle.broker_stream_rest.BrokerStreamRest',
+    'tom_pittgoogle.broker_stream_python.BrokerStreamPython',
 ]
 
 BROKERS = {
