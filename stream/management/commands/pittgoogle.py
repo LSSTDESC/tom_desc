@@ -8,8 +8,6 @@ from django.conf import settings
 from django.contrib.auth.models import Group
 from django.core.management.base import BaseCommand
 # from django.db import transaction
-from tom_alerts.alerts import get_service_class
-from tom_targets.models import Target
 
 # from stream.models import Alert, Topic
 
@@ -75,21 +73,5 @@ class Command(BaseCommand):
     @staticmethod
     def parse_and_save(alert_dict, **kwargs):
         """Parse the alert and save to the database."""
-
-        # target = kwargs["broker"].to_target(alert_dict)
-        target, created = Target.objects.get_or_create(
-            name=alert_dict['objectId'],
-            type='SIDEREAL',
-            ra=alert_dict['ra'],
-            dec=alert_dict['dec'],
-        )
-
-        if created:
-            extra_fields = [item["name"] for item in settings.EXTRA_FIELDS]
-            extras = {k: v for k, v in alert_dict.items() if k in extra_fields}
-
-            target.save(extras=extras)
-            # assign_perm('tom_targets.view_target', kwargs["desc_group"], target)
-
-        success = True
-        return success
+        # TODO
+        return

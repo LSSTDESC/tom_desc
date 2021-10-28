@@ -360,13 +360,7 @@ HARVESTERS = {
 #     {'name': 'eligible', 'type': 'boolean'},
 #     {'name': 'dicovery_date', 'type': 'datetime'}
 # ]
-EXTRA_FIELDS = [
-    {"name": "classifierNames", "type": "string"},
-    # proposing to encode "no classification reported" as -1
-    {"name": "Bogus", "type": "number", "default": -1},
-    {"name": "Real", "type": "number", "default": -1},
-    {"name": "Ia", "type": "number", "default": -1},
-]
+EXTRA_FIELDS = []
 
 # Authentication strategy can either be LOCKED (required login for all views)
 # or READ_ONLY (read only access to views)
