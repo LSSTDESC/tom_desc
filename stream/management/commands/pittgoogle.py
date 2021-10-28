@@ -36,7 +36,7 @@ class Command(BaseCommand):
 
         -   Block until the processing is complete and the connection has been closed.
         """
-        self.consumer.stream_alerts(
+        _ = self.consumer.stream_alerts(
             # callback=self.parse_and_save,
             user_filter=self.parse_and_save,
             parameters=PITTGOOGLE_CONSUMER_CONFIGURATION,  # stopping conditions
