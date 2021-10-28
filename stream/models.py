@@ -34,7 +34,6 @@ class EventAttributes(models.Model):
     created = models.DateTimeField(auto_now_add=True)
     modified = models.DateTimeField(auto_now=True)
 
-
 class Alert(models.Model):
     # target_id = models.ForeignKey(Target, on_delete=models.CASCADE)
     topic = models.ForeignKey(Topic, on_delete=models.PROTECT)
@@ -52,3 +51,21 @@ class Alert(models.Model):
         indexes = [
             models.Index(fields=['timestamp'], name='timestamp_idx'),
         ]
+
+# class ElasticcAlert(models.Model):
+#     # target_id = models.ForeignKey(Target, on_delete=models.CASCADE)
+#     topic = models.ForeignKey(Topic, on_delete=models.PROTECT)
+#     events = models.ManyToManyField(Event)
+#     identifier = models.CharField(max_length=200)
+#     timestamp = models.DateTimeField(null=True, blank=True)
+#     coordinates = gis_models.PointField(null=True, blank=True)
+#     parsed_message = models.JSONField(default=dict)
+#     raw_message = models.JSONField(default=dict)
+#     parsed = models.BooleanField(default=False)
+#     created = models.DateTimeField(auto_now_add=True)
+#     modified = models.DateTimeField(auto_now=True)
+#
+#     class Meta:
+#         indexes = [
+#             models.Index(fields=['timestamp'], name='timestamp_idx'),
+#         ]
