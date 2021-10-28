@@ -59,7 +59,7 @@ class Command(BaseCommand):
             #     f'Polling topics {HOPSKOTCH_TOPICS} with timeout of {HOPSKOTCH_CONSUMER_POLLING_TIMEOUT} seconds'
             # )
 
-            with Stream(persist=True,start_at=StartPosition.EARLIEST,auth=auth).open("kafka://kafka.scimma.org/gcn.circular", "r") as src:
+            with Stream(start_at=StartPosition.EARLIEST,auth=auth).open("kafka://kafka.scimma.org/gcn.circular", "r") as src:
                 for kafka_message, metadata in src.read(metadata=True):
 
                     if kafka_message is None:
