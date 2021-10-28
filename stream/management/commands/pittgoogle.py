@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: UTF-8 -*-
 """Listen to a Pitt-Google Pub/Sub stream and save alerts to the database."""
-from importlib import import_module
 import logging
 
 from django.conf import settings
+from django.contrib.auth.models import Group
 from django.core.management.base import BaseCommand
-from django.db import transaction
+# from django.db import transaction
+from tom_alerts.alerts import get_service_class
+from tom_targets.models import Target
 
 # from stream.models import Alert, Topic
 
@@ -16,37 +18,12 @@ from tom_pittgoogle.consumer_stream_python import ConsumerStreamPython as Consum
 logger = logging.getLogger(__name__)
 
 PITTGOOGLE_CONSUMER_CONFIGURATION = settings.PITTGOOGLE_CONSUMER_CONFIGURATION
-PITTGOOGLE_PARSERS = settings.PITTGOOGLE_PARSERS
-
-
-def get_parser_classes(topic):
-    """."""
-    parser_classes = []
-
-    try:
-        parsers = PITTGOOGLE_PARSERS[topic]
-    except KeyError:
-        logger.log(msg=f'PITTGOOGLE_PARSERS not found for topic: {topic}.', level=logging.WARNING)
-        return parser_classes
-
-    for parser in parsers:
-        mod_name, class_name = parser.rsplit('.', 1)
-        try:
-            mod = import_module(mod_name)
-            clazz = getattr(mod, class_name)
-        except (ImportError, AttributeError):
-            raise ImportError(f'Unable to import parser {parser}')
-        parser_classes.append(clazz)
-
-    return parser_classes
 
 
 class Command(BaseCommand):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
-        self.consumer = Consumer(PITTGOOGLE_CONSUMER_CONFIGURATION['subscription_name'])
 
     def handle(self, *args, **options):
         """Pull and process alerts from a Pitt-Google Pub/Sub stream.
@@ -59,15 +36,36 @@ class Command(BaseCommand):
 
         -   Block until the processing is complete and the connection has been closed.
         """
-        self.consumer.stream_alerts(
-            # callback=self.parse_and_save,
-            user_filter=self.parse_and_save,
-            parameters=PITTGOOGLE_CONSUMER_CONFIGURATION,  # stopping conditions
+        kwargs = {
+                # "desc_group": Group.objects.get(name='DESC'),
+                # "broker": get_service_class('Pitt-Google StreamPython')(),
+                **PITTGOOGLE_CONSUMER_CONFIGURATION,  # stopping conditions
+        }
+
+        consumer = Consumer(PITTGOOGLE_CONSUMER_CONFIGURATION['subscription_name'])
+        _ = consumer.stream_alerts(
+            user_callback=self.parse_and_save,
+            **kwargs
         )
 
     @staticmethod
-    def parse_and_save(alert, parameters):
+    def parse_and_save(alert_dict, **kwargs):
         """Parse the alert and save to the database."""
-        mylogger = logging.getLogger(__name__)
-        mylogger.info("Success! We have pulled an alert.")
-        return alert
+
+        # target = kwargs["broker"].to_target(alert_dict)
+        target, created = Target.objects.get_or_create(
+            name=alert_dict['objectId'],
+            type='SIDEREAL',
+            ra=alert_dict['ra'],
+            dec=alert_dict['dec'],
+        )
+
+        if created:
+            extra_fields = [item["name"] for item in settings.EXTRA_FIELDS]
+            extras = {k: v for k, v in alert_dict.items() if k in extra_fields}
+
+            target.save(extras=extras)
+            # assign_perm('tom_targets.view_target', kwargs["desc_group"], target)
+
+        success = True
+        return success
