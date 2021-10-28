@@ -246,12 +246,11 @@ FINK_TOPICS = os.getenv('FINK_TOPIC','').split()
 GOOGLE_CLOUD_PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT")
 GOOGLE_APPLICATION_CREDENTIALS = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
 PITTGOOGLE_CONSUMER_CONFIGURATION = {
-    # pull a small number of alerts, for testing
+    # pull a small number of alerts from the heartbeat stream for testing
     "subscription_name": "ztf-loop",
     "max_results": 10,
     "timeout": 30,
     "max_backlog": 10,
-    "save_metadata": "yes",
 }
 
 # Caching
@@ -357,7 +356,13 @@ HARVESTERS = {
 #     {'name': 'eligible', 'type': 'boolean'},
 #     {'name': 'dicovery_date', 'type': 'datetime'}
 # ]
-EXTRA_FIELDS = []
+EXTRA_FIELDS = [
+    {"name": "classifierNames", "type": "string"},
+    # proposing to encode "no classification reported" as -1
+    {"name": "Bogus", "type": "number", "default": -1},
+    {"name": "Real", "type": "number", "default": -1},
+    {"name": "Ia", "type": "number", "default": -1},
+]
 
 # Authentication strategy can either be LOCKED (required login for all views)
 # or READ_ONLY (read only access to views)
