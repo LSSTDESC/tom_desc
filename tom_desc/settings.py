@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/2.1/ref/settings/
 """
 import logging.config
 import os
+import socket
 import tempfile
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
@@ -231,6 +232,7 @@ HOPSKOTCH_PARSERS = {
 ANTARES_CONSUMER_CONFIGURATION = {
     'key': os.getenv('ANTARES_KEY',''),
     'secret': os.getenv('ANTARES_SECRET', ''),
+    'group': os.getenv('ANTARES_GROUP', socket.gethostname()),
 }
 
 
