@@ -8,6 +8,9 @@ COPY requirements.txt .
 RUN apt-get update &&\
    apt-get install -y gdal-bin
 
+RUN apt-get update &&\
+    apt-get install -y librdkafka-dev
+
 RUN pip install \
 	--no-cache \
 	--disable-pip-version-check \
