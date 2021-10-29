@@ -40,3 +40,9 @@ class PittGoogleBaseParser(BaseParser):
         # self.alert.coordinates = (alert_dict["ra"], alert_dict["dec"])  # TODO
         return
 
+
+class ZtfLoopParser(PittGoogleBaseParser):
+    """Parse Pitt-Google's stream: ztf-loop."""
+
+    def __repr__(self):
+        return 'ztf-loop Parser'
