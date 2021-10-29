@@ -39,20 +39,17 @@ class Alert(models.Model):
     topic = models.ForeignKey(Topic, on_delete=models.PROTECT)
     events = models.ManyToManyField(Event)
     identifier = models.CharField(max_length=200)
-    # We need a way to pass in the timestamps.
-    # If others pass this through the raw or parsed message,
-    # I (Troy) could just shove ours in there as well, and delete the following line
+    # Pass timestamps in as a metadata dict. Maybe other brokers do this differently?
     metadata = models.JSONField(default=dict)
+    # assuming timestamp is currently being used for survey's publish timestamp
     timestamp = models.DateTimeField(null=True, blank=True)
-    # assuming timestamp is currently being used for survey_publish_timestamp
-    # survey_publish_timestamp = models.DateTimeField(null=True, blank=True)
     broker_ingest_timestamp = models.DateTimeField(null=True, blank=True)
     broker_publish_timestamp = models.DateTimeField(null=True, blank=True)
-    desc_ingest_timestamp = models.DateTimeField(null=True, blank=True)
     coordinates = gis_models.PointField(null=True, blank=True)
     parsed_message = models.JSONField(default=dict)
     raw_message = models.JSONField(default=dict)
     parsed = models.BooleanField(default=False)
+    # created is the DESC ingestion timestamp, automatically added on creation
     created = models.DateTimeField(auto_now_add=True)
     modified = models.DateTimeField(auto_now=True)
 
