@@ -1,3 +1,28 @@
+## [Experimental] Development with Docker Compose
+
+You can try deploying the TOM Toolkit and a Postgres (w/ PostGIS) database via
+`docker-compose`:
+
+```
+git clone https://github.com/LSSTDESC/tom_desc
+cd tom_desc
+docker-compose up
+```
+
+This will spin up the TOM and create a superuser `root:password`. It runs in
+development mode so should hot-reload any changes you make. An exception is
+database changes. The environment will run database migrations the first time
+that you start it but if you make changes to models you will have to apply them
+manually:
+
+```
+docker-compose exec tom python manage.py makemigrations
+docker-compose exec tom python manage.py migrate
+```
+
+You can pass additional environment variables to the TOM container in
+`docker-compose.yml` by adding to the `services.tom.enviroment` field.
+
 ## Installing the TOM Toolkit locally
 
 The toolkit github repository is at https://github.com/LSSTDESC/tom_desc.  Install it locally.
