@@ -21,6 +21,8 @@ services:
       - DB_HOST=postgres
       - DB_PORT=5432
       - DB_NAME=postgres
+      - GOOGLE_CLOUD_PROJECT=pitt-broker-user-project
+      - GOOGLE_APPLICATION_CREDENTIALS=GCP_auth_key-pitt_broker_user_project.json
   postgres:
     image: postgis/postgis
     environment:
