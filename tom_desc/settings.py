@@ -255,7 +255,7 @@ PITTGOOGLE_CONSUMER_CONFIGURATION = {
 }
 
 PITTGOOGLE_PARSERS = {
-    'ztf-loop': ['stream.parsers.pittgoogle_parsers.ZtfLoopParser'],
+    'ztf-loop': 'stream.parsers.pittgoogle_parsers.ZtfLoopParser',
 }
 
 # Caching

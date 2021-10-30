@@ -59,7 +59,7 @@ class Command(BaseCommand):
         kwargs = {
             # kwargs to be passed to parse_and_save
             # note that in Pub/Sub, the topic and subscription can have different names
-            "topic_name": consumer.topic_path.rsplit("/", 1),
+            "topic_name": consumer.topic_path.split("/")[-1],
             "send_alert_bytes": True,
             "send_metadata": True,
             # kwargs for stopping conditions
@@ -78,9 +78,9 @@ class Command(BaseCommand):
         topic, _ = Topic.objects.get_or_create(name=kwargs["topic_name"])
         alert = Alert.objects.create(
             topic=topic,
-            raw_message=alert_bytes,
+            # raw_message=alert_bytes,
             parsed_message=alert_dict,
-            metadata=metadata_dict,
+            # metadata=metadata_dict,
         )
 
         parser_class = get_parser_class(topic.name)

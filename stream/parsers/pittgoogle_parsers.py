@@ -18,7 +18,7 @@ class PittGoogleBaseParser(BaseParser):
 
     def parse(self):
         try:
-            self.parse_metadata()
+            # self.parse_metadata()
             self.parse_alert()
 
         except Exception as e:
@@ -36,7 +36,7 @@ class PittGoogleBaseParser(BaseParser):
 
     def parse_alert(self):
         alert_dict = self.alert.parsed_message
-        # self.alert.identifier = f"{alert_dict['candid']}_PittGoogle"
+        self.alert.identifier = str(alert_dict['candid']})
         # self.alert.coordinates = (alert_dict["ra"], alert_dict["dec"])  # TODO
         return
 
