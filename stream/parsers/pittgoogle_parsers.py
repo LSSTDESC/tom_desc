@@ -36,7 +36,7 @@ class PittGoogleBaseParser(BaseParser):
 
     def parse_alert(self):
         alert_dict = self.alert.parsed_message
-        self.alert.identifier = str(alert_dict['candid']})
+        self.alert.identifier = str(alert_dict['candid'])
         # self.alert.coordinates = (alert_dict["ra"], alert_dict["dec"])  # TODO
         return
 
