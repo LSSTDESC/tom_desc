@@ -52,20 +52,45 @@ class Alert(models.Model):
             models.Index(fields=['timestamp'], name='timestamp_idx'),
         ]
 
-# class ElasticcAlert(models.Model):
-#     # target_id = models.ForeignKey(Target, on_delete=models.CASCADE)
-#     topic = models.ForeignKey(Topic, on_delete=models.PROTECT)
-#     events = models.ManyToManyField(Event)
-#     identifier = models.CharField(max_length=200)
-#     timestamp = models.DateTimeField(null=True, blank=True)
-#     coordinates = gis_models.PointField(null=True, blank=True)
-#     parsed_message = models.JSONField(default=dict)
-#     raw_message = models.JSONField(default=dict)
-#     parsed = models.BooleanField(default=False)
-#     created = models.DateTimeField(auto_now_add=True)
-#     modified = models.DateTimeField(auto_now=True)
-#
-#     class Meta:
-#         indexes = [
-#             models.Index(fields=['timestamp'], name='timestamp_idx'),
-#         ]
+
+class ElasticcAlert(models.Model):
+    """Model for an alert conforming to ELAsTiCC schema.
+
+    https://github.com/LSSTDESC/plasticc_alerts/blob/main/Examples/starterkit/plasticc_schema/lsst.v4_1.brokerClassification.avsc
+    """
+
+    # basic data
+    topic = models.ForeignKey(Topic, on_delete=models.PROTECT)
+    alertId = models.CharField(max_length=200)
+    classifierNames = models.CharField(max_length=255)  # use TextField if need more len
+
+    # classification probabilities
+    # assuming each probability should get it's own field
+    class_10 = models.FloatField(null=True)             # Bogus
+    class_20 = models.FloatField(null=True)             # Real
+    class_020 = models.FloatField(null=True)            # Real/Other
+    class_120 = models.FloatField(null=True)            # Static
+    class_0120 = models.FloatField(null=True)           # Static/Other
+    class_1120 = models.FloatField(null=True)           # Non-Recurring
+    class_01120 = models.FloatField(null=True)          # Non-Recurring/Other
+    class_11120 = models.FloatField(null=True)          # SN-like
+    class_011120 = models.FloatField(null=True)         # SN-like/Other
+    class_111120 = models.FloatField(null=True)         # Ia
+    # etc for all classes
+
+    # timestamps
+    elasticc_publish_timestamp = models.DateTimeField()              # required
+    broker_ingest_timestamp = models.DateTimeField(null=True)
+    broker_publish_timestamp = models.DateTimeField(null=True)
+    desc_ingest_timestamp = models.DateTimeField(auto_now_add=True)  # auto-generated
+
+    # other
+    parsed_message = models.JSONField(default=dict)
+    raw_message = models.JSONField(default=dict)
+    parsed = models.BooleanField(default=False)
+    modified = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['timestamp'], name='timestamp_idx'),
+        ]
