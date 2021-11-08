@@ -53,8 +53,8 @@ class Alert(models.Model):
         ]
 
 
-class ElasticcAlert(models.Model):
-    """Model for an alert conforming to ELAsTiCC schema.
+class ElasticcBrokerAlert(models.Model):
+    """Model for an alert conforming to ELAsTiCC brokerClassification schema.
 
     https://github.com/LSSTDESC/plasticc_alerts/blob/main/Examples/starterkit/plasticc_schema/lsst.v4_1.brokerClassification.avsc
     """
@@ -78,7 +78,7 @@ class ElasticcAlert(models.Model):
     class_111120 = models.FloatField(null=True)         # Ia
     # etc for all classes
 
-    # timestamps
+    # timestamps as datetime.datetime (DateTimeField)
     elasticc_publish_timestamp = models.DateTimeField()              # required
     broker_ingest_timestamp = models.DateTimeField(null=True)
     broker_publish_timestamp = models.DateTimeField(null=True)
@@ -92,4 +92,5 @@ class ElasticcAlert(models.Model):
     class Meta:
         indexes = [
             models.Index(fields=['alertId'], name='alertId'),  # is this wanted?
+            # should there also be an index that is unique across brokers?
         ]
