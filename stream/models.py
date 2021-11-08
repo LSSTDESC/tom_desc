@@ -85,8 +85,7 @@ class ElasticcAlert(models.Model):
     desc_ingest_timestamp = models.DateTimeField(auto_now_add=True)  # auto-generated
 
     # other
-    parsed_message = models.JSONField(default=dict)
-    raw_message = models.JSONField(default=dict)
+    # raw_message = models.JSONField(default=dict)
     parsed = models.BooleanField(default=False)
     modified = models.DateTimeField(auto_now=True)
 
