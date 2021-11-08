@@ -262,6 +262,11 @@ PITTGOOGLE_PARSERS = {
     'elasticc': 'stream.parsers.elasticc_parsers.ElasticcBrokerClassificationParser',
 }
 
+
+ELASTICC_PARSERS = {
+    'elasticc': ['stream.parsers.elasticc_parsers.ElasticcBrokerClassificationParser'],
+}
+
 # Caching
 # https://docs.djangoproject.com/en/dev/topics/cache/#filesystem-caching
 
