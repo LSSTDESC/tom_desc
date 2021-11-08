@@ -1,0 +1,28 @@
+{
+	"namespace": "lsst.v4_1",
+	"type": "record",
+	"name": "brokerClassfication",
+	"doc": "sample avro alert schema v4.1",
+	"fields": [
+		{"name": "alertId", "type": "long", "doc": "unique alert identifer"},
+		{"name": "classifierNames", "type": "string", "doc": "unique list of classifier names" },
+        { "name":"classifications",
+            "type": {
+                 "name":"MyClassifications",
+                 "type":"record",
+                 "fields":[
+                        { "name": "classificationDict",
+                            "type":{
+                                "type": "array",
+                                    "items":{
+                                        "type":"map",
+                                            "values":"float"
+                                        }
+                                    }
+                        }
+                    ]
+                }
+        }
+            ]
+
+}

@@ -250,14 +250,21 @@ GOOGLE_CLOUD_PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT")
 GOOGLE_APPLICATION_CREDENTIALS = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
 PITTGOOGLE_CONSUMER_CONFIGURATION = {
     # pull a small number of alerts from the heartbeat stream for testing
-    "subscription_name": "ztf-loop",
-    "max_results": 10,
+    # "subscription_name": "ztf-loop",
+    "subscription_name": "elasticc-header",
+    "max_results": 1,
     "timeout": 30,
     "max_backlog": 10,
 }
 
 PITTGOOGLE_PARSERS = {
     'ztf-loop': 'stream.parsers.pittgoogle_parsers.ZtfLoopParser',
+    'elasticc': 'stream.parsers.elasticc_parsers.ElasticcBrokerClassificationParser',
+}
+
+
+ELASTICC_PARSERS = {
+    'elasticc': ['stream.parsers.elasticc_parsers.ElasticcBrokerClassificationParser'],
 }
 
 # Caching
