@@ -91,5 +91,5 @@ class ElasticcAlert(models.Model):
 
     class Meta:
         indexes = [
-            models.Index(fields=['timestamp'], name='timestamp_idx'),
+            models.Index(fields=['alertId'], name='alertId'),  # is this wanted?
         ]
