@@ -3,6 +3,7 @@
 """Parse alerts conforming to ELAsTiCC schema: lsst.v4_1.brokerClassification.avsc."""
 import io
 import logging
+from pathlib import Path
 # import re
 
 # from dateutil.parser import parse, parserinfo
@@ -15,7 +16,9 @@ from stream.parsers.base_parser import BaseParser
 
 logger = logging.getLogger(__name__)
 
-avsc_file = "elasticc_schema/lsst.v4_1.brokerClassification.avsc"
+# brokerClassification schema
+parent_path = Path(__file__).parent.resolve()
+avsc_file = parent_path / "elasticc_schema/lsst.v4_1.brokerClassification.avsc"
 BROKERCLASSIFICATION_SCHEMA = fastavro.schema.load_schema(avsc_file)
 
 
