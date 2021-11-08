@@ -8,9 +8,10 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
-from stream.models import Alert, Topic
+from stream.models import ElasticcBrokerAlert, Topic
 
-from tom_pittgoogle.consumer_stream_python import ConsumerStreamPython as Consumer
+# from tom_pittgoogle.consumer_stream_python import ConsumerStreamPython as Consumer
+from stream.management.commands.pittgoogle_consumer import ConsumerStreamPython as Consumer
 
 
 logger = logging.getLogger(__name__)
@@ -56,42 +57,59 @@ class Command(BaseCommand):
         """
         consumer = Consumer(PITTGOOGLE_CONSUMER_CONFIGURATION['subscription_name'])
 
-        kwargs = {
-            # kwargs to be passed to parse_and_save
-            # note that in Pub/Sub, the topic and subscription can have different names
-            "topic_name": consumer.topic_path.split("/")[-1],
-            "send_alert_bytes": True,
-            "send_metadata": True,
-            # kwargs for stopping conditions
-            **PITTGOOGLE_CONSUMER_CONFIGURATION,
-        }
+        send_data = "alert_bytes"
+        include_metadata = True
+        user_callback = self.parse_and_save
+        flow_configs = PITTGOOGLE_CONSUMER_CONFIGURATION
+        user_kwargs = {"topic_name": consumer.topic_path.split("/")[-1]}
 
         # pull and process alerts in a background thread. block until complete.
         _ = consumer.stream_alerts(
-            user_callback=self.parse_and_save,
-            **kwargs
+            send_data=send_data,
+            include_metadata=include_metadata,
+            user_callback=user_callback,
+            flow_configs=flow_configs,
+            **user_kwargs
         )
 
     @staticmethod
-    def parse_and_save(alert_dict, alert_bytes, metadata_dict, **kwargs):
+    def parse_and_save(message_data, topic_name="elasticc"):
         """Parse the alert and save to the database."""
-        topic, _ = Topic.objects.get_or_create(name=kwargs["topic_name"])
-        alert = Alert.objects.create(
-            topic=topic,
-            # raw_message=alert_bytes,
-            parsed_message=alert_dict,
-            # metadata=metadata_dict,
-        )
+        alert_bytes = message_data["alert_bytes"]
+        metadata_dict = message_data["metadata_dict"]
+        topic, _ = Topic.objects.get_or_create(name=topic_name)
 
-        parser_class = get_parser_class(topic.name)
-        with transaction.atomic():
-            # Get the parser class, instantiate it, parse the alert, and save it
-            parser = parser_class(alert)
-            alert.parsed = parser.parse()
-            if alert.parsed is True:
-                alert.save()
+        # Instantiate an Alert with topic and timestamps
+        try:
+            alert = ElasticcBrokerAlert.objects.create(
+                topic=topic,
+                # timestamps should be datetime.datetime
+                elasticc_publish_timestamp=metadata_dict["kafka.timestamp"],
+                broker_ingest_timestamp=None,
+                broker_publish_timestamp=metadata_dict["publish_time"],
+            )
+        # catch everything until we know what errors we're looking for
+        except Exception as e:
+            logger.warn(
+                (
+                    f"Error instantiating Alert with topic: {topic}, "
+                    f"metadata: {metadata_dict}"
+                    f"\n{e}"
+                )
+            )
+            return {"ack": False}
 
-        # TODO: catch errors
-        success = True
+        # Parse the alert_bytes and save
+        try:
+            parser_class = get_parser_class(topic.name)
+            with transaction.atomic():
+                parser = parser_class(alert)
+                alert.parsed = parser.parse(alert_bytes)
+                if alert.parsed is True:
+                    alert.save()
+        # catch everything until we know what errors we're looking for
+        except Exception as e:
+            logger.warn(f"Error parsing alert bytes.\n{e}")
+            return {"ack": False}
 
-        return success
+        return {"ack": True}
