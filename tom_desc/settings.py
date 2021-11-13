@@ -264,7 +264,8 @@ PITTGOOGLE_PARSERS = {
 
 
 ELASTICC_PARSERS = {
-    'elasticc': ['stream.parsers.elasticc_parsers.ElasticcBrokerClassificationParser'],
+    'broker-classification':
+        'stream.parsers.elasticc_parsers.ElasticcBrokerClassificationParser',
 }
 
 # Caching
