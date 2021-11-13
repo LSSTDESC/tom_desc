@@ -79,13 +79,13 @@ class ElasticcBrokerAlert(models.Model):
     # etc for all classes
 
     # timestamps as datetime.datetime (DateTimeField)
-    elasticc_publish_timestamp = models.DateTimeField()              # required
+    desc_ingest_timestamp = models.DateTimeField(auto_now_add=True)  # auto-generated
+    elasticc_publish_timestamp = models.DateTimeField(null=True)
     broker_ingest_timestamp = models.DateTimeField(null=True)
     broker_publish_timestamp = models.DateTimeField(null=True)
-    desc_ingest_timestamp = models.DateTimeField(auto_now_add=True)  # auto-generated
 
     # other
-    # raw_message = models.JSONField(default=dict)
+    message_bytes = models.BinaryField(null=True)
     parsed = models.BooleanField(default=False)
     modified = models.DateTimeField(auto_now=True)
 

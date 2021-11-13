@@ -1,16 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: UTF-8 -*-
 """Parse alerts conforming to ELAsTiCC schema: lsst.v4_1.brokerClassification.avsc."""
-import io
 import logging
 from pathlib import Path
-# import re
 
-# from dateutil.parser import parse, parserinfo
-from django.core.exceptions import ValidationError
 import fastavro
 
-# from stream.models import Event
+from stream.parsers import utils as parser_utils
 from stream.parsers.base_parser import BaseParser
 
 
@@ -44,15 +40,17 @@ class ElasticcBrokerClassificationParser(BaseParser):
     def __repr__(self):
         return 'ELAsTiCC brokerClassification Parser'
 
-    def parse(self, avro_bytes):
-        """Parse Avro serialized, bytes-like object conforming to ELAsTiCC schema.
+    def parse(self):
+        """Parse `self.alert.message_bytes` into the fields of `self.alert`.
 
-        Args:
-            avro_bytes (bytes): Avro serialized, bytes-like object
+        Assumes `self.alert.message_bytes` conforms to the ELAsTiCC
+        brokerClassification schema.
 
-        Returns True if avro_bytes was successfully parsed, else False
+        Returns True if `self.alert.message_bytes` was successfully parsed, else False.
         """
-        msg_dicts = self.avro_to_dict(avro_bytes)  # list
+        msg_dicts = parser_utils.avro_to_dict(
+            self.alert.message_bytes, BROKERCLASSIFICATION_SCHEMA
+        )  # list
 
         if msg_dicts is None:  # unable to parse
             return False
@@ -78,33 +76,3 @@ class ElasticcBrokerClassificationParser(BaseParser):
                 raise
 
         return True
-
-    def avro_to_dict(self, avro_bytes):
-        """Convert Avro serialized bytes data to a dict.
-
-        Args:
-            avro_bytes (bytes): Avro serialized, bytes-like object
-
-        Returns:
-            A list of dictionaries, or None if bytes_data is not a bytes-like object.
-        """
-        try:
-            with io.BytesIO(avro_bytes) as fin:
-                dicts = [r for r in fastavro.reader(fin)]
-
-        except TypeError as e:
-            logger.warn(f"Unable to deserialize message {avro_bytes}: {e}")
-            return
-
-        # Validate against the schema. May want to turn this off in production.
-        try:
-            fastavro.validation.validate_many(dicts, BROKERCLASSIFICATION_SCHEMA)
-        except ValidationError as e:
-            msg = (
-                "Message does not conform to brokerClassification schema. "
-                f"Message: {dicts}. Schema: {BROKERCLASSIFICATION_SCHEMA}. Error: {e}"
-            )
-            logger.warn(msg)
-            return
-
-        return dicts
