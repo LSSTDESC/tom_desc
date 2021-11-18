@@ -53,30 +53,34 @@ class Alert(models.Model):
         ]
 
 
-class ElasticcBrokerAlert(models.Model):
+class ElasticcBrokerClassification(models.Model):
     """Model for an alert conforming to ELAsTiCC brokerClassification schema.
 
     https://github.com/LSSTDESC/plasticc_alerts/blob/main/Examples/starterkit/plasticc_schema/lsst.v4_1.brokerClassification.avsc
     """
 
-    # basic data
-    topic = models.ForeignKey(Topic, on_delete=models.PROTECT)
     alertId = models.CharField(max_length=200)
-    classifierNames = models.CharField(max_length=255)  # use TextField if need more len
+    DIAObjectId = models.CharField(max_length=200)
+    brokerMessageId = models.ForeignKey(ElasticcBrokerTimestamps, on_delete=models.PROTECT)
 
-    # classification probabilities
-    # assuming each probability should get it's own field
-    class_10 = models.FloatField(null=True)             # Bogus
-    class_20 = models.FloatField(null=True)             # Real
-    class_020 = models.FloatField(null=True)            # Real/Other
-    class_120 = models.FloatField(null=True)            # Static
-    class_0120 = models.FloatField(null=True)           # Static/Other
-    class_1120 = models.FloatField(null=True)           # Non-Recurring
-    class_01120 = models.FloatField(null=True)          # Non-Recurring/Other
-    class_11120 = models.FloatField(null=True)          # SN-like
-    class_011120 = models.FloatField(null=True)         # SN-like/Other
-    class_111120 = models.FloatField(null=True)         # Ia
-    # etc for all classes
+    # choosing null=True to be forgiving, so the rest of the info still gets stored
+    classifierName = models.CharField(max_length=200, null=True)
+    classId = models.CharField(max_length=50, null=True)
+    probability = models.FloatField(null=True)
+
+    modified = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            # models.Index(fields=['alertId'], name='alertId'),  # is this wanted?
+        ]
+
+
+class ElasticcBrokerMetadata(models.Model):
+    """Model for the timestamps associated with an alert from an ELAsTiCC broker."""
+
+    brokerMessageId = models.CharField(primary_key=True, max_length=255)  # TextField for more len
+    # topic = models.ForeignKey(Topic, on_delete=models.PROTECT)
 
     # timestamps as datetime.datetime (DateTimeField)
     desc_ingest_timestamp = models.DateTimeField(auto_now_add=True)  # auto-generated
@@ -84,13 +88,9 @@ class ElasticcBrokerAlert(models.Model):
     broker_ingest_timestamp = models.DateTimeField(null=True)
     broker_publish_timestamp = models.DateTimeField(null=True)
 
-    # other
-    message_bytes = models.BinaryField(null=True)
-    parsed = models.BooleanField(default=False)
     modified = models.DateTimeField(auto_now=True)
 
     class Meta:
         indexes = [
-            models.Index(fields=['alertId'], name='alertId'),  # is this wanted?
-            # should there also be an index that is unique across brokers?
+            # models.Index(fields=['alertId'], name='alertId'),  # is this wanted?
         ]
