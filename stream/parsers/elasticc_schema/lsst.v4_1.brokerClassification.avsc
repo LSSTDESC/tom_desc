@@ -1,28 +1,21 @@
 {
-	"namespace": "lsst.v4_1",
-	"type": "record",
-	"name": "brokerClassfication",
-	"doc": "sample avro alert schema v4.1",
-	"fields": [
-		{"name": "alertId", "type": "long", "doc": "unique alert identifer"},
-		{"name": "classifierNames", "type": "string", "doc": "unique list of classifier names" },
-        { "name":"classifications",
-            "type": {
-                 "name":"MyClassifications",
-                 "type":"record",
-                 "fields":[
-                        { "name": "classificationDict",
-                            "type":{
-                                "type": "array",
-                                    "items":{
-                                        "type":"map",
-                                            "values":"float"
-                                        }
-                                    }
-                        }
-                    ]
-                }
-        }
-            ]
-
+  "namespace": "lsst.v4_1",
+  "type": "record",
+  "name": "brokerClassfication",
+  "doc": "sample avro alert schema v4.1",
+  "fields": [
+    {"name": "alertId",         "type": "long",   "doc": "unique alert identifer"},
+    {"name": "diaObjectId",     "type": "string", "doc": "unique object identifer"},
+    {"name": "classifications", "type": {
+      "type": "array",
+      "items": {
+	    "type": "record", "name": "classificationDict", "fields": [
+          {"name": "classifierName",    "type": "string"},
+          {"name": "classId",           "type": "string"},
+          {"name": "probability",       "type": "float"}
+        ]
+      }
+    }
+    }
+  ]
 }

@@ -259,13 +259,13 @@ PITTGOOGLE_CONSUMER_CONFIGURATION = {
 
 PITTGOOGLE_PARSERS = {
     'ztf-loop': 'stream.parsers.pittgoogle_parsers.ZtfLoopParser',
-    'elasticc': 'stream.parsers.elasticc_parsers.ElasticcBrokerClassificationParser',
+    'elasticc': 'stream.parsers.elasticc_parsers.ElasticcBrokerMessageParser',
 }
 
 
 ELASTICC_PARSERS = {
     'broker-classification':
-        'stream.parsers.elasticc_parsers.ElasticcBrokerClassificationParser',
+        'stream.parsers.elasticc_parsers.ElasticcBrokerMessageParser',
 }
 
 # Caching

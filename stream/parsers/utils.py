@@ -18,6 +18,7 @@ def import_class(class_full_name):
     Args:
         class_full_name (str):
             Fully qualified name of the class to be imported and returned.
+            e.g., 'stream.parsers.elasticc_parsers.ElasticcBrokerMessageParser'
 
     Returns:
         The imported class.
@@ -41,8 +42,8 @@ def import_class(class_full_name):
     return clazz
 
 
-def avro_to_dict(avro_bytes, schema):
-    """Deserialize `avro_bytes` to a dict and check that it conforms to `schema`.
+def avro_to_list_of_dicts(avro_bytes, schema):
+    """Deserialize `avro_bytes` to a list of dicts, check that it conforms to `schema`.
 
     Args:
         avro_bytes (bytes):
@@ -52,20 +53,21 @@ def avro_to_dict(avro_bytes, schema):
             Avro schema to which the `avro_bytes` should conform.
 
     Returns:
-        A list of dictionaries, or None if bytes_data is not a bytes-like object.
+        A list of dictionaries, or None if unable to deserialize.
     """
     # Deserialize avro_bytes
+    # first, try assuming the schema is in the header
     try:
-        # assume the schema is in the header
         with io.BytesIO(avro_bytes) as fin:
             avro_dicts = [r for r in fastavro.reader(fin)]
 
-    # handle case where the schema is not attached
+    # handle case where the schema is not attached in the header
     except (UnicodeDecodeError, ValueError):
         try:
             with io.BytesIO(avro_bytes) as fin:
                 avro_dict = fastavro.schemaless_reader(fin, schema)
 
+        # if we still can't deserialize, log the error and return None
         except (UnicodeDecodeError, StopIteration) as e:
             msg = (
                 f"Unable to deserialize bytes {avro_bytes} using schema {schema}. \n{e}"
@@ -79,7 +81,13 @@ def avro_to_dict(avro_bytes, schema):
 
     # handle other errors
     except TypeError as e:
-        logger.warning(f"Unable to deserialize message {avro_bytes}: {e}")
+        logger.warning(
+            (
+                "`avro_bytes` is not a bytes-like object. Unable to deserialize. "
+                f"\n`avro_bytes`: {avro_bytes}"
+                f"\nError message: {e}"
+            )
+        )
         return
 
     # Validate against the schema. If schemaless_reader was used, it's already validated
@@ -88,7 +96,7 @@ def avro_to_dict(avro_bytes, schema):
             fastavro.validation.validate_many(avro_dicts, schema)
         except ValidationError as e:
             msg = (
-                "Message does not conform to brokerClassification schema. "
+                "Message does not conform to the schema. "
                 f"\nMessage: {avro_dicts}. \nSchema: {schema}. \nError: {e}"
             )
             logger.warning(msg)

@@ -53,20 +53,16 @@ class Alert(models.Model):
         ]
 
 
-class ElasticcBrokerClassification(models.Model):
-    """Model for an alert conforming to ELAsTiCC brokerClassification schema.
+class ElasticcBrokerMetadata(models.Model):
+    """Model for the timestamps associated with an alert from an ELAsTiCC broker."""
 
-    https://github.com/LSSTDESC/plasticc_alerts/blob/main/Examples/starterkit/plasticc_schema/lsst.v4_1.brokerClassification.avsc
-    """
+    brokerMessageId = models.CharField(primary_key=True, max_length=255)
 
-    alertId = models.CharField(max_length=200)
-    DIAObjectId = models.CharField(max_length=200)
-    brokerMessageId = models.ForeignKey(ElasticcBrokerTimestamps, on_delete=models.PROTECT)
-
-    # choosing null=True to be forgiving, so the rest of the info still gets stored
-    classifierName = models.CharField(max_length=200, null=True)
-    classId = models.CharField(max_length=50, null=True)
-    probability = models.FloatField(null=True)
+    # timestamps as datetime.datetime (DateTimeField)
+    descIngestTimestamp = models.DateTimeField(auto_now_add=True)  # auto-generated
+    elasticcPublishTimestamp = models.DateTimeField(null=True)
+    brokerIngestTimestamp = models.DateTimeField(null=True)
+    brokerPublishTimestamp = models.DateTimeField(null=True)
 
     modified = models.DateTimeField(auto_now=True)
 
@@ -76,17 +72,22 @@ class ElasticcBrokerClassification(models.Model):
         ]
 
 
-class ElasticcBrokerMetadata(models.Model):
-    """Model for the timestamps associated with an alert from an ELAsTiCC broker."""
+class ElasticcBrokerClassification(models.Model):
+    """Model for an alert conforming to ELAsTiCC brokerClassification schema.
 
-    brokerMessageId = models.CharField(primary_key=True, max_length=255)  # TextField for more len
-    # topic = models.ForeignKey(Topic, on_delete=models.PROTECT)
+    https://github.com/LSSTDESC/plasticc_alerts/blob/main/Examples/starterkit/plasticc_schema/lsst.v4_1.brokerClassification.avsc
+    """
 
-    # timestamps as datetime.datetime (DateTimeField)
-    desc_ingest_timestamp = models.DateTimeField(auto_now_add=True)  # auto-generated
-    elasticc_publish_timestamp = models.DateTimeField(null=True)
-    broker_ingest_timestamp = models.DateTimeField(null=True)
-    broker_publish_timestamp = models.DateTimeField(null=True)
+    alertId = models.CharField(max_length=200)
+    diaObjectId = models.CharField(max_length=200)
+    brokerMessageId = models.ForeignKey(
+        ElasticcBrokerMetadata, on_delete=models.PROTECT, null=True
+    )
+
+    # using null=True to be forgiving, so the rest of the info still gets stored
+    classifierName = models.CharField(max_length=200, null=True)
+    classId = models.CharField(max_length=50, null=True)
+    probability = models.FloatField(null=True)
 
     modified = models.DateTimeField(auto_now=True)
 
