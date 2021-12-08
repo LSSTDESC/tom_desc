@@ -46,52 +46,52 @@ class Command(BaseCommand):
                 For each message complete the remaining steps.
 
             2.  Unpack the message payload into an Avro serialized bytes
-                object, and the metadata into a dictionary.
+                object, and the attributes into a dictionary.
 
             3.  Instantiate an ELASTICC_PARSER, and call its parse_and_save() method.
-                This will create one database entry for each reported classification,
-                and one for the metadata. See the parser's __init__ docstring for
-                requirements.
+                This will create database entries for each reported classification,
+                along with entries for the message attributes and the classifier.
+                See the parser's __init__ docstring for requirements.
 
             4.  The parser returns a bool indicating whether all database entries were
                 created successfully. False indicates a failure to create one or more
                 entries (some entries may have been successful, but at least one was
-                not). The parser logs the errors it encounters.
+                not).
         """
         # 1. Listen to the example broker stream.
         for file_path in EXAMPLE_BROKER_MESSAGES:
 
-            # 2. Unpack the message payload and metadata.
-            msg_payload_avro_bytes, msg_metadata_dict = self.unpack_message(file_path)
+            # 2. Unpack the message payload and attributes.
+            msg_payload_avro_bytes, msg_attrs_dict = self.unpack_message(file_path)
 
             # 3. Use the parser to save entries to the database.
-            parser = ELASTICC_PARSER(msg_payload_avro_bytes, msg_metadata_dict)
+            parser = ELASTICC_PARSER(msg_payload_avro_bytes, msg_attrs_dict)
             success = parser.parse_and_save()
 
             # 4. Respond to the parser's success/failure, as desired.
             if success:
                 continue
             else:
-                logger.warn(f"Error parsing msg. ID: {msg_metadata_dict['messageId']}.")
+                logger.warn(f"Error parsing msg. ID: {msg_attrs_dict['messageId']}.")
 
     def unpack_message(self, path_to_example_message):
-        """Return message payload and metadata. This example just loads dummy data."""
+        """Return message payload and attributes. This example just loads dummy data."""
         # load the Avro message
         with open(path_to_example_message, "rb") as f:
             msg_payload_avro_bytes = f.read()
 
-        # collect message metadata
-        example_message_id = str(np.random.randint(100000, 1000000))
+        # collect message attributes
+        example_message_id = np.random.randint(100000, 1000000)
         example_timestamp = datetime.datetime.now(datetime.timezone.utc)
-        msg_metadata_dict = {
+        msg_attrs_dict = {
             # required info
             "brokerName": BROKER_NAME,
             "brokerTopic": BROKER_TOPIC,
-            "messageId": example_message_id,
             # optional info
+            "messageId": example_message_id,
             "elasticcPublishTimestamp": example_timestamp,
             "brokerIngestTimestamp": example_timestamp,
             "brokerPublishTimestamp": example_timestamp,
         }
 
-        return (msg_payload_avro_bytes, msg_metadata_dict)
+        return (msg_payload_avro_bytes, msg_attrs_dict)
