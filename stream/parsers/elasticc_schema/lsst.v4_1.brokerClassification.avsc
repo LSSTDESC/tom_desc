@@ -6,6 +6,14 @@
   "fields": [
     {"name": "alertId", "type": "long", "doc": "unique alert identifer"},
     {"name": "diaObjectId", "type": "long", "doc": "unique object identifer"},
+    {"name": "elasticcPublishTimestamp",
+        "type": {"type": "long", "logicalType": "timestamp-micros"},
+        "doc": "timestamp from originating ELAsTiCC alert"
+    },
+    {"name": "brokerIngestTimestamp",
+        "type": ["null", {"type": "long", "logicalType": "timestamp-micros"}],
+        "doc": "timestamp of broker ingestion of ELAsTiCC alert"
+    },
     {"name": "classifications", "type": {
         "type": "array",
         "items": {

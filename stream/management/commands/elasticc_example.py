@@ -53,7 +53,8 @@ class Command(BaseCommand):
                 along with entries for the message attributes and the classifier.
                 See the parser's __init__ docstring for requirements.
 
-            4.  The parser returns a bool indicating whether all database entries were
+            4.  Respond to the parser's success/failure, as desired.
+                The parser returns a bool indicating whether all database entries were
                 created successfully. False indicates a failure to create one or more
                 entries (some entries may have been successful, but at least one was
                 not).
@@ -89,9 +90,9 @@ class Command(BaseCommand):
             "brokerTopic": BROKER_TOPIC,
             # optional info
             "messageId": example_message_id,
-            "elasticcPublishTimestamp": example_timestamp,
-            "brokerIngestTimestamp": example_timestamp,
             "brokerPublishTimestamp": example_timestamp,
         }
+        # Two additional timestamps are included in the msg payload,
+        # elasticcPublishTimestamp and brokerIngestTimestamp
 
         return (msg_payload_avro_bytes, msg_attrs_dict)
