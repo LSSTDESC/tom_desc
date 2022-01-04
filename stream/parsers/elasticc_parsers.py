@@ -7,7 +7,11 @@ from pathlib import Path
 from django.db import IntegrityError
 import fastavro
 
-from stream.models import ElasticcBrokerClassification, ElasticcBrokerMessage, ElasticcBrokerClassifier
+from stream.models import (
+    ElasticcBrokerClassification,
+    ElasticcBrokerMessage,
+    ElasticcBrokerClassifier,
+)
 from stream.parsers import utils as parser_utils
 from stream.parsers.base_parser import BaseParser
 
@@ -23,10 +27,16 @@ BROKERCLASSIFICATION_SCHEMA = fastavro.schema.load_schema(avsc_file)
 class ElasticcBrokerMessageParser(BaseParser):
     """Parse alerts conforming to ELAsTiCC schema: lsst.v4_1.brokerClassification.avsc.
 
-    Example alert (after casting Avro -> dict):
+    Example alert as a dict (everything except `brokerIngestTimestamp` is required):
     {
         "alertId": 123456789,
         "diaObjectId": 135792468,
+        "elasticcPublishTimestamp": datetime.datetime(
+            2022, 1, 4, 6, 11, 12, 476607, tzinfo=datetime.timezone.utc
+        ),
+        "brokerIngestTimestamp": datetime.datetime(
+            2022, 1, 4, 6, 12, 1, 344427, tzinfo=datetime.timezone.utc
+        ),
         "classifications": [
             {
                 "classifierName": "RealBogus_v0.1",
@@ -61,6 +71,9 @@ class ElasticcBrokerMessageParser(BaseParser):
             msg_payload (bytes):
                 Avro serialized bytes object conforming to the ELAsTiCC schema,
                 lsst.v4_1.brokerClassification.avsc.
+                This payload includes two timestamps
+                (`elasticcPublishTimestamp` and `brokerIngestTimestamp`)
+                which the parser will extract and combine with the `msg_attrs`.
 
             msg_attrs (dict):
                 Attributes associated with the message.
@@ -68,16 +81,14 @@ class ElasticcBrokerMessageParser(BaseParser):
                     'brokerName':               string (required)
                     'brokerTopic':              string (required)
                     'messageId':                int (optional)
-                    'elasticcPublishTimestamp': datetime.datetime (optional)
-                    'brokerIngestTimestamp':    datetime.datetime (optional)
                     'brokerPublishTimestamp':   datetime.datetime (optional)
         """
         self.msg_payload = msg_payload
         self.msg_attrs = msg_attrs
-        # Attribute for the ElasticcBrokerMessage object (unique for given message).
-        # save_attrs() will update this value, if it successfully creates the object.
-        # save_classification() will use it to associate classifications with the message.
-        self.elasticc_broker_attrs = None
+        # Class attribute for ElasticcBrokerMessage object (unique for given message).
+        # save_msg_attributes() will update this, if it successfully creates the object.
+        # save_classification() will use it to associate classifications with the msg.
+        self.elasticc_broker_msg_attrs = None
 
     def __repr__(self):
         return 'ELAsTiCC broker message parser'
@@ -88,8 +99,8 @@ class ElasticcBrokerMessageParser(BaseParser):
         Creates one entry in the ElasticcBrokerClassification table for each reported
         classification (possibly multiple entries per alert),
         and one entry in the ElasticcBrokerMessage table (one entry per alert).
-        If the message contains a classifier that does not already have an entry in the
-        ElasticcBrokerClassifier table, one is created.
+        Additionally, if the message contains a classifier that does not already have an
+        entry in the ElasticcBrokerClassifier table, one is created.
 
         Returns:
             bool:
@@ -103,12 +114,21 @@ class ElasticcBrokerMessageParser(BaseParser):
         if not success:
             return success
 
-        # Save attributes to the database.
-        attrs_success = self.save_attrs()
-
-        # Save classifications to the database.
-        classifications_success = True
+        # Save attributes and classifications to the database.
+        attributes_success, classifications_success = True, True
         for msg_dict in msg_dicts:
+
+            # Save attributes.
+            # grab timestamps from payload. other attributes are in self.msg_attrs.
+            timestamps = {
+                "elasticcPublishTimestamp": msg_dict.get("elasticcPublishTimestamp"),
+                "brokerIngestTimestamp": msg_dict.get("brokerIngestTimestamp"),
+            }
+            attrs_success = self.save_msg_attributes(timestamps)
+            if not attrs_success:
+                attributes_success = False
+
+            # Save classifications
             for classification in msg_dict["classifications"]:
                 class_success = self.save_classification(
                     msg_dict["alertId"],
@@ -119,7 +139,7 @@ class ElasticcBrokerMessageParser(BaseParser):
                     classifications_success = False
 
         # Report whether all operations were successful.
-        return (attrs_success and classifications_success)
+        return (attributes_success and classifications_success)
 
     def deserialize_and_validate_payload(self):
         """Deserialze and validate self.msg_payload."""
@@ -138,14 +158,14 @@ class ElasticcBrokerMessageParser(BaseParser):
 
         return (msg_dicts, success)
 
-    def save_attrs(self):
+    def save_msg_attributes(self, timestamps):
         """Save message attributes to the ElasticcBrokerMessage database table."""
         success = True
-        attrs = self.msg_attrs
+        attrs = dict(self.msg_attrs, **timestamps)
 
         # save to the database
         try:
-            elasticc_broker_attrs = ElasticcBrokerMessage.objects.create(
+            elasticc_broker_msg_attrs = ElasticcBrokerMessage.objects.create(
                 streamMessageId=attrs.get("messageId"),
                 topicName=attrs.get("brokerTopic"),
                 elasticcPublishTimestamp=attrs.get("elasticcPublishTimestamp"),
@@ -166,12 +186,16 @@ class ElasticcBrokerMessageParser(BaseParser):
 
         # set the class attribute so save_classification() can use it
         else:
-            self.elasticc_broker_attrs = elasticc_broker_attrs
+            self.elasticc_broker_msg_attrs = elasticc_broker_msg_attrs
 
         return success
 
     def save_classification(self, alertId, diaObjectId, classification):
-        """Save a classification to the ElasticcBrokerClassification database table."""
+        """Save a classification to the ElasticcBrokerClassification database table.
+
+        If the classifier that produced the classification does not already have an
+        entry in the ElasticcBrokerClassifier table, one is created.
+        """
         success = True
         classifier, created = ElasticcBrokerClassifier.objects.get_or_create(
             brokerName=self.msg_attrs["brokerName"],
@@ -183,7 +207,7 @@ class ElasticcBrokerMessageParser(BaseParser):
             _ = ElasticcBrokerClassification.objects.create(
                 alertId=alertId,
                 diaObjectId=diaObjectId,
-                dbMessageIndex=self.elasticc_broker_attrs,
+                dbMessageIndex=self.elasticc_broker_msg_attrs,
                 dbClassifierIndex=classifier,
                 classId=classification["classId"],
                 probability=classification["probability"],

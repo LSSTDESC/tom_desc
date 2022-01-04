@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: UTF-8 -*-
-"""Load example ELAsTiCC brokerClassification alert and parse to ElasticcBrokerAlert."""
+"""Load example ELAsTiCC brokerClassification alerts, save contents to the database."""
 import logging
-from pathlib import Path
+from pathlib import Path    # only used to load the example alerts
 
-import datetime
+import datetime             # only used for the example timestamps
 from django.conf import settings
 from django.core.management.base import BaseCommand
-import numpy as np
+import numpy as np          # only used for the example messageId
 
 from stream.parsers import utils as parser_utils
 
@@ -23,6 +23,7 @@ elasticc_parser_class_name = settings.ELASTICC_PARSERS["broker-classification"] 
 ELASTICC_PARSER = parser_utils.import_class(elasticc_parser_class_name)  # class
 
 # example messages conforming to the brokerClassification schema
+# only needed for the example. brokers can remove the following set of lines.
 parent_path = Path(__file__).parent.parent.parent.resolve() / "parsers/elasticc_schema"
 EXAMPLE_BROKER_MESSAGES = [
     parent_path / "brokerClassification_example.avro",
@@ -46,14 +47,15 @@ class Command(BaseCommand):
                 For each message complete the remaining steps.
 
             2.  Unpack the message payload into an Avro serialized bytes
-                object, and the attributes into a dictionary.
+                object, and the message attributes into a dictionary.
 
-            3.  Instantiate an ELASTICC_PARSER, and call its parse_and_save() method.
+            3.  Instantiate an `ELASTICC_PARSER` and call its `parse_and_save()` method.
                 This will create database entries for each reported classification,
                 along with entries for the message attributes and the classifier.
                 See the parser's __init__ docstring for requirements.
 
-            4.  The parser returns a bool indicating whether all database entries were
+            4.  Respond to the parser's success/failure, as desired.
+                The parser returns a bool indicating whether all database entries were
                 created successfully. False indicates a failure to create one or more
                 entries (some entries may have been successful, but at least one was
                 not).
@@ -89,9 +91,9 @@ class Command(BaseCommand):
             "brokerTopic": BROKER_TOPIC,
             # optional info
             "messageId": example_message_id,
-            "elasticcPublishTimestamp": example_timestamp,
-            "brokerIngestTimestamp": example_timestamp,
             "brokerPublishTimestamp": example_timestamp,
         }
+        # Two additional timestamps are included in the msg payload,
+        # elasticcPublishTimestamp and brokerIngestTimestamp
 
         return (msg_payload_avro_bytes, msg_attrs_dict)
