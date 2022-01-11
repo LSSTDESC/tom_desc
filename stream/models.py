@@ -1,3 +1,4 @@
+import sys
 from django.contrib.gis.geos import Point
 from django.contrib.gis.db import models as gis_models
 from django.db import models
@@ -196,12 +197,34 @@ class ElasticcDiaObject(models.Model):
     
 class ElasticcSSObject(models.Model):
     ssObjectId = models.BigIntegerField( primary_key=True, db_index=True )
-    discoveriySubmissionDate = models.FloatField( null=True )
+    discoverySubmissionDate = models.FloatField( null=True )
     firstObservationDate = models.FloatField( null=True )
     arc = models.FloatField( null=True )
-    numObjs = models.IntegerField( null=True )
+    numObs = models.IntegerField( null=True )
     flags = models.BigIntegerField()
 
+    @staticmethod
+    def create( data ):
+        curssobj = ElasticcSSObject(
+            ssObjectId = data['ssObjectId'],
+            discoverySubmissionDate = data['discoverySubmissionDate'],
+            firstObservationDate = data['firstObservationDate'],
+            arc = data['arc'],
+            numObs = data['numObs'],
+            flags = data['flags']
+        )
+        curssobj.save()
+        return curssobj
+
+    @staticmethod
+    def load_or_create( data ):
+        try:
+            curssobj = ElasticcSSObject.objects.get( pk=data['ssObjectId'] )
+            # VERIFY THAT STUFF MATCHES????
+            return curssobj
+        except ElasticcSSObject.DoesNotExist:
+            return ElasticcSSObject.create( data )
+    
 class ElasticcDiaSource(models.Model):
     diaSourceId = models.BigIntegerField( primary_key=True, db_index=True )
     ccdVisitId = models.BigIntegerField()
@@ -221,7 +244,7 @@ class ElasticcDiaSource(models.Model):
     # decl = models.FloatField()
     raErr = models.FloatField( null=True )
     declErr = models.FloatField( null=True )
-    ra_decl_cov = models.FloatField( null=True )
+    ra_decl_Cov = models.FloatField( null=True )
     x = models.FloatField()
     y = models.FloatField()
     xErr = models.FloatField( null=True )
@@ -277,8 +300,86 @@ class ElasticcDiaSource(models.Model):
     hostgal2_magerr_z = models.FloatField( null=True )
     hostgal2_magerr_Y = models.FloatField( null=True )
 
+    @staticmethod
+    def create( data ):
+        cursrc = ElasticcDiaSource(
+            diaSourceId = data['diaSourceId'],
+            ccdVisitId = data['ccdVisitId'],
+            diaObject = data['diaObject'],
+            ssObject = data['ssObject'],
+            ### parentDiaSource = data['parentDiaSource'],
+            midPointTai = data['midPointTai'],
+            filterName = data['filterName'],
+            programId = data['programId'],
+            radec = Point( data['ra'], data['decl'] ),
+            raErr = data['raErr'],
+            declErr = data['declErr'],
+            ra_decl_Cov = data['ra_decl_Cov'],
+            x = data['x'],
+            y = data['y'],
+            xErr = data['xErr'],
+            yErr = data['yErr'],
+            x_y_Cov = data['x_y_Cov'],
+            apFlux = data['apFlux'],
+            apFluxErr = data['apFluxErr'],
+            snr = data['snr'],
+            psFlux = data['psFlux'],
+            psFluxErr = data['psFluxErr'],
+            flags = data['flags'],
+            nobs = data['nobs'],
+            mwebv = data['mwebv'],
+            mwebv_err = data['mwebv_err'],
+            z_final = data['z_final'],
+            z_final_err = data['z_final_err'],
+            hostgal_ellipticity = data['hostgal_ellipticity'],
+            hostgal_sqradius = data['hostgal_sqradius'],
+            hostgal_z = data['hostgal_z'],
+            hostgal_mag_u = data['hostgal_mag_u'],
+            hostgal_mag_g = data['hostgal_mag_g'],
+            hostgal_mag_r = data['hostgal_mag_r'],
+            hostgal_mag_i = data['hostgal_mag_i'],
+            hostgal_mag_z = data['hostgal_mag_z'],
+            hostgal_mag_Y = data['hostgal_mag_Y'],
+            hostgal_radec = Point( data['hostgal_ra'], data['hostgal_dec'] ),
+            hostgal_snsep = data['hostgal_snsep'],
+            hostgal_magerr_u = data['hostgal_magerr_u'],
+            hostgal_magerr_g = data['hostgal_magerr_g'],
+            hostgal_magerr_r = data['hostgal_magerr_r'],
+            hostgal_magerr_i = data['hostgal_magerr_i'],
+            hostgal_magerr_z = data['hostgal_magerr_z'],
+            hostgal_magerr_Y = data['hostgal_magerr_Y'],
+            hostgal2_ellipticity = data['hostgal2_ellipticity'],
+            hostgal2_sqradius = data['hostgal2_sqradius'],
+            hostgal2_z = data['hostgal2_z'],
+            hostgal2_mag_u = data['hostgal2_mag_u'],
+            hostgal2_mag_g = data['hostgal2_mag_g'],
+            hostgal2_mag_r = data['hostgal2_mag_r'],
+            hostgal2_mag_i = data['hostgal2_mag_i'],
+            hostgal2_mag_z = data['hostgal2_mag_z'],
+            hostgal2_mag_Y = data['hostgal2_mag_Y'],
+            hostgal2_radec = Point( data['hostgal2_ra'], data['hostgal2_dec'] ),
+            hostgal2_snsep = data['hostgal2_snsep'],
+            hostgal2_magerr_u = data['hostgal2_magerr_u'],
+            hostgal2_magerr_g = data['hostgal2_magerr_g'],
+            hostgal2_magerr_r = data['hostgal2_magerr_r'],
+            hostgal2_magerr_i = data['hostgal2_magerr_i'],
+            hostgal2_magerr_z = data['hostgal2_magerr_z'],
+            hostgal2_magerr_Y = data['hostgal2_magerr_Y']
+        )
+        cursrc.save()
+        return cursrc
+    
+    @staticmethod
+    def load_or_create( data ):
+        try:
+            cursrc = ElasticcDiaSource.objects.get( pk=data['ssObjectId'] )
+            # VERIFY THAT STUFF MATCHES????
+            return cursrc
+        except ElasticcDiaSource.DoesNotExist:
+            return ElasticcDiaSource.create( data )
+
 class ElasticcAlert(models.Model):
-    alertId = models.BigIntegerField( primary_key=True, db_index=True )
+    alertId = models.BigIntegerField( db_index=True )
     diaSource = models.ForeignKey( ElasticcDiaSource, on_delete=models.CASCADE )
     # prvDiaSources
     # prvDiaForcedSources
@@ -287,3 +388,37 @@ class ElasticcAlert(models.Model):
     ssObject = models.ForeignKey( ElasticcSSObject, on_delete=models.CASCADE )
     # cutoutDifference
     # cutoutTemplate
+
+    @staticmethod
+    def create( data ):
+        curalert = ElasticcAlert(
+            alertId = data['alertId'],
+            diaSource = data['diaSource'],
+            diaObject = data['diaObject'],
+            ssObject = data['ssObject']
+        )
+        curalert.save()
+        return curalert
+
+    @staticmethod
+    def load_or_create( data ):
+        # Alas, alertId is not unique, it seems.  I am going to
+        #  consider an alert to be the same thing if all of alertId,
+        #  diaSource.diaSourceId, diaObject.diaObjectId, and
+        #  ssObject.ssObject.Id are the same.  I don't know if this
+        #  is really the riht thing to do
+
+        them = ElasticcAlert.objects.filter( alertId=data['alertId'],
+                                             diaSource__diaSourceId=data['diaSource'].diaSourceId,
+                                             diaObject__diaObjectId=data['diaObject'].diaObjectId,
+                                             ssObject__ssObjectId=data['ssObject'].ssObjectId )
+        if len(them) == 0:
+            return ElasticcAlert.create( data )
+        if len(them) > 1:
+            sys.stderr.write( f"WARNING: Alert multiply defined: "
+                              f"alertId: {data['alertId']}, "
+                              f"diaSourceId: {data['diaSource'].diaSourceId}, "
+                              f"diaObjectId: {data['diaObject'].diaObjectId}, "
+                              f"ssObjectId: {data['ssObject'].ssObjectId}" )
+        return them[0]
+    

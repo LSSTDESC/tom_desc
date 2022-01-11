@@ -1,4 +1,6 @@
 import json
+import traceback
+import io
 from django.http import HttpResponse, JsonResponse
 from django.utils.decorators import method_decorator
 from django.contrib.auth.decorators import login_required, permission_required
@@ -88,3 +90,29 @@ class MaybeAddElasticcDiaObject(django.views.View):
         curobj = ElasticcDiaObject.load_or_create( data )
         resp = { 'status': 'ok', 'message': f'ObjectID: {curobj.diaObjectId}' }
         return JsonResponse( resp )
+
+@method_decorator(login_required, name='dispatch')
+class MaybeAddElasticcAlert(django.views.View):
+    def post(self, request, *args, **kwargs):
+        try:
+            data = json.loads( request.body )
+            curobj = ElasticcDiaObject.load_or_create( data['diaObject'] )
+            curssobj = ElasticcSSObject.load_or_create( data['ssObject'] )
+            data['diaSource']['diaObject'] = curobj
+            data['diaSource']['ssObject'] = curssobj
+            cursrc = ElasticcDiaSource.load_or_create( data['diaSource'] )
+            data['diaSource'] = cursrc
+            data['diaObject'] = curobj
+            data['ssObject'] = curssobj
+            alertobj = ElasticcAlert.load_or_create( data )
+            resp = { 'status': 'ok', 'message': f'Alert ID: {alertobj.alertId}' }
+            return JsonResponse( resp )
+        except Exception as e:
+            strstream = io.StringIO()
+            traceback.print_exc( file=strstream )
+            resp = { 'status': 'error',
+                     'message': 'Exception in AddElasticcAlert',
+                     'exception': str(e),
+                     'traceback': strstream.getvalue() }
+            strstream.close()
+            return JsonResponse( resp )
