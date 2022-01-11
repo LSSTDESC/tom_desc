@@ -3,14 +3,13 @@ RUN pip install --upgrade pip
 
 WORKDIR /tom_desc
 
-COPY requirements.txt .
-
 RUN apt-get update &&\
    apt-get install -y gdal-bin
 
 RUN apt-get update &&\
     apt-get install -y librdkafka-dev
 
+COPY requirements.txt .
 RUN pip install \
 	--no-cache \
 	--disable-pip-version-check \

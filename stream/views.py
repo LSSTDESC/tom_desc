@@ -1,11 +1,17 @@
+import json
+from django.http import HttpResponse, JsonResponse
+from django.utils.decorators import method_decorator
+from django.contrib.auth.decorators import login_required, permission_required
 from django.shortcuts import render
 from django.db.models import F
+import django.views
 from rest_framework import pagination
 from rest_framework import permissions
 from rest_framework import viewsets
 
 from stream.filters import AlertFilter, EventFilter, TopicFilter
-from stream.models import Alert, Event, Target, Topic
+from stream.models import Alert, Event, Target, Topic, RknopTest
+from stream.models import ElasticcDiaObject, ElasticcSSObject, ElasticcDiaSource, ElasticcAlert
 from stream.serializers import AlertSerializer, EventDetailSerializer, EventSerializer, TargetSerializer, TopicSerializer
 from stream.serializers.v1 import serializers as v1_serializers
 
@@ -55,3 +61,30 @@ class EventViewSet(viewsets.ModelViewSet):
         if self.action == 'retrieve':
             return EventDetailSerializer
         return EventSerializer
+
+# ======================================================================
+
+
+@method_decorator(login_required, name='dispatch')
+class DumpRknopTest(django.views.View):
+    def get(self, request, *args, **kwargs):
+        them = RknopTest.objects.all()
+        ret = []
+        for it in them:
+            ret.append( { "number": it.number, "description": it.description } )
+        return HttpResponse(json.dumps(ret))
+        
+
+
+# ======================================================================
+# I think that using the REST API and serializers is a better way to do
+# this, but I'm still learning how all that works.  For now, put this here
+# with a lot of manual work so that I can at least get stuff in
+
+@method_decorator(login_required, name='dispatch')
+class MaybeAddElasticcDiaObject(django.views.View):
+    def post(self, request, *args, **kwargs):
+        data = json.loads( request.body )
+        curobj = ElasticcDiaObject.load_or_create( data )
+        resp = { 'status': 'ok', 'message': f'ObjectID: {curobj.diaObjectId}' }
+        return JsonResponse( resp )

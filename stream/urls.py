@@ -10,7 +10,8 @@ router.register(r'alerts', views.AlertViewSet)
 router.register(r'topics', views.TopicViewSet)
 router.register(r'events', views.EventViewSet)
 
-
 urlpatterns = [
+    url('dumprknoptest', views.DumpRknopTest.as_view()),
+    url('addelasticcdiaobject', views.MaybeAddElasticcDiaObject.as_view()),
     url('', include((router.urls, 'stream'), namespace='stream')),
 ]
