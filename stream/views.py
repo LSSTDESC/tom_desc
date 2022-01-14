@@ -71,7 +71,6 @@ class EventViewSet(viewsets.ModelViewSet):
 class DumpRknopTest(django.views.View):
     def get(self, request, *args, **kwargs):
         them = RknopTest.objects.all()
-        ret = []
         for it in them:
             ret.append( { "number": it.number, "description": it.description } )
         return HttpResponse(json.dumps(ret))
@@ -93,19 +92,22 @@ class MaybeAddElasticcDiaObject(django.views.View):
 
 @method_decorator(login_required, name='dispatch')
 class MaybeAddElasticcAlert(django.views.View):
+    def load_one_object( self, data ):
+        curobj = ElasticcDiaObject.load_or_create( data['diaObject'] )
+        data['diaSource']['diaObject'] = curobj
+        cursrc = ElasticcDiaSource.load_or_create( data['diaSource'] )
+        return cursrc.diaSourceId, curobj.diaObjectId
+        
     def post(self, request, *args, **kwargs):
         try:
             data = json.loads( request.body )
-            curobj = ElasticcDiaObject.load_or_create( data['diaObject'] )
-            curssobj = ElasticcSSObject.load_or_create( data['ssObject'] )
-            data['diaSource']['diaObject'] = curobj
-            data['diaSource']['ssObject'] = curssobj
-            cursrc = ElasticcDiaSource.load_or_create( data['diaSource'] )
-            data['diaSource'] = cursrc
-            data['diaObject'] = curobj
-            data['ssObject'] = curssobj
-            alertobj = ElasticcAlert.load_or_create( data )
-            resp = { 'status': 'ok', 'message': f'Alert ID: {alertobj.alertId}' }
+            loaded = []
+            if isinstance( data, dict ):
+                loaded.append( self.load_one_object( data ) )
+            else:
+                for item in data:
+                    loaded.append( self.load_one_object( item ) )
+            resp = { 'status': 'ok', 'message': loaded }
             return JsonResponse( resp )
         except Exception as e:
             strstream = io.StringIO()

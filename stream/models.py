@@ -239,7 +239,7 @@ class ElasticcDiaSource(models.Model):
     @staticmethod
     def load_or_create( data ):
         try:
-            cursrc = ElasticcDiaSource.objects.get( pk=data['ssObjectId'] )
+            cursrc = ElasticcDiaSource.objects.get( pk=data['diaSourceId'] )
             # VERIFY THAT STUFF MATCHES????
             return cursrc
         except ElasticcDiaSource.DoesNotExist:
