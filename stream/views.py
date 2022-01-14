@@ -13,7 +13,7 @@ from rest_framework import viewsets
 
 from stream.filters import AlertFilter, EventFilter, TopicFilter
 from stream.models import Alert, Event, Target, Topic, RknopTest
-from stream.models import ElasticcDiaObject, ElasticcSSObject, ElasticcDiaSource, ElasticcAlert
+from stream.models import ElasticcDiaObject, ElasticcDiaSource
 from stream.serializers import AlertSerializer, EventDetailSerializer, EventSerializer, TargetSerializer, TopicSerializer
 from stream.serializers.v1 import serializers as v1_serializers
 

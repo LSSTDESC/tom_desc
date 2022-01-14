@@ -5,7 +5,7 @@ from .models import Target, Topic
 from .models import ElasticcBrokerClassification, ElasticcBrokerClassifier, ElasticcBrokerMessage
 from .models import Event, EventAttributes, Alert
 from .models import RknopTest
-from .models import ElasticcDiaObject, ElasticcSSObject, ElasticcDiaSource, ElasticcAlert
+from .models import ElasticcDiaObject, ElasticcDiaSource
 
 admin.site.register( [ Target,
                        Topic,
@@ -15,9 +15,6 @@ admin.site.register( [ Target,
                        Event, EventAttributes,
                        Alert,
                        RknopTest,
-                       ElasticcSSObject,
-                       ElasticcDiaSource,
-                       ElasticcAlert,
                       ]
                      )
 
@@ -30,3 +27,4 @@ class PointsAsNumbers(admin.ModelAdmin):
     }
 
 admin.site.register( ElasticcDiaObject, PointsAsNumbers )
+admin.site.register( ElasticcDiaSource, PointsAsNumbers )
