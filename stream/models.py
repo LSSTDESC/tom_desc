@@ -151,6 +151,7 @@ class ElasticcDiaObject(models.Model):
         curobj = ElasticcDiaObject(
             diaObjectId = data['diaObjectId'],
             radec = Point( data['ra'], data['decl'] ),
+        )
         curobj.save()
         return curobj
     
