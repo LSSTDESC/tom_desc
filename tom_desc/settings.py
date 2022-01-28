@@ -30,6 +30,8 @@ DEBUG = True
 
 ALLOWED_HOSTS = ['*']
 
+# Added RKNOP 2022-01-28
+DATA_UPLOAD_MAX_MEMORY_SIZE = 524288000
 
 # Application definition
 
