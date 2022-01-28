@@ -214,7 +214,7 @@ class ElasticcDiaSource(models.Model):
             z_final = data['z_final'],
             z_final_err = data['z_final_err'],
             hostgal_z = data['hostgal_z'],
-            hostgal_z_err = data['hostgal_z_err'],
+            # hostgal_z_err = data['hostgal_z_err'],   # Isn't currently in alert schema
             hostgal_snsep = data['hostgal_snsep'],
             hostgal_mag_u = data['hostgal_mag_u'],
             hostgal_mag_g = data['hostgal_mag_g'],
