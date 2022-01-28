@@ -226,7 +226,7 @@ class ElasticcDiaSource(models.Model):
             hostgal_magerr_g = data['hostgal_magerr_g'],
             hostgal_magerr_r = data['hostgal_magerr_r'],
             hostgal_magerr_i = data['hostgal_magerr_i'],
-            hostgal_maerrg_z = data['hostgal_magerr_z'],
+            hostgal_magerr_z = data['hostgal_magerr_z'],
             hostgal_magerr_Y = data['hostgal_magerr_Y'],
         )
         cursrc.save()
