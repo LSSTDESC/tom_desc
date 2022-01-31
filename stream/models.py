@@ -171,7 +171,11 @@ class ElasticcDiaSource(models.Model):
 
 
 class ElasticcDiaTruth(models.Model):
-    diaSource = models.ForeignKey( ElasticcDiaSource, on_delete=models.CASCADE, null=False, unique=True )
+    # I can't use a foreign key constraint here because there will be truth entries for
+    # sources for which there was no alert, and as such which will not be in the
+    # ElasticcDiaSource table.
+    diaSourceId = models.BigIntegerField( null=False, primary_key=True )
+    diaObjectId = models.BigIntegerField( null=False )
     detect = models.BooleanField()
     true_gentype = models.IntegerField()
     true_genmag = models.FloatField()
@@ -180,14 +184,16 @@ class ElasticcDiaTruth(models.Model):
     def create( data ):
         try:
             source = ElasticcDiaSource.objects.get( diaSourceId=data['SourceID'] )
+            if source.diaObject_id != data['SNID']:
+                raise ValueError( f"SNID {data['SNID']} doesn't match diaSource diaObject_id {source.diaObject_id}" )
+            if math.fabs( float( data['MJD'] - source.midPointTai ) > 0.01 ):
+                raise ValueError( f"MJD {data['MJD']} doesn't match diaSource midPointTai {source.midPointTai}" )
         except ElasticcDiaSource.DoesNotExist:
-            raise ValueError( f"Source not found: {data['SourceID']}" )
-        if source.diaObject_id != data['SNID']:
-            raise ValueError( f"SNID {data['SNID']} doesn't match diaSource diaObject_id {source.diaObject_id}" )
-        if math.fabs( float( data['MJD'] - source.midPointTai ) > 0.01 ):
-            raise ValueError( f"MJD {data['MJD']} doesn't match diaSource midPointTai {source.midPointTai}" )
+            if data['DETECT']:
+                raise ValueError( f'No SourceID {data["SourceID"]} for a DETECT=true truth entry' )
         curtruth = ElasticcDiaTruth(
-            diaSource_id = int( data['SourceID'] ),
+            diaSourceId = int( data['SourceID'] ),
+            diaObjectId = int( data['SNID'] ),
             detect = bool( data['DETECT'] ),
             true_gentype = int( data['TRUE_GENTYPE'] ),
             true_genmag = float( data['TRUE_GENMAG'] )
