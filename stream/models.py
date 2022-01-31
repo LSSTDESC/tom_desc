@@ -204,7 +204,7 @@ class ElasticcDiaTruth(models.Model):
     @staticmethod
     def load_or_create( data ):
         try:
-            curtruth = ElasticcDiaTruth.objects.get( diaSource_id=data['SourceID'] )
+            curtruth = ElasticcDiaTruth.objects.get( diaSourceId=data['SourceID'] )
             # VERIFY THAT STUFF MATCHES?????
             return curtruth
         except ElasticcDiaTruth.DoesNotExist:

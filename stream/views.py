@@ -128,7 +128,7 @@ class MaybeAddElasticcAlert(django.views.View):
 class MaybeAddElasticcTruth(django.views.View):
     def load_one_object( self, data ):
         curobj = ElasticcDiaTruth.load_or_create( data )
-        return curobj.diaSource_id
+        return curobj.diaSourceId
     
     def post( self, request, *args, **kwargs ):
         try:
