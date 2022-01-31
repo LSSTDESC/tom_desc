@@ -15,5 +15,6 @@ urlpatterns = [
     url('addelasticcdiaobject', views.MaybeAddElasticcDiaObject.as_view()),
     url('addelasticalert', views.MaybeAddElasticcAlert.as_view()),
     url('addtruth', views.MaybeAddElasticcTruth.as_view()),
+    url('runsqlquery', views.RunSQLQuery.as_view()),
     url('', include((router.urls, 'stream'), namespace='stream')),
 ]

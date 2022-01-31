@@ -1,0 +1,30 @@
+Rob's workflow
+
+  * In the local checked out tree ( $HOME/desc/tom_desc )
+     * Edit code
+     * Commit and push
+  * At /global/cfs/cdirs/m1727/tom/deploy_dev/tom_desc
+     * git pull
+  * On the spin dev server
+     * Run python manage.py makemigrations
+     * Fix bugs until that works, editing code in deploy_dev/tom_desc
+         ( edit on cori, not the spin server, which doesn't have emacs )
+     * Run python manage.py migrate
+     * Panic if that didn't work, try to fix it
+     * Run kill -HUP 1 to get new code loaded into the server
+     * git status
+     * git add any migrations that were created and any edited files
+     * Commit and push
+   * In the local checked out tree:
+     * Git pull
+
+When ready to deploy to production:
+
+  * At /global/cfs/cdirs/m1727/tom/deploy_production/tom_desc
+     * git pull
+  * On the spin production server
+     * Run python manage.py migrate
+     * Panic if that didn't just work
+     * Run kill -HUP 1
+     
+     

@@ -1,6 +1,9 @@
+import os
 import json
 import traceback
 import io
+import psycopg2
+import psycopg2.extras
 from django.http import HttpResponse, JsonResponse
 from django.utils.decorators import method_decorator
 from django.contrib.auth.decorators import login_required, permission_required
@@ -150,3 +153,28 @@ class MaybeAddElasticcTruth(django.views.View):
                      'traceback': strstream.getvalue() }
             strstream.close()
             return JsonResponse( resp )
+
+# ======================================================================
+# A low-level query interface
+#
+# Requires a tom_desc_ro readonly user in the database.  Assumes postgres
+
+@method_decorator(login_required, name='dispatch')
+class RunSQLQuery(django.views.View):
+    def post( self, request, *args, **kwargs ):
+        data = json.loads( request.body )
+        if not 'query' in data:
+            raise ValueError( "Must pass a query" )
+        subdict = {}
+        if 'subdict' in data:
+            subdict = data['subdict']
+        with open( "/secrets/postgres_ro_password" ) as ifp:
+            password = ifp.readline()
+        password.strip()
+        dbconn = psycopg2.connect( dbname=os.getenv('DB_NAME'), dbhost=os.getenv('DB_HOST'),
+                                   user='tom_desc_ro', password=password,
+                                   cursor_factory=psycopg2.extras.RealDictCursor )
+        cursor = dbconn.cursor()
+        cursor.execute( data['query'], subdict )
+        return json.dumps( cursor.fetchall() )
+        
