@@ -155,9 +155,11 @@ class MaybeAddElasticcTruth(django.views.View):
             return JsonResponse( resp )
 
 # ======================================================================
-# A low-level query interface
+# A low-level query interface.
 #
-# Requires a tom_desc_ro readonly user in the database.  Assumes postgres
+# That is, of course, EXTREMELY scary.  This is why you need to make
+# sure the user tom_desc_ro is a readonly user.  Still scary, but not
+# Cthulhuesque.
 
 @method_decorator(login_required, name='dispatch')
 class RunSQLQuery(django.views.View):
