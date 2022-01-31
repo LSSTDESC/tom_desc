@@ -56,85 +56,6 @@ class Alert(models.Model):
         ]
 
 
-class ElasticcBrokerMessage(models.Model):
-    """Model for the message attributes of an ELAsTiCC broker alert."""
-
-    dbMessageIndex = models.BigAutoField(primary_key=True)
-    streamMessageId = models.BigIntegerField(null=True)
-    topicName = models.CharField(max_length=200)
-
-    # timestamps as datetime.datetime (DateTimeField)
-    descIngestTimestamp = models.DateTimeField(auto_now_add=True)  # auto-generated
-    elasticcPublishTimestamp = models.DateTimeField(null=True)
-    brokerIngestTimestamp = models.DateTimeField(null=True)
-    brokerPublishTimestamp = models.DateTimeField(null=True)
-
-    modified = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        indexes = [
-            models.Index(fields=['dbMessageIndex', 'topicName']),
-        ]
-
-
-class ElasticcBrokerClassifier(models.Model):
-    """Model for a classifier producing an ELAsTiCC broker classification."""
-
-    dbClassifierIndex = models.BigAutoField(primary_key=True)
-
-    brokerName = models.CharField(max_length=100)
-    brokerVersion = models.TextField()     # state changes logically not part of the classifier
-    classiferName = models.CharField(max_length=200)
-    classifierVersion = models.TextField()   # change in classifier code / parameters
-    
-    modified = models.DateTimeField(auto_now=True)
-
-    models.UniqueConstraint(
-        fields=['brokerName', 'classiferName'], name='unique_broker_classifier'
-    )
-
-    class Meta:
-        indexes = [
-            models.Index(fields=["dbClassifierIndex", "brokerName", "classiferName"]),
-        ]
-
-
-class ElasticcBrokerClassification(models.Model):
-    """Model for a classification from an ELAsTiCC broker."""
-
-    dbClassificationIndex = models.BigAutoField(primary_key=True)
-    dbMessage = models.ForeignKey(
-        ElasticcBrokerMessage, on_delete=models.PROTECT, null=True
-    )
-    dbClassifier = models.ForeignKey(
-        ElasticcBrokerClassifier, on_delete=models.PROTECT, null=True
-    )
-
-    alertId = models.BigIntegerField()
-    # diaObjectId = models.BigIntegerField()
-    diaSource = models.ForeignKey( ElasticcDiaSource, on_delete=models.PROTECT )
-
-    classId = models.IntegerField()
-    probability = models.FloatField()
-
-    # JSON blob of additional information from the broker?
-    # Here or in a separate table?
-    
-    modified = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        indexes = [
-            models.Index(
-                fields=['dbClassificationIndex', 'dbClassifierIndex', 'dbMessageIndex']
-            ),
-        ]
-
-# ======================================================================
-        
-class RknopTest(models.Model):
-    number = models.IntegerField( primary_key=True )
-    description = models.TextField()
-
 # ======================================================================
 # I want these tables to correspond to the avro schema.  I considered
 #   writing code to generate the code below (or even to have
@@ -253,7 +174,7 @@ class ElasticcDiaTruth(models.Model):
     diaSource = models.ForeignKey( ElasticcDiaSource, on_delete=models.CASCADE, null=False, unique=True )
     detect = models.BooleanField()
     true_gentype = models.IntegerField()
-    true_genmag = models.Floatfield()
+    true_genmag = models.FloatField()
 
     @staticmethod
     def create( data ):
@@ -264,7 +185,7 @@ class ElasticcDiaTruth(models.Model):
         if source.diaObject_id != data['SNID']:
             raise ValueError( f"SNID {data['SNID']} doesn't match diaSource diaObject_id {source.diaObject_id}" )
         if math.fabs( float( data['MJD'] - source.midPointTai ) > 0.01 ):
-            raise ValueError( f"MJD {data['MJD'] doesn't match diaSource midPointTai {source.midPointTai}" )
+            raise ValueError( f"MJD {data['MJD']} doesn't match diaSource midPointTai {source.midPointTai}" )
         curtruth = ElasticcDiaTruth(
             diaSource_id = int( data['SourceID'] ),
             detect = bool( data['DETECT'] ),
@@ -277,10 +198,92 @@ class ElasticcDiaTruth(models.Model):
     @staticmethod
     def load_or_create( data ):
         try:
-            curtruth = ElasticcDiaTruth.objects.get( diaSource_id=data['diaSourceId'] )
+            curtruth = ElasticcDiaTruth.objects.get( diaSource_id=data['SourceID'] )
             # VERIFY THAT STUFF MATCHES?????
             return curtruth
         except ElasticcDiaTruth.DoesNotExist:
             return ElasticcDiaTruth.create( data )
+
+# ======================================================================
+
+class ElasticcBrokerMessage(models.Model):
+    """Model for the message attributes of an ELAsTiCC broker alert."""
+
+    dbMessageIndex = models.BigAutoField(primary_key=True)
+    streamMessageId = models.BigIntegerField(null=True)
+    topicName = models.CharField(max_length=200)
+
+    # timestamps as datetime.datetime (DateTimeField)
+    descIngestTimestamp = models.DateTimeField(auto_now_add=True)  # auto-generated
+    elasticcPublishTimestamp = models.DateTimeField(null=True)
+    brokerIngestTimestamp = models.DateTimeField(null=True)
+    brokerPublishTimestamp = models.DateTimeField(null=True)
+
+    modified = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['dbMessageIndex', 'topicName']),
+        ]
+
+
+class ElasticcBrokerClassifier(models.Model):
+    """Model for a classifier producing an ELAsTiCC broker classification."""
+
+    dbClassifierIndex = models.BigAutoField(primary_key=True)
+
+    brokerName = models.CharField(max_length=100)
+    brokerVersion = models.TextField(null=True)     # state changes logically not part of the classifier
+    classiferName = models.CharField(max_length=200)
+    classifierVersion = models.TextField(null=True)   # change in classifier code / parameters
+    
+    modified = models.DateTimeField(auto_now=True)
+
+    models.UniqueConstraint(
+        fields=['brokerName', 'classiferName'], name='unique_broker_classifier'
+    )
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["dbClassifierIndex", "brokerName", "classiferName"]),
+        ]
+
+
+class ElasticcBrokerClassification(models.Model):
+    """Model for a classification from an ELAsTiCC broker."""
+
+    dbClassificationIndex = models.BigAutoField(primary_key=True)
+    dbMessage = models.ForeignKey(
+        ElasticcBrokerMessage, on_delete=models.PROTECT, null=True
+    )
+    dbClassifier = models.ForeignKey(
+        ElasticcBrokerClassifier, on_delete=models.PROTECT, null=True
+    )
+
+    alertId = models.BigIntegerField()
+    # diaObjectId = models.BigIntegerField()
+    diaSource = models.ForeignKey( ElasticcDiaSource, on_delete=models.PROTECT, null=True )
+
+    classId = models.IntegerField()
+    probability = models.FloatField()
+
+    # JSON blob of additional information from the broker?
+    # Here or in a separate table?
+    
+    modified = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(
+                fields=['dbClassificationIndex']
+            ),
+        ]
+
+# ======================================================================
+        
+class RknopTest(models.Model):
+    number = models.IntegerField( primary_key=True )
+    description = models.TextField()
+
     
 

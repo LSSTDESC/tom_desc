@@ -29,3 +29,5 @@ class PointsAsNumbers(admin.ModelAdmin):
 
 admin.site.register( ElasticcDiaObject, PointsAsNumbers )
 admin.site.register( ElasticcDiaSource, PointsAsNumbers )
+# # I need to do this here rather than in the list above because ElasticcDiaTruth needs ...Source defined
+# admin.site.register( ElasticcDiaTrutH )

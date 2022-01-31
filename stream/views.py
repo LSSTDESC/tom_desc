@@ -13,8 +13,9 @@ from rest_framework import viewsets
 
 from stream.filters import AlertFilter, EventFilter, TopicFilter
 from stream.models import Alert, Event, Target, Topic, RknopTest
-from stream.models import ElasticcDiaObject, ElasticcDiaSource
-from stream.serializers import AlertSerializer, EventDetailSerializer, EventSerializer, TargetSerializer, TopicSerializer
+from stream.models import ElasticcDiaObject, ElasticcDiaSource, ElasticcDiaTruth
+from stream.serializers import AlertSerializer, EventDetailSerializer, EventSerializer
+from stream.serializers import TargetSerializer, TopicSerializer
 from stream.serializers.v1 import serializers as v1_serializers
 
 
@@ -123,11 +124,11 @@ class MaybeAddElasticcAlert(django.views.View):
 # OK... I really  need to make this and MaybeAddElasticcAlert derived
 #  classes of a common superclass
 
-@method_Decorator(login_required, name='dispatch')
+@method_decorator(login_required, name='dispatch')
 class MaybeAddElasticcTruth(django.views.View):
     def load_one_object( self, data ):
         curobj = ElasticcDiaTruth.load_or_create( data )
-        return curobj
+        return curobj.diaSource_id
     
     def post( self, request, *args, **kwargs ):
         try:
@@ -140,9 +141,9 @@ class MaybeAddElasticcTruth(django.views.View):
                     loaded.append( self.load_one_object( item ) )
             resp = { 'status': 'ok', 'message': loaded }
             return JsonResponse( resp )
-        except Exceptoin as e:
+        except Exception as e:
             strstream = io.StringIO()
-            traceback.print_exc( file=stream )
+            traceback.print_exc( file=strstream )
             resp = { 'status': 'error',
                      'message': f'Exception in {self.__class__.__name__}',
                      'exception': str(e),
