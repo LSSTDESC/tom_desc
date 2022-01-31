@@ -1,3 +1,4 @@
+import sys
 import os
 import json
 import traceback
@@ -173,10 +174,11 @@ class RunSQLQuery(django.views.View):
         with open( "/secrets/postgres_ro_password" ) as ifp:
             password = ifp.readline()
         password.strip()
-        dbconn = psycopg2.connect( dbname=os.getenv('DB_NAME'), dbhost=os.getenv('DB_HOST'),
+        dbconn = psycopg2.connect( dbname=os.getenv('DB_NAME'), host=os.getenv('DB_HOST'),
                                    user='tom_desc_ro', password=password,
                                    cursor_factory=psycopg2.extras.RealDictCursor )
+        # sys.stderr.write( f'Query is {data["query"]}, subdict is {subdict}\n' )
         cursor = dbconn.cursor()
         cursor.execute( data['query'], subdict )
-        return json.dumps( cursor.fetchall() )
+        return JsonResponse( { 'status': 'ok', 'rows': cursor.fetchall() } )
         
