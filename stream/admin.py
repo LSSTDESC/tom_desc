@@ -5,13 +5,14 @@ from .models import Target, Topic
 from .models import ElasticcBrokerClassification, ElasticcBrokerClassifier, ElasticcBrokerMessage
 from .models import Event, EventAttributes, Alert
 from .models import RknopTest
-from .models import ElasticcDiaObject, ElasticcDiaSource
+from .models import ElasticcDiaObject, ElasticcDiaSource, ElasticcDiaTruth
 
 admin.site.register( [ Target,
                        Topic,
                        ElasticcBrokerClassification,
                        ElasticcBrokerClassifier,
                        ElasticcBrokerMessage,
+                       ElasticcDiaTruth,
                        Event, EventAttributes,
                        Alert,
                        RknopTest,
