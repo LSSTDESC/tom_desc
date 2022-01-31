@@ -1,4 +1,5 @@
 import sys
+import math
 from django.contrib.gis.geos import Point
 from django.contrib.gis.db import models as gis_models
 from django.db import models
@@ -82,8 +83,10 @@ class ElasticcBrokerClassifier(models.Model):
     dbClassifierIndex = models.BigAutoField(primary_key=True)
 
     brokerName = models.CharField(max_length=100)
+    brokerVersion = models.TextField()     # state changes logically not part of the classifier
     classiferName = models.CharField(max_length=200)
-
+    classifierVersion = models.TextField()   # change in classifier code / parameters
+    
     modified = models.DateTimeField(auto_now=True)
 
     models.UniqueConstraint(
@@ -100,19 +103,23 @@ class ElasticcBrokerClassification(models.Model):
     """Model for a classification from an ELAsTiCC broker."""
 
     dbClassificationIndex = models.BigAutoField(primary_key=True)
-    dbMessageIndex = models.ForeignKey(
+    dbMessage = models.ForeignKey(
         ElasticcBrokerMessage, on_delete=models.PROTECT, null=True
     )
-    dbClassifierIndex = models.ForeignKey(
+    dbClassifier = models.ForeignKey(
         ElasticcBrokerClassifier, on_delete=models.PROTECT, null=True
     )
 
     alertId = models.BigIntegerField()
-    diaObjectId = models.BigIntegerField()
+    # diaObjectId = models.BigIntegerField()
+    diaSource = models.ForeignKey( ElasticcDiaSource, on_delete=models.PROTECT )
 
     classId = models.IntegerField()
     probability = models.FloatField()
 
+    # JSON blob of additional information from the broker?
+    # Here or in a separate table?
+    
     modified = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -240,3 +247,40 @@ class ElasticcDiaSource(models.Model):
             return cursrc
         except ElasticcDiaSource.DoesNotExist:
             return ElasticcDiaSource.create( data )
+
+
+class ElasticcDiaTruth(models.Model):
+    diaSource = models.ForeignKey( ElasticcDiaSource, on_delete=models.CASCADE, null=False, unique=True )
+    detect = models.BooleanField()
+    true_gentype = models.IntegerField()
+    true_genmag = models.Floatfield()
+
+    @staticmethod
+    def create( data ):
+        try:
+            source = ElasticcDiaSource.objects.get( diaSourceId=data['SourceID'] )
+        except ElasticcDiaSource.DoesNotExist:
+            raise ValueError( f"Source not found: {data['SourceID']}" )
+        if source.diaObject_id != data['SNID']:
+            raise ValueError( f"SNID {data['SNID']} doesn't match diaSource diaObject_id {source.diaObject_id}" )
+        if math.fabs( float( data['MJD'] - source.midPointTai ) > 0.01 ):
+            raise ValueError( f"MJD {data['MJD'] doesn't match diaSource midPointTai {source.midPointTai}" )
+        curtruth = ElasticcDiaTruth(
+            diaSource_id = int( data['SourceID'] ),
+            detect = bool( data['DETECT'] ),
+            true_gentype = int( data['TRUE_GENTYPE'] ),
+            true_genmag = float( data['TRUE_GENMAG'] )
+        )
+        curtruth.save()
+        return curtruth
+    
+    @staticmethod
+    def load_or_create( data ):
+        try:
+            curtruth = ElasticcDiaTruth.objects.get( diaSource_id=data['diaSourceId'] )
+            # VERIFY THAT STUFF MATCHES?????
+            return curtruth
+        except ElasticcDiaTruth.DoesNotExist:
+            return ElasticcDiaTruth.create( data )
+    
+

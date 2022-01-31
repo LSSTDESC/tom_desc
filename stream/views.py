@@ -118,3 +118,34 @@ class MaybeAddElasticcAlert(django.views.View):
                      'traceback': strstream.getvalue() }
             strstream.close()
             return JsonResponse( resp )
+
+# ======================================================================
+# OK... I really  need to make this and MaybeAddElasticcAlert derived
+#  classes of a common superclass
+
+@method_Decorator(login_required, name='dispatch')
+class MaybeAddElasticcTruth(django.views.View):
+    def load_one_object( self, data ):
+        curobj = ElasticcDiaTruth.load_or_create( data )
+        return curobj
+    
+    def post( self, request, *args, **kwargs ):
+        try:
+            data = json.loads( request.body )
+            loaded = []
+            if isinstance( data, dict ):
+                loaded.append( self.load_one_object( data ) )
+            else:
+                for item in data:
+                    loaded.append( self.load_one_object( item ) )
+            resp = { 'status': 'ok', 'message': loaded }
+            return JsonResponse( resp )
+        except Exceptoin as e:
+            strstream = io.StringIO()
+            traceback.print_exc( file=stream )
+            resp = { 'status': 'error',
+                     'message': f'Exception in {self.__class__.__name__}',
+                     'exception': str(e),
+                     'traceback': strstream.getvalue() }
+            strstream.close()
+            return JsonResponse( resp )

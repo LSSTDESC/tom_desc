@@ -14,5 +14,6 @@ urlpatterns = [
     url('dumprknoptest', views.DumpRknopTest.as_view()),
     url('addelasticcdiaobject', views.MaybeAddElasticcDiaObject.as_view()),
     url('addelasticalert', views.MaybeAddElasticcAlert.as_view()),
+    url('addtruth', views.MaybeAddElasticcTruth.as_view()),
     url('', include((router.urls, 'stream'), namespace='stream')),
 ]
