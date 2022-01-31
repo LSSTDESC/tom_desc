@@ -174,11 +174,11 @@ class ElasticcDiaTruth(models.Model):
     # I can't use a foreign key constraint here because there will be truth entries for
     # sources for which there was no alert, and as such which will not be in the
     # ElasticcDiaSource table.
-    diaSourceId = models.BigIntegerField( null=False, primary_key=True )
-    diaObjectId = models.BigIntegerField( null=False )
-    detect = models.BooleanField()
-    true_gentype = models.IntegerField()
-    true_genmag = models.FloatField()
+    diaSourceId = models.BigIntegerField( null=True )
+    diaObjectId = models.BigIntegerField( null=True )
+    detect = models.BooleanField( null=True )
+    true_gentype = models.IntegerField( null=True )
+    true_genmag = models.FloatField( null=True )
 
     @staticmethod
     def create( data ):
