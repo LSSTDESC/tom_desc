@@ -5,7 +5,7 @@ The "production" server at nersc is htts://desc-tom.lbl.gov ; ask Rob
 
 If you want low-level access to the database by sending SQL queries, you
 can read the database via a thin web API; see
-[`sql_query_tom_db.py`](/blob/main/sql_query_tom_db.py)
+[`sql_query_tom_db.py`](sql_query_tom_db.py)
 for instructions and an example (and some of the table schema).  This
 requires you to have an account on the TOM, and is read-only access.
 
