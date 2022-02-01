@@ -182,7 +182,8 @@ class ElasticcDiaTruth(models.Model):
 
     class Meta:
         indexes = [
-            models.Index( fields=['diaSourceId', 'diaObjectId'] ),
+            models.Index( fields=['diaSourceId'] ),
+            models.Index( fields=['diaObjectId'] )
         ]
 
     @staticmethod
