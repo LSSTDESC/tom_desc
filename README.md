@@ -1,3 +1,40 @@
+# Using the TOM
+
+The "production" server at nersc is htts://desc-tom.lbl.gov ; ask Rob
+(raknop@lbl.gov) if you need a user account.
+
+If you want low-level access to the database by sending SQL queries, you
+can read the database via a thin web API; see
+[`sql_query_tom_db.py`](/LSSTDESC/tom_desc/blob/main/sql_query_tom_db.py)
+for instructions and an example (and some of the table schema).  This
+requires you to have an account on the TOM, and is read-only access.
+
+The rest of this is only interesting if you want to develop it or deploy
+a private version for hacking.
+
+# Deployment at NERSC
+
+The server runs on NERSC Spin, in the `desc-tom` namespace of production
+m1727.  It reads its container image from
+`registry.services.nersc.gov/raknop/tom-desc-production`; that container
+image is built from the Dockerfile in the top level directory of this
+archive.
+
+The actual web ap software is *not* read from the docker image (although
+a version of the software is packaged in the image).  Rather, the
+directory `/tom_desc` inside the container is mounted from the NERSC csf
+file system.  This allows us to update the software without having to
+rebuild and redploy the image; the image only needs to be redeployed if
+we have to add prerequisite packages, or if we want to update the OS
+software for security patches and the like.  The actual TOM software is
+deployed at `/global/cfs/cdirs/m1727/tom/deploy_production/tom_desc`.
+Right now, that deployment is just handled as a git checkout.  After
+it's updated, things need to happen *on* the Spin server (migrations,
+telling the server to reload the software).  My (Rob's) notes on this
+are in `rob_notes.txt`.
+
+# Local deployment
+
 ## [Experimental] Development with Docker Compose
 
 You can try deploying the TOM Toolkit and a Postgres (w/ PostGIS) database via
@@ -123,9 +160,3 @@ docker run -p 8080:8080 --network=tom-net tom-desc &
 # point your browser at localhost:8080
 ```
 </details>
-
-## Send to NERSC
-```bash
-docker tag tom-desc registry.nersc.gov/m1727/tom-desc-app
-docker push registry.nersc.gov/m1727/tom-desc-app
-```
