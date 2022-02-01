@@ -191,9 +191,13 @@ class ElasticcDiaTruth(models.Model):
         try:
             source = ElasticcDiaSource.objects.get( diaSourceId=data['SourceID'] )
             if source.diaObject_id != data['SNID']:
-                raise ValueError( f"SNID {data['SNID']} doesn't match diaSource diaObject_id {source.diaObject_id}" )
+                raise ValueError( f"SNID {data['SNID']} doesn't match "
+                                  f"diaSource diaObject_id {source.diaObject_id} "
+                                  f"for diaSource {source.diaSourceId}" )
             if math.fabs( float( data['MJD'] - source.midPointTai ) > 0.01 ):
-                raise ValueError( f"MJD {data['MJD']} doesn't match diaSource midPointTai {source.midPointTai}" )
+                raise ValueError( f"MJD {data['MJD']} doesn't match "
+                                  f"diaSource midPointTai {source.midPointTai} "
+                                  f"for diaSource {source.diaSoruceId}" )
         except ElasticcDiaSource.DoesNotExist:
             if data['DETECT']:
                 raise ValueError( f'No SourceID {data["SourceID"]} for a DETECT=true truth entry' )
