@@ -1,6 +1,6 @@
 # Using the TOM
 
-The "production" server at nersc is htts://desc-tom.lbl.gov ; ask Rob
+The "production" server at nersc is https://desc-tom.lbl.gov ; ask Rob
 (raknop@lbl.gov) if you need a user account.
 
 If you want low-level access to the database by sending SQL queries, you
