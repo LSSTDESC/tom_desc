@@ -180,6 +180,11 @@ class ElasticcDiaTruth(models.Model):
     true_gentype = models.IntegerField( null=True )
     true_genmag = models.FloatField( null=True )
 
+    class Meta:
+        indexes = [
+            models.Index( fields=['diaSourceId', 'diaObjectId'] ),
+        ]
+
     @staticmethod
     def create( data ):
         try:
