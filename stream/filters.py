@@ -2,7 +2,7 @@ import math
 
 from django.db.models import Q
 from django_filters import rest_framework as filters
-from django.contrib.gis.geos import Point, Polygon
+# from django.contrib.gis.geos import Point, Polygon
 from django.contrib.gis.measure import D
 
 from stream.models import Topic
@@ -20,10 +20,10 @@ class TopicFilter(filters.FilterSet):
 
 class AlertFilter(filters.FilterSet):
     keyword = filters.CharFilter(method='filter_keyword_search', label='Keyword Search', help_text='Text Search')
-    cone_search = filters.CharFilter(method='filter_cone_search', label='Cone Search',
-                                     help_text='RA, Dec, Radius (degrees)')
-    polygon_search = filters.CharFilter(method='filter_polygon_search', label='Polygon Search',
-                                        help_text='Comma-separated pairs of space-delimited coordinates (degrees).')
+    # cone_search = filters.CharFilter(method='filter_cone_search', label='Cone Search',
+    #                                  help_text='RA, Dec, Radius (degrees)')
+    # polygon_search = filters.CharFilter(method='filter_polygon_search', label='Polygon Search',
+    #                                     help_text='Comma-separated pairs of space-delimited coordinates (degrees).')
     timestamp = filters.DateTimeFromToRangeFilter()
     topic = filters.ModelMultipleChoiceFilter(queryset=Topic.objects.all())
     event_trigger_number = filters.CharFilter(method='filter_event_trigger_number', label='LVC Trigger Number')
@@ -37,22 +37,22 @@ class AlertFilter(filters.FilterSet):
     def filter_event_trigger_number(self, queryset, name, value):
         return queryset.filter(topic__name='lvc.lvc-counterpart', parsed_message__event_trig_num__icontains=value)
 
-    def filter_cone_search(self, queryset, name, value):
-        ra, dec, radius = value.split(',')
+    # def filter_cone_search(self, queryset, name, value):
+    #     ra, dec, radius = value.split(',')
 
-        ra = float(ra)
-        dec = float(dec)
+    #     ra = float(ra)
+    #     dec = float(dec)
 
-        radius_meters = 2 * math.pi * EARTH_RADIUS_METERS * float(radius) / 360
+    #     radius_meters = 2 * math.pi * EARTH_RADIUS_METERS * float(radius) / 360
 
-        return queryset.filter(coordinates__distance_lte=(Point(ra, dec), D(m=radius_meters)))
+    #     return queryset.filter(coordinates__distance_lte=(Point(ra, dec), D(m=radius_meters)))
 
-    def filter_polygon_search(self, queryset, name, value):
-        # TODO: document this function in a docstring with example value input and resulting vertices
-        value += ', ' + value.split(', ', 1)[0]
-        vertices = tuple((float(v.split(' ')[0]), float(v.split(' ')[1])) for v in value.split(', '))  # TODO: explain!
-        polygon = Polygon(vertices, srid=4035)
-        return queryset.filter(coordinates__within=polygon)
+    # def filter_polygon_search(self, queryset, name, value):
+    #     # TODO: document this function in a docstring with example value input and resulting vertices
+    #     value += ', ' + value.split(', ', 1)[0]
+    #     vertices = tuple((float(v.split(' ')[0]), float(v.split(' ')[1])) for v in value.split(', '))  # TODO: explain!
+    #     polygon = Polygon(vertices, srid=4035)
+    #     return queryset.filter(coordinates__within=polygon)
 
     def filter_keyword_search(self, queryset, name, value):
         """

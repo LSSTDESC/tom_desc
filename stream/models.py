@@ -1,11 +1,21 @@
 import sys
 import math
-from django.contrib.gis.geos import Point
-from django.contrib.gis.db import models as gis_models
+# from django.contrib.gis.geos import Point
+# from django.contrib.gis.db import models as gis_models
 from django.db import models
 
 # Create your models here.
 
+# RKNOP 2022-02-02 I'm moving off of PostGIS, to use Q3C for cone and
+# polygon searches, as that's more standard in astronomy.  To use this,
+# you have to manually create a migration that adds the Q3C index for ra
+# and dec fields.  (TODO: need to set up analyze and clustering
+# maintenance.)
+#
+# To do this, first you have to run
+#   python manage.py makemigrations stream --name <name> --empty
+# Then edit the file created (something like stream/migrations/0002_<name>.py);
+# see 0002_q3c_indices.py for an example.
 
 class Target(models.Model):
     name = models.CharField(max_length=200)
@@ -43,7 +53,9 @@ class Alert(models.Model):
     events = models.ManyToManyField(Event)
     identifier = models.CharField(max_length=200)
     timestamp = models.DateTimeField(null=True, blank=True)
-    coordinates = gis_models.PointField(null=True, blank=True)
+    # coordinates = gis_models.PointField(null=True, blank=True)
+    ra = models.FloatField(null=True)
+    decl = models.FloatField(null=True)
     parsed_message = models.JSONField(default=dict)
     raw_message = models.JSONField(default=dict)
     parsed = models.BooleanField(default=False)
@@ -69,8 +81,10 @@ class Alert(models.Model):
 
 class ElasticcDiaObject(models.Model):
     diaObjectId = models.BigIntegerField( primary_key=True, db_index=True )
+    ra = models.FloatField( null=True )
+    decl = models.FloatField( null=True )
     # Alert has ra, decl
-    radec = gis_models.PointField( spatial_index=True )
+    # radec = gis_models.PointField( spatial_index=True )
 
     @staticmethod
     def create( data ):
@@ -78,7 +92,9 @@ class ElasticcDiaObject(models.Model):
         # (Or I could build a **kwargs)
         curobj = ElasticcDiaObject(
             diaObjectId = data['diaObjectId'],
-            radec = Point( data['ra'], data['decl'] ),
+            ra = data['ra'],
+            decl = data['decl']
+            # radec = Point( data['ra'], data['decl'] ),
         )
         curobj.save()
         return curobj
@@ -100,9 +116,9 @@ class ElasticcDiaSource(models.Model):
     filterName = models.TextField()
     # I believe that the Point field defaults to Longitude / Latitude in degrees, which is like RA/Dec
     # The alerts have fields ra, decl
-    radec = gis_models.PointField( spatial_index=True )
-    # ra = models.FloatField()
-    # decl = models.FloatField()
+    # radec = gis_models.PointField( spatial_index=True )
+    ra = models.FloatField( null=True )
+    decl = models.FloatField( null=True )
     apFlux = models.FloatField()
     apFluxErr = models.FloatField()
     nobs = models.FloatField( null=True )
@@ -133,7 +149,9 @@ class ElasticcDiaSource(models.Model):
             diaObject = data['diaObject'],
             midPointTai = data['midPointTai'],
             filterName = data['filterName'],
-            radec = Point( data['ra'], data['decl'] ),
+            # radec = Point( data['ra'], data['decl'] ),
+            ra = data['ra'],
+            decl = data['decl'],
             apFlux = data['apFlux'],
             apFluxErr = data['apFluxErr'],
             nobs = data['nobs'],
@@ -300,6 +318,8 @@ class ElasticcBrokerClassification(models.Model):
 class RknopTest(models.Model):
     number = models.IntegerField( primary_key=True )
     description = models.TextField()
-
+    ra = models.FloatField( null=True )
+    decl = models.FloatField( null=True )
+    
     
 
