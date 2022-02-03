@@ -152,7 +152,7 @@ class ElasticcDiaObject(models.Model):
             kws.append( f'hostgal{gal}_snsep' )
             kws.append( f'hostgal{gal}_ellipticity' )
             kws.append( f'hostgal{gal}_sqradius' )
-            for phot in [ 10, 20, 30, 40, 50, 60, 70, 80 90 ]:
+            for phot in [ 10, 20, 30, 40, 50, 60, 70, 80, 90 ]:
                 kws.append( f'hostgal{gal}_zphot_q{phot}' )
             for band in [ 'u', 'g', 'r', 'i', 'z', 'Y' ]:
                 for err in [ '', 'err' ]:
@@ -178,7 +178,7 @@ class ElasticcDiaObject(models.Model):
     
 class ElasticcDiaSource(models.Model):
     diaSourceId = models.BigIntegerField( primary_key=True, db_index=True )
-    ccdVisitId = models.BigIntegerField()
+    ccdVisitId = models.BigIntegerField( null=True )
     diaObject = models.ForeignKey( ElasticcDiaObject, on_delete=models.CASCADE, null=True )
     # I'm not using a foreign key for parentDiaSource to allow things to be loaded out of order
     parentDiaSourceId = models.BigIntegerField( null=True )
@@ -188,7 +188,7 @@ class ElasticcDiaSource(models.Model):
     decl = models.FloatField( null=True )
     psFlux = models.FloatField()
     psFluxErr = models.FloatField()
-    snr = models.FloatField()
+    snr = models.FloatField( null=True )
     nobs = models.FloatField( null=True )
 
     @staticmethod
