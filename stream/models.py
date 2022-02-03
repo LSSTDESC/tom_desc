@@ -83,6 +83,7 @@ class ElasticcDiaObject(models.Model):
     diaObjectId = models.BigIntegerField( primary_key=True, db_index=True )
     ra = models.FloatField( null=True )
     decl = models.FloatField( null=True )
+    hostgal_ellipticity = models.FloatField( null=True )
     hostgal_sqradius = models.FloatField( null=True )
     hostgal_z = models.FloatField( null=True )
     hostgal_z_err = models.FloatField( null=True )
@@ -194,7 +195,7 @@ class ElasticcDiaSource(models.Model):
     @staticmethod
     def create( data ):
         kws = [ 'diaSourceId', 'ccdVisitId', 'diaObject', 'parentDiaSourceId',
-                'modPointTai', 'filterName', 'ra', 'decl', 'psFlux', 'psFluxErr', 'snr', 'nobs' ]
+                'midPointTai', 'filterName', 'ra', 'decl', 'psFlux', 'psFluxErr', 'snr', 'nobs' ]
         kwargs = {}
         for kw in kws:
             if kw in data:
