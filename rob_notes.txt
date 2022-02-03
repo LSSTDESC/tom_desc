@@ -28,3 +28,29 @@ When ready to deploy to production:
      * Run kill -HUP 1
      
      
+
+======================================================================
+
+Resetting migrations
+
+WARNING : This will blow away the database tables for the app!!!
+
+I needed to do this as I wanted to move from PostGIS to G3C, but the old
+migrations would have required PostGIS to work.  What I did:
+
+ * python manage.py migrate stream zero
+ * blow away everything in stream/migrations
+ * python manage.py makemigrations stream
+ * python manage.py migrate
+
+======================================================================
+
+Mouting postgres
+
+I had trouble with my persistent volume claim because postgres couldn't
+write to the directory.  I created a temp container (with just some
+linux image) that moutned the same persistent mount, went in there and
+did a chown of 101:104 (the postgres user and group in my postgres
+image) on the persistent mount.
+
+ 

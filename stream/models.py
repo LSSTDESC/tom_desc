@@ -83,19 +83,87 @@ class ElasticcDiaObject(models.Model):
     diaObjectId = models.BigIntegerField( primary_key=True, db_index=True )
     ra = models.FloatField( null=True )
     decl = models.FloatField( null=True )
-    # Alert has ra, decl
-    # radec = gis_models.PointField( spatial_index=True )
-
+    hostgal_sqradius = models.FloatField( null=True )
+    hostgal_z = models.FloatField( null=True )
+    hostgal_z_err = models.FloatField( null=True )
+    hostgal_zphot_q10 = models.FloatField( null=True )
+    hostgal_zphot_q20 = models.FloatField( null=True )
+    hostgal_zphot_q30 = models.FloatField( null=True )
+    hostgal_zphot_q40 = models.FloatField( null=True )
+    hostgal_zphot_q50 = models.FloatField( null=True )
+    hostgal_zphot_q60 = models.FloatField( null=True )
+    hostgal_zphot_q70 = models.FloatField( null=True )
+    hostgal_zphot_q80 = models.FloatField( null=True )
+    hostgal_zphot_q90 = models.FloatField( null=True )
+    hostgal_zphot_pz50 = models.FloatField( null=True )
+    hostgal_mag_u = models.FloatField( null=True )
+    hostgal_mag_g = models.FloatField( null=True )
+    hostgal_mag_r = models.FloatField( null=True )
+    hostgal_mag_i = models.FloatField( null=True )
+    hostgal_mag_z = models.FloatField( null=True )
+    hostgal_mag_Y = models.FloatField( null=True )
+    hostgal_ra = models.FloatField( null=True )
+    hostgal_dec = models.FloatField( null=True )
+    hostgal_snsep = models.FloatField( null=True )
+    hostgal_magerr_u = models.FloatField( null=True )
+    hostgal_magerr_g = models.FloatField( null=True )
+    hostgal_magerr_r = models.FloatField( null=True )
+    hostgal_magerr_i = models.FloatField( null=True )
+    hostgal_magerr_z = models.FloatField( null=True )
+    hostgal_magerr_Y = models.FloatField( null=True )
+    hostgal2_ellipticity = models.FloatField( null=True )
+    hostgal2_sqradius = models.FloatField( null=True )
+    hostgal2_z = models.FloatField( null=True )
+    hostgal2_z_err = models.FloatField( null=True )
+    hostgal2_zphot_q10 = models.FloatField( null=True )
+    hostgal2_zphot_q20 = models.FloatField( null=True )
+    hostgal2_zphot_q30 = models.FloatField( null=True )
+    hostgal2_zphot_q40 = models.FloatField( null=True )
+    hostgal2_zphot_q50 = models.FloatField( null=True )
+    hostgal2_zphot_q60 = models.FloatField( null=True )
+    hostgal2_zphot_q70 = models.FloatField( null=True )
+    hostgal2_zphot_q80 = models.FloatField( null=True )
+    hostgal2_zphot_q90 = models.FloatField( null=True )
+    hostgal2_zphot_pz50 = models.FloatField( null=True )
+    hostgal2_mag_u = models.FloatField( null=True )
+    hostgal2_mag_g = models.FloatField( null=True )
+    hostgal2_mag_r = models.FloatField( null=True )
+    hostgal2_mag_i = models.FloatField( null=True )
+    hostgal2_mag_z = models.FloatField( null=True )
+    hostgal2_mag_Y = models.FloatField( null=True )
+    hostgal2_ra = models.FloatField( null=True )
+    hostgal2_dec = models.FloatField( null=True )
+    hostgal2_snsep = models.FloatField( null=True )
+    hostgal2_magerr_u = models.FloatField( null=True )
+    hostgal2_magerr_g = models.FloatField( null=True )
+    hostgal2_magerr_r = models.FloatField( null=True )
+    hostgal2_magerr_i = models.FloatField( null=True )
+    hostgal2_magerr_z = models.FloatField( null=True )
+    hostgal2_magerr_Y = models.FloatField( null=True )
+    
     @staticmethod
     def create( data ):
-        # There's almost certainly a Django helper method/class to do this automatically....
-        # (Or I could build a **kwargs)
-        curobj = ElasticcDiaObject(
-            diaObjectId = data['diaObjectId'],
-            ra = data['ra'],
-            decl = data['decl']
-            # radec = Point( data['ra'], data['decl'] ),
-        )
+        kws = [ 'diaObjectId', 'ra', 'decl' ]
+        for gal in [ "", "2" ]:
+            kws.append( f'hostgal{gal}_z' )
+            kws.append( f'hostgal{gal}_z_err' )
+            kws.append( f'hostgal{gal}_ra' )
+            kws.append( f'hostgal{gal}_dec' )
+            kws.append( f'hostgal{gal}_snsep' )
+            kws.append( f'hostgal{gal}_ellipticity' )
+            kws.append( f'hostgal{gal}_sqradius' )
+            for phot in [ 10, 20, 30, 40, 50, 60, 70, 80 90 ]:
+                kws.append( f'hostgal{gal}_zphot_q{phot}' )
+            for band in [ 'u', 'g', 'r', 'i', 'z', 'Y' ]:
+                for err in [ '', 'err' ]:
+                    kws.append( f'hostgal{gal}_mag{err}_{band}' )
+        kwargs = {}
+        for kw in kws:
+            if kw in data:
+                kwargs[kw] = data[kw]
+            else:
+                kwargs[kw] = None
+        curobj = ElasticcDiaObject( **kwargs )
         curobj.save()
         return curobj
     
@@ -110,71 +178,30 @@ class ElasticcDiaObject(models.Model):
     
 class ElasticcDiaSource(models.Model):
     diaSourceId = models.BigIntegerField( primary_key=True, db_index=True )
-    # Alert has field diaObjectId
+    ccdVisitId = models.BigIntegerField()
     diaObject = models.ForeignKey( ElasticcDiaObject, on_delete=models.CASCADE, null=True )
+    # I'm not using a foreign key for parentDiaSource to allow things to be loaded out of order
+    parentDiaSourceId = models.BigIntegerField( null=True )
     midPointTai = models.FloatField()
     filterName = models.TextField()
-    # I believe that the Point field defaults to Longitude / Latitude in degrees, which is like RA/Dec
-    # The alerts have fields ra, decl
-    # radec = gis_models.PointField( spatial_index=True )
     ra = models.FloatField( null=True )
     decl = models.FloatField( null=True )
-    apFlux = models.FloatField()
-    apFluxErr = models.FloatField()
+    psFlux = models.FloatField()
+    psFluxErr = models.FloatField()
+    snr = models.FloatField()
     nobs = models.FloatField( null=True )
-    mwebv = models.FloatField( null=True )
-    mwebv_err = models.FloatField( null=True )
-    z_final = models.FloatField( null=True )
-    z_final_err = models.FloatField( null=True )
-    hostgal_z = models.FloatField( null=True )
-    hostgal_z_err = models.FloatField( null=True )
-    hostgal_snsep = models.FloatField( null=True )
-    hostgal_mag_u = models.FloatField( null=True )
-    hostgal_mag_g = models.FloatField( null=True )
-    hostgal_mag_r = models.FloatField( null=True )
-    hostgal_mag_i = models.FloatField( null=True )
-    hostgal_mag_z = models.FloatField( null=True )
-    hostgal_mag_Y = models.FloatField( null=True )
-    hostgal_magerr_u = models.FloatField( null=True )
-    hostgal_magerr_g = models.FloatField( null=True )
-    hostgal_magerr_r = models.FloatField( null=True )
-    hostgal_magerr_i = models.FloatField( null=True )
-    hostgal_magerr_z = models.FloatField( null=True )
-    hostgal_magerr_Y = models.FloatField( null=True )
-    
+
     @staticmethod
     def create( data ):
-        cursrc = ElasticcDiaSource(
-            diaSourceId = data['diaSourceId'],
-            diaObject = data['diaObject'],
-            midPointTai = data['midPointTai'],
-            filterName = data['filterName'],
-            # radec = Point( data['ra'], data['decl'] ),
-            ra = data['ra'],
-            decl = data['decl'],
-            apFlux = data['apFlux'],
-            apFluxErr = data['apFluxErr'],
-            nobs = data['nobs'],
-            mwebv = data['mwebv'],
-            mwebv_err = data['mwebv_err'],
-            z_final = data['z_final'],
-            z_final_err = data['z_final_err'],
-            hostgal_z = data['hostgal_z'],
-            # hostgal_z_err = data['hostgal_z_err'],   # Isn't currently in alert schema
-            hostgal_snsep = data['hostgal_snsep'],
-            hostgal_mag_u = data['hostgal_mag_u'],
-            hostgal_mag_g = data['hostgal_mag_g'],
-            hostgal_mag_r = data['hostgal_mag_r'],
-            hostgal_mag_i = data['hostgal_mag_i'],
-            hostgal_mag_z = data['hostgal_mag_z'],
-            hostgal_mag_Y = data['hostgal_mag_Y'],
-            hostgal_magerr_u = data['hostgal_magerr_u'],
-            hostgal_magerr_g = data['hostgal_magerr_g'],
-            hostgal_magerr_r = data['hostgal_magerr_r'],
-            hostgal_magerr_i = data['hostgal_magerr_i'],
-            hostgal_magerr_z = data['hostgal_magerr_z'],
-            hostgal_magerr_Y = data['hostgal_magerr_Y'],
-        )
+        kws = [ 'diaSourceId', 'ccdVisitId', 'diaObject', 'parentDiaSourceId',
+                'modPointTai', 'filterName', 'ra', 'decl', 'psFlux', 'psFluxErr', 'snr', 'nobs' ]
+        kwargs = {}
+        for kw in kws:
+            if kw in data:
+                kwargs[kw] = data[kw]
+            else:
+                kwargs[kw] = None
+        cursrc = ElasticcDiaSource( **kwargs )
         cursrc.save()
         return cursrc
     
