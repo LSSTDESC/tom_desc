@@ -152,8 +152,8 @@ class ElasticcDiaObject(models.Model):
             kws.append( f'hostgal{gal}_snsep' )
             kws.append( f'hostgal{gal}_ellipticity' )
             kws.append( f'hostgal{gal}_sqradius' )
-            for phot in [ 10, 20, 30, 40, 50, 60, 70, 80, 90 ]:
-                kws.append( f'hostgal{gal}_zphot_q{phot}' )
+            for phot in [ 'q10', 'q20', 'q30', 'q40', 'q50', 'q60', 'q70', 'q80', 'q90', 'pz50' ]:
+                kws.append( f'hostgal{gal}_zphot_{phot}' )
             for band in [ 'u', 'g', 'r', 'i', 'z', 'Y' ]:
                 for err in [ '', 'err' ]:
                     kws.append( f'hostgal{gal}_mag{err}_{band}' )
