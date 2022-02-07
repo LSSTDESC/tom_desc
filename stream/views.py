@@ -8,18 +8,20 @@ import psycopg2.extras
 from django.http import HttpResponse, JsonResponse
 from django.utils.decorators import method_decorator
 from django.contrib.auth.decorators import login_required, permission_required
-from django.shortcuts import render
+from django.shortcuts import render, get_object_or_404
 from django.db.models import F
 import django.views
 from rest_framework import pagination
 from rest_framework import permissions
 from rest_framework import viewsets
+from rest_framework import response
 
 from stream.filters import AlertFilter, EventFilter, TopicFilter
 from stream.models import Alert, Event, Target, Topic, RknopTest
 from stream.models import ElasticcDiaObject, ElasticcDiaSource, ElasticcDiaTruth
 from stream.serializers import AlertSerializer, EventDetailSerializer, EventSerializer
 from stream.serializers import TargetSerializer, TopicSerializer
+from stream.serializers import ElasticcDiaObjectSerializer, ElasticcDiaSourceSerializer, ElasticcDiaTruthSerializer
 from stream.serializers.v1 import serializers as v1_serializers
 
 
@@ -81,6 +83,28 @@ class DumpRknopTest(django.views.View):
         return HttpResponse(json.dumps(ret))
         
 
+# ======================================================================
+
+class ElasticcDiaObjectViewSet(viewsets.ReadOnlyModelViewSet):
+    permission_classes = [permissions.IsAuthenticated]
+    queryset = ElasticcDiaObject.objects.all()
+    serializer_class = ElasticcDiaObjectSerializer
+
+class ElasticcDiaSourceViewSet(viewsets.ReadOnlyModelViewSet):
+    permission_classes = [permissions.IsAuthenticated]
+    queryset = ElasticcDiaSource.objects.all()
+    serializer_class = ElasticcDiaSourceSerializer
+
+class ElasticcDiaTruthViewSet(viewsets.ReadOnlyModelViewSet):
+    permission_classes = [permissions.IsAuthenticated]
+    queryset = ElasticcDiaTruth.objects.all()
+    serializer_class = ElasticcDiaTruthSerializer
+
+    def retrieve( self, request, pk=None ):
+        queryset = ElasticcDiaTruth.objects.all()
+        truth = get_object_or_404( queryset, diaSourceId=pk )
+        serializer = ElasticcDiaTruthSerializer( truth )
+        return response.Response( serializer.data )
 
 # ======================================================================
 # I think that using the REST API and serializers is a better way to do

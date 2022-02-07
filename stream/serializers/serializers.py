@@ -2,6 +2,7 @@ from astropy.coordinates import Angle
 from astropy import units
 
 from stream.models import Alert, Event, EventAttributes, Target, Topic
+from stream.models import ElasticcDiaObject, ElasticcDiaSource, ElasticcDiaTruth
 from rest_framework import serializers
 
 
@@ -53,6 +54,23 @@ class AlertSerializer(serializers.ModelSerializer):
 
     def get_topic(self, obj):
         return Topic.objects.get(pk=obj.topic.id).name
+
+
+class ElasticcDiaObjectSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ElasticcDiaObject
+        fields = '__all__'
+
+
+class ElasticcDiaSourceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ElasticcDiaSource
+        fields = '__all__'
+
+class ElasticcDiaTruthSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ElasticcDiaTruth
+        exclude = [ 'id' ]
 
 
 class TopicSerializer(serializers.ModelSerializer):
