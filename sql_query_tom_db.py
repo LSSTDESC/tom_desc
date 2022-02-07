@@ -69,69 +69,113 @@ if __name__ == "__main__":
 
 
 # ======================================================================
-# Some of the tables as of 2022-02-01
+# Some of the tables as of 2022-02-07
 
-#                Table "public.stream_elasticcdiaobject"
-#    Column    |         Type         | Collation | Nullable | Default 
-# -------------+----------------------+-----------+----------+---------
-#  diaObjectId | bigint               |           | not null | 
-#  radec       | geometry(Point,4326) |           | not null | 
+#                  Table "public.stream_elasticcdiaobject"
+#         Column        |       Type       | Collation | Nullable | Default
+# ----------------------+------------------+-----------+----------+---------
+#  diaObjectId          | bigint           |           | not null |
+#  ra                   | double precision |           |          |
+#  decl                 | double precision |           |          |
+#  hostgal2_dec         | double precision |           |          |
+#  hostgal2_ellipticity | double precision |           |          |
+#  hostgal2_mag_Y       | double precision |           |          |
+#  hostgal2_mag_g       | double precision |           |          |
+#  hostgal2_mag_i       | double precision |           |          |
+#  hostgal2_mag_r       | double precision |           |          |
+#  hostgal2_mag_u       | double precision |           |          |
+#  hostgal2_mag_z       | double precision |           |          |
+#  hostgal2_magerr_Y    | double precision |           |          |
+#  hostgal2_magerr_g    | double precision |           |          |
+#  hostgal2_magerr_i    | double precision |           |          |
+#  hostgal2_magerr_r    | double precision |           |          |
+#  hostgal2_magerr_u    | double precision |           |          |
+#  hostgal2_magerr_z    | double precision |           |          |
+#  hostgal2_ra          | double precision |           |          |
+#  hostgal2_snsep       | double precision |           |          |
+#  hostgal2_sqradius    | double precision |           |          |
+#  hostgal2_z           | double precision |           |          |
+#  hostgal2_z_err       | double precision |           |          |
+#  hostgal2_zphot_pz50  | double precision |           |          |
+#  hostgal2_zphot_q10   | double precision |           |          |
+#  hostgal2_zphot_q20   | double precision |           |          |
+#  hostgal2_zphot_q30   | double precision |           |          |
+#  hostgal2_zphot_q40   | double precision |           |          |
+#  hostgal2_zphot_q50   | double precision |           |          |
+#  hostgal2_zphot_q60   | double precision |           |          |
+#  hostgal2_zphot_q70   | double precision |           |          |
+#  hostgal2_zphot_q80   | double precision |           |          |
+#  hostgal2_zphot_q90   | double precision |           |          |
+#  hostgal_dec          | double precision |           |          |
+#  hostgal_mag_Y        | double precision |           |          |
+#  hostgal_mag_g        | double precision |           |          |
+#  hostgal_mag_i        | double precision |           |          |
+#  hostgal_mag_r        | double precision |           |          |
+#  hostgal_mag_u        | double precision |           |          |
+#  hostgal_mag_z        | double precision |           |          |
+#  hostgal_magerr_Y     | double precision |           |          |
+#  hostgal_magerr_g     | double precision |           |          |
+#  hostgal_magerr_i     | double precision |           |          |
+#  hostgal_magerr_r     | double precision |           |          |
+#  hostgal_magerr_u     | double precision |           |          |
+#  hostgal_magerr_z     | double precision |           |          |
+#  hostgal_ra           | double precision |           |          |
+#  hostgal_snsep        | double precision |           |          |
+#  hostgal_sqradius     | double precision |           |          |
+#  hostgal_z            | double precision |           |          |
+#  hostgal_z_err        | double precision |           |          |
+#  hostgal_zphot_pz50   | double precision |           |          |
+#  hostgal_zphot_q10    | double precision |           |          |
+#  hostgal_zphot_q20    | double precision |           |          |
+#  hostgal_zphot_q30    | double precision |           |          |
+#  hostgal_zphot_q40    | double precision |           |          |
+#  hostgal_zphot_q50    | double precision |           |          |
+#  hostgal_zphot_q60    | double precision |           |          |
+#  hostgal_zphot_q70    | double precision |           |          |
+#  hostgal_zphot_q80    | double precision |           |          |
+#  hostgal_zphot_q90    | double precision |           |          |
+#  hostgal_ellipticity  | double precision |           |          |
 # Indexes:
 #     "stream_elasticcdiaobject_pkey" PRIMARY KEY, btree ("diaObjectId")
-#     "stream_elasticcdiaobject_radec_id" gist (radec)
+#     "elasticcdiaobject_q3c_radec_idx" btree (q3c_ang2ipix(ra, decl))
 # Referenced by:
-#     TABLE "stream_elasticcdiasource" CONSTRAINT "stream_elasticcdiaso_diaObject_id_2fbc5706_fk_stream_el" FOREIGN KEY ("diaObject_id") REFERENCES stream_elasticcdiaobject("diaObjectId") DEFERRABLE INITIALLY DEFERRED
+#     TABLE "stream_elasticcdiasource" CONSTRAINT "stream_elasticcdiaso_diaObject_id_2fbc5706_fk_stream_el" FOREIGN KEY ("
+# diaObject_id") REFERENCES stream_elasticcdiaobject("diaObjectId") DEFERRABLE INITIALLY DEFERRED
 
 
-#                  Table "public.stream_elasticcdiasource"
-#       Column      |         Type         | Collation | Nullable | Default 
-# ------------------+----------------------+-----------+----------+---------
-#  diaSourceId      | bigint               |           | not null | 
-#  midPointTai      | double precision     |           | not null | 
-#  filterName       | text                 |           | not null | 
-#  radec            | geometry(Point,4326) |           | not null | 
-#  apFlux           | double precision     |           | not null | 
-#  apFluxErr        | double precision     |           | not null | 
-#  nobs             | double precision     |           |          | 
-#  mwebv            | double precision     |           |          | 
-#  mwebv_err        | double precision     |           |          | 
-#  z_final          | double precision     |           |          | 
-#  z_final_err      | double precision     |           |          | 
-#  hostgal_z        | double precision     |           |          | 
-#  hostgal_snsep    | double precision     |           |          | 
-#  diaObject_id     | bigint               |           |          | 
-#  hostgal_mag_Y    | double precision     |           |          | 
-#  hostgal_mag_g    | double precision     |           |          | 
-#  hostgal_mag_i    | double precision     |           |          | 
-#  hostgal_mag_r    | double precision     |           |          | 
-#  hostgal_mag_u    | double precision     |           |          | 
-#  hostgal_mag_z    | double precision     |           |          | 
-#  hostgal_magerr_Y | double precision     |           |          | 
-#  hostgal_magerr_g | double precision     |           |          | 
-#  hostgal_magerr_i | double precision     |           |          | 
-#  hostgal_magerr_r | double precision     |           |          | 
-#  hostgal_magerr_u | double precision     |           |          | 
-#  hostgal_magerr_z | double precision     |           |          | 
-#  hostgal_z_err    | double precision     |           |          | 
+#                 Table "public.stream_elasticcdiasource"
+#       Column       |       Type       | Collation | Nullable | Default
+# -------------------+------------------+-----------+----------+---------
+#  diaSourceId       | bigint           |           | not null |
+#  midPointTai       | double precision |           | not null |
+#  filterName        | text             |           | not null |
+#  ra                | double precision |           |          |
+#  decl              | double precision |           |          |
+#  psFlux            | double precision |           | not null |
+#  psFluxErr         | double precision |           | not null |
+#  nobs              | double precision |           |          |
+#  diaObject_id      | bigint           |           |          |
+#  ccdVisitId        | bigint           |           |          |
+#  parentDiaSourceId | bigint           |           |          |
+#  snr               | double precision |           |          |
 # Indexes:
 #     "stream_elasticcdiasource_pkey" PRIMARY KEY, btree ("diaSourceId")
+#     "elasticcdiasource_q3c_radec_idx" btree (q3c_ang2ipix(ra, decl))
 #     "stream_elasticcdiasource_diaObject_id_2fbc5706" btree ("diaObject_id")
-#     "stream_elasticcdiasource_radec_id" gist (radec)
 # Foreign-key constraints:
 #     "stream_elasticcdiaso_diaObject_id_2fbc5706_fk_stream_el" FOREIGN KEY ("diaObject_id") REFERENCES stream_elasticcdiaobject("diaObjectId") DEFERRABLE INITIALLY DEFERRED
 # Referenced by:
 #     TABLE "stream_elasticcbrokerclassification" CONSTRAINT "stream_elasticcbroke_diaSource_id_e266c51f_fk_stream_el" FOREIGN KEY ("diaSource_id") REFERENCES stream_elasticcdiasource("diaSourceId") DEFERRABLE INITIALLY DEFERRED
 
-
 #                                     Table "public.stream_elasticcdiatruth"
 #     Column    |       Type       | Collation | Nullable |                       Default                       
 # --------------+------------------+-----------+----------+-----------------------------------------------------
 #  id           | bigint           |           | not null | nextval('stream_elasticcdiatruth_id_seq'::regclass)
+#  diaSourceId  | bigint           |           |          | 
+#  diaObjectId  | bigint           |           |          | 
 #  detect       | boolean          |           |          | 
 #  true_gentype | integer          |           |          | 
 #  true_genmag  | double precision |           |          | 
-#  diaObjectId  | bigint           |           |          | 
-#  diaSourceId  | bigint           |           |          | 
 # Indexes:
 #     "stream_elasticcdiatruth_pkey" PRIMARY KEY, btree (id)
 #     "stream_elas_diaObje_e18552_idx" btree ("diaObjectId")
