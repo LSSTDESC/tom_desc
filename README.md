@@ -1,7 +1,77 @@
 # Using the TOM
 
-The "production" server at nersc is https://desc-tom.lbl.gov ; ask Rob
-(raknop@lbl.gov or on the DESC Slack) if you need a user account.
+The "production" server at nersc is `https://desc-tom.lbl.gov` ; ask Rob
+(raknop@lbl.gov or Rob Knop on the LSST Slack) if you need a user account.
+
+There are a few ways to use it.  The browser-base web interface hasn't
+been well developed yet, but there are some of the basic things that
+come with the TOM there.  The ELAsTiCC challenge information is all
+being stored underneath `https://desc-tom.lbl.gov/stream`.  You can try
+clicking about there to see what you get, but this isn't terrily useful
+let.
+
+There are some REST-like interfaces that you could use programmatically
+to pull down information.  To do this, you need to have an account on
+the TOM, and you need to log into it with the client you're using.
+Here's an example:
+
+```
+import requests
+import json
+
+# Configure
+
+url = 'https://desc-tom.lbl.gov'
+username = '<your TOM username>'
+password = '<your TOM password>'
+
+# Log in.
+# Note that Django is *very* particular about trailing slashes.
+
+rqs = requests.session()
+rqs.get( f'{url}/accounts/login/' )
+rqs.post( f'{url}/accounts/login/',
+          data={ 'username': username,
+                 'password': password,
+                 'csrfmiddlewaretoken': rqs.cookies['csrftoken'] } )
+csrfheader = { 'X-CSRFTokien': rqs.cookies['csrftoken'] }
+
+# Pull down information about objects
+
+response = rqs.get( f'{url}/stream/elasticcdiaobject' )
+data = json.loads( response.text )
+print( data.keys() )
+print( data['count'] )
+print( len( data['results'] ) )
+print( json.dumps( data['results'][0], indent=4 ) )
+
+# Pull down information about one object (pick #5 from the list for no
+# good reason).  This is gratuitous, because all that information was
+# already in the list we just downloaded, but really this is just here
+# to demonstrate the API
+
+objid = data['results'][5]['diaObjectId']
+response = rqs.get( f'{url}/stream/elasticcdiaobject/{objid}' )
+data = json.loads( response.text )
+print( data.keys() )
+print( f'{data["ra"]}  {data["decl"]}' )
+```
+
+Currently defined are:
+* `https://desc-tom.lbl.gov/stream/elasticcdiaobject`
+* `https://desc-tom.lbl.gov/stream/elasticcdiasource`
+* `https://desc-tom.lbl.gov/stream/elasticcdiatruth`
+
+Called by themselves, they return a JSON dict as in the example above,
+with `count` giving the total number of objects (or sources or truth
+table entries), and `results` having an array of dictionaries for the
+first hundred objects.  `next` and `previous` have URLs for getting the
+next or previous 100 from the list.  (This will be fraught if records
+are actively being addded to the database at the same time as when
+you're running your queries.)  As in the example above, you can append a
+single number (after a slash) to pull down the information for that one
+object or source; that number is (respectively) diaObjectId or
+diaSourceId.  (For the Trutht table, pass the relevant diaSourceId.)
 
 If you want low-level access to the database by sending SQL queries, you
 can read the database via a thin web API; see
@@ -11,6 +81,8 @@ requires you to have an account on the TOM, and is read-only access.
 
 The rest of this is only interesting if you want to develop it or deploy
 a private version for hacking.
+
+---
 
 # Deployment at NERSC
 
