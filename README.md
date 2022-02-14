@@ -71,7 +71,7 @@ are actively being addded to the database at the same time as when
 you're running your queries.)  As in the example above, you can append a
 single number (after a slash) to pull down the information for that one
 object or source; that number is (respectively) diaObjectId or
-diaSourceId.  (For the Trutht table, pass the relevant diaSourceId.)
+diaSourceId.  (For the Truth table, pass the relevant diaSourceId.)
 
 If you want low-level access to the database by sending SQL queries, you
 can read the database via a thin web API; see
