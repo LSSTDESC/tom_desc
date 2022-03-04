@@ -83,6 +83,10 @@ class ElasticcDiaObject(models.Model):
     diaObjectId = models.BigIntegerField( primary_key=True, db_index=True )
     ra = models.FloatField( null=True )
     decl = models.FloatField( null=True )
+    mwebv = models.FloatField( null=True )
+    mwebv_err = models.FloatField( null=True )
+    z_final = models.FloatField( null=True )
+    z_final_err = models.FloatField( null=True )
     hostgal_ellipticity = models.FloatField( null=True )
     hostgal_sqradius = models.FloatField( null=True )
     hostgal_z = models.FloatField( null=True )
@@ -96,7 +100,7 @@ class ElasticcDiaObject(models.Model):
     hostgal_zphot_q70 = models.FloatField( null=True )
     hostgal_zphot_q80 = models.FloatField( null=True )
     hostgal_zphot_q90 = models.FloatField( null=True )
-    hostgal_zphot_pz50 = models.FloatField( null=True )
+    hostgal_zphot_q99 = models.FloatField( null=True )
     hostgal_mag_u = models.FloatField( null=True )
     hostgal_mag_g = models.FloatField( null=True )
     hostgal_mag_r = models.FloatField( null=True )
@@ -125,7 +129,7 @@ class ElasticcDiaObject(models.Model):
     hostgal2_zphot_q70 = models.FloatField( null=True )
     hostgal2_zphot_q80 = models.FloatField( null=True )
     hostgal2_zphot_q90 = models.FloatField( null=True )
-    hostgal2_zphot_pz50 = models.FloatField( null=True )
+    hostgal2_zphot_q99 = models.FloatField( null=True )
     hostgal2_mag_u = models.FloatField( null=True )
     hostgal2_mag_g = models.FloatField( null=True )
     hostgal2_mag_r = models.FloatField( null=True )
@@ -144,7 +148,7 @@ class ElasticcDiaObject(models.Model):
     
     @staticmethod
     def create( data ):
-        kws = [ 'diaObjectId', 'ra', 'decl' ]
+        kws = [ 'diaObjectId', 'ra', 'decl', 'mwebv', 'mwebv_err', 'z_final', 'z_final_err' ]
         for gal in [ "", "2" ]:
             kws.append( f'hostgal{gal}_z' )
             kws.append( f'hostgal{gal}_z_err' )
@@ -153,7 +157,7 @@ class ElasticcDiaObject(models.Model):
             kws.append( f'hostgal{gal}_snsep' )
             kws.append( f'hostgal{gal}_ellipticity' )
             kws.append( f'hostgal{gal}_sqradius' )
-            for phot in [ 'q10', 'q20', 'q30', 'q40', 'q50', 'q60', 'q70', 'q80', 'q90', 'pz50' ]:
+            for phot in [ 'q10', 'q20', 'q30', 'q40', 'q50', 'q60', 'q70', 'q80', 'q90', 'q99' ]:
                 kws.append( f'hostgal{gal}_zphot_{phot}' )
             for band in [ 'u', 'g', 'r', 'i', 'z', 'Y' ]:
                 for err in [ '', 'err' ]:
