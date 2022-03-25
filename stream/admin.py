@@ -1,23 +1,23 @@
 from django.contrib import admin
 from django.forms.widgets import Textarea
-# from django.contrib.gis.db import models as gis_models
-from .models import Target, Topic
 from .models import ElasticcBrokerClassification, ElasticcBrokerClassifier, ElasticcBrokerMessage
-from .models import Event, EventAttributes, Alert
-from .models import RknopTest
 from .models import ElasticcDiaObject, ElasticcDiaSource, ElasticcDiaTruth
+# from django.contrib.gis.db import models as gis_models
+# from .models import Target, Topic
+# from .models import Event, EventAttributes, Alert
+# from .models import RknopTest
 
-admin.site.register( [ Target,
-                       Topic,
+admin.site.register( [ # Target,
+                       # Topic,
                        ElasticcBrokerClassification,
                        ElasticcBrokerClassifier,
                        ElasticcBrokerMessage,
                        ElasticcDiaObject,
                        ElasticcDiaSource,
                        ElasticcDiaTruth,
-                       Event, EventAttributes,
-                       Alert,
-                       RknopTest,
+                       # Event, EventAttributes,
+                       # Alert,
+                       # RknopTest,
                       ]
                      )
 
