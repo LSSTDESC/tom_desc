@@ -61,6 +61,8 @@ INSTALLED_APPS = [
     'tom_catalogs',
     'tom_observations',
     'tom_dataproducts',
+    'db.apps.DbConfig',
+    'elasticc.apps.ElasticcConfig',
     'stream.apps.StreamConfig',
     'automatisation.apps.AutomatisationConfig',
 ]
@@ -75,7 +77,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'tom_common.middleware.Raise403Middleware',
+    # 'tom_common.middleware.Raise403Middleware',    # <-- I hate this.  I want to be able to 403.
     'tom_common.middleware.ExternalServiceMiddleware',
     'tom_common.middleware.AuthStrategyMiddleware',
 ]

@@ -45,6 +45,15 @@ migrations would have required PostGIS to work.  What I did:
 
 ======================================================================
 
+Adding a group permission
+
+  from django.contrib.auth.models import Group, Permission
+  perm = Permission.objects.get( codename='elasticc_admin' )
+  g = Group.objects.get( name='elasticc_admin' )
+  g.permissions.add( perm )
+
+======================================================================
+
 Mouting postgres
 
 I had trouble with my persistent volume claim because postgres couldn't

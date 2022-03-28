@@ -1,0 +1,241 @@
+import sys
+import io
+import traceback
+import json
+import datetime
+import timezone
+import django.urls
+from django.http import HttpResponse, JsonResponse
+from django.utils.decorators import method_decorator
+from django.shortcuts import render, get_object_or_404
+from django.contrib.auth.decorators import login_required, permission_required
+# from django.contrib.auth.mixins import PermissionRequiredMixin
+from guardian.mixins import PermissionRequiredMixin
+import django.views
+from rest_framework import pagination
+from rest_framework import permissions
+from rest_framework import viewsets
+from rest_framework import response
+
+from elasticc.models import DiaObject, DiaSource, DiaForcedSource
+from elasticc.models import DiaAlert, DiaTruth
+from elasticc.models import DiaAlertPrvSource, DiaAlertPrvForcedSource
+from elasticc.models import BrokerMessage, BrokerClassifier, BrokerClassification
+from elasticc.serializers import DiaObjectSerializer, DiaTruthSerializer
+from elasticc.serializers import DiaForcedSourceSerializer, DiaSourceSerializer, DiaAlertSerializer
+
+# ======================================================================
+
+class DiaObjectViewSet(viewsets.ReadOnlyModelViewSet):
+    permission_classes = [permissions.IsAuthenticated]
+    queryset = DiaObject.objects.all()
+    serializer_class = DiaObjectSerializer
+
+class DiaSourceViewSet(viewsets.ReadOnlyModelViewSet):
+    permission_classes = [permissions.IsAuthenticated]
+    queryset = DiaSource.objects.all()
+    serializer_class = DiaSourceSerializer
+
+class DiaForcedSourceViewSet(viewsets.ReadOnlyModelViewSet):
+    permission_classes = [permissions.IsAuthenticated]
+    queryset = DiaForcedSource.objects.all()
+    serializer_class = DiaForcedSourceSerializer
+    
+class DiaTruthViewSet(viewsets.ReadOnlyModelViewSet):
+    permission_classes = [permissions.IsAuthenticated]
+    queryset = DiaTruth.objects.all()
+    serializer_class = DiaTruthSerializer
+
+    def retrieve( self, request, pk=None ):
+        queryset = DiaTruth.objects.all()
+        truth = get_object_or_404( queryset, diaSourceId=pk )
+        serializer = DiaTruthSerializer( truth )
+        return response.Response( serializer.data )
+
+class DiaAlertViewSet(viewsets.ReadOnlyModelViewSet):
+    permission_classes = [permissions.IsAuthenticated]
+    queryset = DiaAlert.objects.all()
+    serializer_class = DiaAlertSerializer
+    
+# ======================================================================
+# I think that using the REST API and serializers is a better way to do
+# this, but I'm still learning how all that works.  For now, put this here
+# with a lot of manual work so that I can at least get stuff in
+#
+# (NOTE: I discovered that PermissionReqiredMixin has to go before
+# django.views.View in the inheritance list.  This seems to me like something
+# the documentation ought to call out anywhere it mentions the mixin....)
+
+# @method_decorator(login_required, name='dispatch')
+class MaybeAddDiaObject(PermissionRequiredMixin, django.views.View):
+    permission_required = 'elasticc.elasticc_admin'
+    raise_exception = True
+    
+    def post(self, request, *args, **kwargs):
+        data = json.loads( request.body )
+        curobj = DiaObject.load_or_create( data )
+        resp = { 'status': 'ok', 'message': f'ObjectID: {curobj.diaObjectId}' }
+        return JsonResponse( resp )
+
+# @method_decorator(login_required, name='dispatch')
+class MaybeAddAlert(PermissionRequiredMixin, django.views.View):
+    permission_required = 'elasticc.elasticc_admin'
+    raise_exception = True
+
+    def load_one_object( self, data ):
+        # Load the main object
+        curobj = DiaObject.load_or_create( data['diaObject'] )
+        # Load the main source
+        data['diaSource']['diaObject'] = curobj
+        cursrc = DiaSource.load_or_create( data['diaSource'] )
+        # Load the previous sources
+        prevs = []
+        if data['prvDiaSources'] is not None:
+            for prvdata in data['prvDiaSources']:
+                prvdata['diaObject'] = curobj
+                prevs.append( DiaSource.load_or_create( prvdata ) )
+        # Load the previous forced sources
+        forced = []
+        if data['prvDiaForcedSources'] is not None:
+            for forceddata in data['prvDiaForcedSources']:
+                forceddata['diaObject'] = curobj
+                forced.append( DiaForcedSource.load_or_create( forceddata ) )
+        # Load the alert
+        # TODO : check to see if the alertId already exists???
+        # Right now, this will error out due to the unique constraint
+        curalert = DiaAlert( alertId = data['alertId'], diaSource = cursrc, diaObject = curobj )
+        curalert.save()
+        # Load the linkages to the previouses
+        for prv in prevs:
+            tmp = DiaAlertPrvSource( diaAlert=curalert, diaSource=prv )
+            tmp.save()
+        for prv in forced:
+            tmp = DiaAlertPrvForcedSource( diaAlert=curalert, diaForcedSource=prv )
+            tmp.save()
+                          
+        return { 'alertId': curalert.alertId,
+                 'diaSourceId': cursrc.diaSourceId,
+                 'diaObjectId': curobj.diaObjectId,
+                 'prvDiaSourceIds': [ prv.diaSourceId for prv in prevs ],
+                 'prvDiaForcedSourceIds': [ prv.diaForcedSourceId for prv in forced ] }
+        
+    def post(self, request, *args, **kwargs):
+        try:
+            data = json.loads( request.body )
+            loaded = []
+            if isinstance( data, dict ):
+                loaded.append( self.load_one_object( data ) )
+            else:
+                for item in data:
+                    loaded.append( self.load_one_object( item ) )
+            resp = { 'status': 'ok', 'message': loaded }
+            return JsonResponse( resp )
+        except Exception as e:
+            strstream = io.StringIO()
+            traceback.print_exc( file=strstream )
+            resp = { 'status': 'error',
+                     'message': 'Exception in AddAlert',
+                     'exception': str(e),
+                     'traceback': strstream.getvalue() }
+            strstream.close()
+            return JsonResponse( resp )
+
+
+# @method_decorator(login_required, name='dispatch')
+class MaybeAddTruth(PermissionRequiredMixin, django.views.View):
+    permission_required = 'elasticc.elasticc_admin'
+    raise_exception = True
+
+    def load_one_object( self, data ):
+        curobj = DiaTruth.load_or_create( data )
+        return curobj.diaSourceId
+    
+    def post( self, request, *args, **kwargs ):
+        try:
+            data = json.loads( request.body )
+            loaded = []
+            if isinstance( data, dict ):
+                loaded.append( self.load_one_object( data ) )
+            else:
+                for item in data:
+                    loaded.append( self.load_one_object( item ) )
+            resp = { 'status': 'ok', 'message': loaded }
+            return JsonResponse( resp )
+        except Exception as e:
+            strstream = io.StringIO()
+            traceback.print_exc( file=strstream )
+            resp = { 'status': 'error',
+                     'message': f'Exception in {self.__class__.__name__}',
+                     'exception': str(e),
+                     'traceback': strstream.getvalue() }
+            strstream.close()
+            return JsonResponse( resp )
+
+
+class BrokerMessageView(PermissionRequiredMixin, django.views.View):
+    permission_required = 'elasticc.elasticc_broker'
+    raise_exception = True
+
+    def put( self, request, *args, **kwargs ):
+        data = json.loads( request.body )
+
+        # Make the BrokerMessage object
+        # This could lead to duplication; if the same classification
+        # is sent more than once from a broker, it will get saved multiple
+        # times.
+        msgobj = BrokerMessage(
+            alertId = data['alertId'],
+            diaSourceId = data['diaSourceId'],
+            # Note: an IEEE double can hold ~16 digits of precision
+            # Given that it's ~10⁹ seconds since the Epoch now, the
+            # IEEE double should be able to hold the number of microseconds
+            # with integrity.  So, just divide by 1e6 to go from number of
+            # microseconds to POSIX timestamp.
+            elasticcPublishTimestamp = datetime.datetime.fromtimestamp( data['elasticcPublishTimestamp']/1e6,
+                                                                        tz=datetime.timezone.utc )
+            brokerIngestTimestamp = datetime.datetime.fromtimestamp( data['brokerIngestTimestamp']/1e6,
+                                                                     tz=datetime.timezone.utc )
+        )
+        msgobj.save()
+
+
+        # Next, dig in, and make sure we know all the BrokerClassifier things
+        broker_name = data['brokerName']
+        broker_verson = data['brokerVersion']
+        classifiers = {}
+        for classification in data['classifications']:
+            # There's the _possibility_ of confusion here, but I'm going to write
+            #  it off as not very likely.
+            # (The ghost of Bobby Tables will haunt me forever.)
+            cferkey = f'{Name: data["classifierName"]} Params: {data["classifierParams"]}'
+            if cferkey in classifiers.keys():
+                continue
+            curcfers = BrokerClassifier.objects.all().filter(
+                brokerName = broker_name,
+                brokerVersion = broker_version,
+                classifierName = classification['classifierName'],
+                classifierParams = classification['classifierParams'] )
+            if len(curcfers) > 0:
+                cfer = curcfer[0]
+            else:
+                cfer = BrokerClassifier(
+                    brokerName = broker_name,
+                    brokerVersion = broker_version,
+                    classifierName = classification['classifierName'],
+                    classifierParams = classification['classifierParams'] )
+                cfer.save()
+            classifiers[cferkey] = cfer
+
+        # Now, save all the classifications
+        for classification in data['classifications']:
+            cfer = classifiers[f'{Name: data["classifierName"]} Params: {data["classifierParams"]}']
+            cfication = BrokerClassification(
+                dbMessage = msgobj,
+                dbClassifier = cfer,
+                classId = classification['classId'],
+                probability = classification['probability'] )
+            cfication.save()
+
+        resp = JsonResponse( { 'dbMessageIndex': msgobj.dbMessageIndex }, status=201 )
+        resp.headers['Location'] = f"{django.urls.reverse('brokermessage')}/{dbMessageIndex}"
+            
