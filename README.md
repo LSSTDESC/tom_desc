@@ -61,6 +61,7 @@ Currently defined are:
 * `https://desc-tom.lbl.gov/elasticc/diaobject/`
 * `https://desc-tom.lbl.gov/elasticc/diasource/`
 * `https://desc-tom.lbl.gov/elasticc/diatruth/`
+* `https://desc-tom.lbl.gov/elasticc/diaalert/`
 
 Called by themselves, they return a JSON dict as in the example above,
 with `count` giving the total number of objects (or sources or truth
@@ -69,9 +70,10 @@ first hundred objects.  `next` and `previous` have URLs for getting the
 next or previous 100 from the list.  (This will be fraught if records
 are actively being addded to the database at the same time as when
 you're running your queries.)  As in the example above, you can append a
-single number (after a slash) to pull down the information for that one
-object or source; that number is (respectively) diaObjectId or
-diaSourceId.  (For the Truth table, pass the relevant diaSourceId.)
+single number (with a trailing slash after it) to pull down the
+information for that one object or source; that number is (respectively)
+diaObjectId or diaSourceId.  (For the Truth table, pass the relevant
+diaSourceId.)
 
 If you want low-level access to the database by sending SQL queries, you
 can read the database via a thin web API; see
