@@ -3,7 +3,7 @@
 The "production" server at nersc is `https://desc-tom.lbl.gov` ; ask Rob
 (raknop@lbl.gov or Rob Knop on the LSST Slack) if you need a user account.
 
-There are a few ways to use it.  The browser-base web interface hasn't
+There are a few ways to use it.  The browser-based web interface hasn't
 been well developed yet, but there are some of the basic things that
 come with the TOM there.  The ELAsTiCC challenge information is all
 being stored underneath `https://desc-tom.lbl.gov/stream`.  You can try
@@ -38,7 +38,7 @@ csrfheader = { 'X-CSRFTokien': rqs.cookies['csrftoken'] }
 
 # Pull down information about objects
 
-response = rqs.get( f'{url}/stream/elasticcdiaobject' )
+response = rqs.get( f'{url}/elasticc/diaobject/' )
 data = json.loads( response.text )
 print( data.keys() )
 print( data['count'] )
@@ -51,16 +51,16 @@ print( json.dumps( data['results'][0], indent=4 ) )
 # to demonstrate the API
 
 objid = data['results'][5]['diaObjectId']
-response = rqs.get( f'{url}/stream/elasticcdiaobject/{objid}' )
+response = rqs.get( f'{url}/elasticc/diaobject/{objid}/' )
 data = json.loads( response.text )
 print( data.keys() )
 print( f'{data["ra"]}  {data["decl"]}' )
 ```
 
 Currently defined are:
-* `https://desc-tom.lbl.gov/stream/elasticcdiaobject`
-* `https://desc-tom.lbl.gov/stream/elasticcdiasource`
-* `https://desc-tom.lbl.gov/stream/elasticcdiatruth`
+* `https://desc-tom.lbl.gov/elasticc/diaobject/`
+* `https://desc-tom.lbl.gov/elasticc/diasource/`
+* `https://desc-tom.lbl.gov/elasticc/diatruth/`
 
 Called by themselves, they return a JSON dict as in the example above,
 with `count` giving the total number of objects (or sources or truth

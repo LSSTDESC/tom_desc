@@ -6,10 +6,9 @@ import psycopg2.extras
 from django.http import HttpResponse, JsonResponse
 from django.utils.decorators import method_decorator
 from django.shortcuts import render
+from django.contrib.auth.mixins import PermissionRequiredMixin, LoginRequiredMixin
 import django.views
-from django.contrib.auth.decorators import login_required, permission_required
 
-# Create your views here.
 # ======================================================================
 # A low-level query interface.
 #
@@ -17,8 +16,9 @@ from django.contrib.auth.decorators import login_required, permission_required
 # sure the postgres user tom_desc_ro is a readonly user.  Still scary,
 # but not Cthulhuesque.
 
-@method_decorator(login_required, name='dispatch')
-class RunSQLQuery(django.views.View):
+class RunSQLQuery(LoginRequiredMixin, django.views.View):
+    raise_exception = True
+
     def post( self, request, *args, **kwargs ):
         data = json.loads( request.body )
         if not 'query' in data:

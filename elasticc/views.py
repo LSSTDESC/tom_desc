@@ -1,16 +1,16 @@
 import sys
+import re
 import io
 import traceback
 import json
 import datetime
-import timezone
 import django.urls
 from django.http import HttpResponse, JsonResponse
 from django.utils.decorators import method_decorator
 from django.shortcuts import render, get_object_or_404
 from django.contrib.auth.decorators import login_required, permission_required
-# from django.contrib.auth.mixins import PermissionRequiredMixin
-from guardian.mixins import PermissionRequiredMixin
+from django.contrib.auth.mixins import PermissionRequiredMixin, LoginRequiredMixin
+# from guardian.mixins import PermissionRequiredMixin
 import django.views
 from rest_framework import pagination
 from rest_framework import permissions
@@ -172,10 +172,13 @@ class MaybeAddTruth(PermissionRequiredMixin, django.views.View):
             return JsonResponse( resp )
 
 
-class BrokerMessageView(PermissionRequiredMixin, django.views.View):
+class BrokerMessagePut(PermissionRequiredMixin, django.views.View):
     permission_required = 'elasticc.elasticc_broker'
     raise_exception = True
 
+    def get( self, request ):
+        return JsonResponse( { 'status': 'Nothing to see here, move along.' } )
+    
     def put( self, request, *args, **kwargs ):
         data = json.loads( request.body )
 
@@ -192,7 +195,7 @@ class BrokerMessageView(PermissionRequiredMixin, django.views.View):
             # with integrity.  So, just divide by 1e6 to go from number of
             # microseconds to POSIX timestamp.
             elasticcPublishTimestamp = datetime.datetime.fromtimestamp( data['elasticcPublishTimestamp']/1e6,
-                                                                        tz=datetime.timezone.utc )
+                                                                        tz=datetime.timezone.utc ),
             brokerIngestTimestamp = datetime.datetime.fromtimestamp( data['brokerIngestTimestamp']/1e6,
                                                                      tz=datetime.timezone.utc )
         )
@@ -201,13 +204,13 @@ class BrokerMessageView(PermissionRequiredMixin, django.views.View):
 
         # Next, dig in, and make sure we know all the BrokerClassifier things
         broker_name = data['brokerName']
-        broker_verson = data['brokerVersion']
+        broker_version = data['brokerVersion']
         classifiers = {}
         for classification in data['classifications']:
             # There's the _possibility_ of confusion here, but I'm going to write
             #  it off as not very likely.
             # (The ghost of Bobby Tables will haunt me forever.)
-            cferkey = f'{Name: data["classifierName"]} Params: {data["classifierParams"]}'
+            cferkey = f'Name: {classification["classifierName"]} Params: {classification["classifierParams"]}'
             if cferkey in classifiers.keys():
                 continue
             curcfers = BrokerClassifier.objects.all().filter(
@@ -216,7 +219,7 @@ class BrokerMessageView(PermissionRequiredMixin, django.views.View):
                 classifierName = classification['classifierName'],
                 classifierParams = classification['classifierParams'] )
             if len(curcfers) > 0:
-                cfer = curcfer[0]
+                cfer = curcfers[0]
             else:
                 cfer = BrokerClassifier(
                     brokerName = broker_name,
@@ -228,7 +231,8 @@ class BrokerMessageView(PermissionRequiredMixin, django.views.View):
 
         # Now, save all the classifications
         for classification in data['classifications']:
-            cfer = classifiers[f'{Name: data["classifierName"]} Params: {data["classifierParams"]}']
+            cfer = classifiers[f'Name: {classification["classifierName"]} '
+                               f'Params: {classification["classifierParams"]}']
             cfication = BrokerClassification(
                 dbMessage = msgobj,
                 dbClassifier = cfer,
@@ -237,5 +241,51 @@ class BrokerMessageView(PermissionRequiredMixin, django.views.View):
             cfication.save()
 
         resp = JsonResponse( { 'dbMessageIndex': msgobj.dbMessageIndex }, status=201 )
-        resp.headers['Location'] = f"{django.urls.reverse('brokermessage')}/{dbMessageIndex}"
-            
+        # I really wish there were a django function for this, as I'm not sure that
+        # my string replace will always do the right thing.  What I'm after is the
+        # url of the current view, but without any parameters passed
+        fullpath = request.build_absolute_uri()
+        loc = re.sub( '\?.*$', '', fullpath )
+        if loc[-1] != "/":
+            loc += "/"
+        resp.headers['Location'] =  f'{loc}{msgobj.dbMessageIndex}'
+
+        return resp
+
+# I would sort of like to make this the same class as BrokerMessagePut, but I haven't
+# figure out how to tell the django method dispatcher to use a url pattern for only
+# some HTTP methods
+class BrokerMessageGet(LoginRequiredMixin, django.views.View):
+# class BrokerMessageGet(django.views.View):
+    raise_exception = True
+
+    def get( self, request, msgid ):
+        msgobj = BrokerMessage.objects.get(pk=msgid)
+        resp = {
+            'alertId': msgobj.alertId,
+            'diaSourceId': msgobj.diaSourceId,
+            'elasticcPublishTimestamp': int( msgobj.elasticcPublishTimestamp.timestamp() * 1e6 ),
+            'brokerIngestTimestamp': int( msgobj.brokerIngestTimestamp.timestamp() * 1e6 ),
+            'brokerName': "<unknown>",
+            'brokerVersion': "<unknown>",
+            'classifications': []
+            }
+        clsfctions = BrokerClassification.objects.all().filter( dbMessage=msgobj )
+        first = True
+        for classification in clsfctions:
+            clsifer = classification.dbClassifier
+            if first:
+                resp['brokerName'] = clsifer.brokerName
+                resp['brokerVersion'] = clsifer.brokerVersion
+                first = False
+            else:
+                if ( ( clsifer.brokerName != resp['brokerName'] ) or
+                     ( clsifer.brokerVersion != resp['brokerVersion'] ) ):
+                    raise ValueError( "Mismatching brokerName and brokerVersion in the database! "
+                                      "This shouldn't happen!" )
+            resp['classifications'].append( { 'classifierName': clsifer.classifierName,
+                                              'classifierParams': clsifer.classifierParams,
+                                              'classId': classification.classId,
+                                              'probability': classification.probability } )
+
+        return JsonResponse( resp )

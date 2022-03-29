@@ -343,14 +343,14 @@ class BrokerClassifier(models.Model):
 
     brokerName = models.CharField(max_length=100)
     brokerVersion = models.TextField(null=True)     # state changes logically not part of the classifier
-    classiferName = models.CharField(max_length=200)
+    classifierName = models.CharField(max_length=200)
     classifierParams = models.TextField(null=True)   # change in classifier code / parameters
     
     modified = models.DateTimeField(auto_now=True)
 
     class Meta:
         indexes = [
-            models.Index(fields=["brokerName", "classiferName"]),
+            models.Index(fields=["brokerName", "classifierName"]),
         ]
 
 
@@ -358,8 +358,8 @@ class BrokerClassification(models.Model):
     """Model for a classification from an ELAsTiCC broker."""
 
     dbClassificationIndex = models.BigAutoField(primary_key=True)
-    dbMessage = models.ForeignKey( BrokerMessage, on_delete=models.PROTECT, null=True )
-    dbClassifier = models.ForeignKey( BrokerClassifier, on_delete=models.PROTECT, null=True )
+    dbMessage = models.ForeignKey( BrokerMessage, on_delete=models.CASCADE, null=True )
+    dbClassifier = models.ForeignKey( BrokerClassifier, on_delete=models.CASCADE, null=True )
 
     # These next three can be determined by looking back at the linked dbMessage
     # alertId = models.BigIntegerField()

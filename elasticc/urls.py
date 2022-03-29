@@ -1,4 +1,4 @@
-from django.conf.urls import include, url
+from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from elasticc import views
 
@@ -11,9 +11,12 @@ router.register(f'diatruth', views.DiaTruthViewSet)
 router.register(f'diaalert', views.DiaAlertViewSet)
 
 urlpatterns = [
-    url('adddiaobject', views.MaybeAddDiaObject.as_view()),
-    url('addelasticcalert', views.MaybeAddAlert.as_view()),
-    url('addtruth', views.MaybeAddTruth.as_view()),
-    url('brokermessage', views.BrokerMessageView.as_view(), name='brokermessage'),
-    url('', include((router.urls, 'elasticc'), namespace=app_name)),
+    path('adddiaobject', views.MaybeAddDiaObject.as_view()),
+    path('addelasticcalert', views.MaybeAddAlert.as_view()),
+    path('addtruth', views.MaybeAddTruth.as_view()),
+
+    path('brokermessage/<int:msgid>/', views.BrokerMessageGet.as_view(), name='brokermesssage-get'),
+    path('brokermessage/', views.BrokerMessagePut.as_view(), name='brokermessage-put'),
+
+    path('', include((router.urls, 'elasticc'), namespace=app_name)),
 ]

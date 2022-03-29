@@ -1,6 +1,6 @@
-from django.conf.urls import url
+from django.urls import path
 from db import views
 
 urlpatterns = [
-    url('runsqlquery', views.RunSQLQuery.as_view()),
+    path('runsqlquery/', views.RunSQLQuery.as_view()),
 ]
