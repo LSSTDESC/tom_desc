@@ -95,6 +95,7 @@ if __name__ == "__main__":
 #         Column        |       Type       | Collation | Nullable | Default 
 # ----------------------+------------------+-----------+----------+---------
 #  diaObjectId          | bigint           |           | not null | 
+#  simVersion           | text             |           |          |
 #  ra                   | double precision |           | not null | 
 #  decl                 | double precision |           | not null | 
 #  mwebv                | double precision |           |          | 
