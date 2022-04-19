@@ -67,6 +67,7 @@ class ElasticcPermissions(models.Model):
 
 class DiaObject(Createable):
     diaObjectId = models.BigIntegerField( primary_key=True, unique=True, db_index=True )
+    simVersion = models.TextField( null=True )
     ra = models.FloatField( )
     decl = models.FloatField( )
     mwebv = models.FloatField( null=True )
