@@ -1,7 +1,17 @@
+import sys
 import math
+import logging
 from django.db import models
 from django.utils.functional import cached_property
 import django.contrib.postgres.indexes as indexes
+
+_logger = logging.getLogger(__name__)
+_logout = logging.StreamHandler( sys.stderr )
+_formatter = logging.Formatter( f'[%(asctime)s - %(levelname)s] - %(message)s' )
+_logout.setFormatter( _formatter )
+_logger.propagate = False
+_logger.addHandler( _logout )
+_logger.setLevel( logging.DEBUG )
 
 # Create your models here.
 
@@ -42,6 +52,25 @@ class Createable(models.Model):
         except cls.DoesNotExist:
             return cls.create( data )
 
+    @classmethod
+    def bulk_load_or_create( cls, data ):
+        """Pass an array of dicts."""
+        pks = [ i[cls._pk] for i in data ]
+        curobjs = list( cls.objects.filter( pk__in=pks ) )
+        exists = set( [ getattr(i, i._pk) for i in curobjs ] )
+        newobjs = set()
+        for newdata in data:
+            if newdata[cls._pk] in exists:
+                continue
+            kwargs = {}
+            for kw in cls._create_kws:
+                kwargs[kw] = newdata[kw] if kw in newdata else None
+            newobjs.add( cls( **kwargs ) )
+        if len(newobjs) > 0:
+            addedobjs = cls.objects.bulk_create( newobjs )
+            curobjs.extend( addedobjs )
+        return curobjs
+        
 # ======================================================================-
 # This class is to hold permissions that don't logically belong
 # to a single model below.
@@ -196,13 +225,16 @@ class DiaForcedSource(Createable):
     _create_kws = [ 'diaForcedSourceId', 'ccdVisitId', 'diaObject',
                     'midPointTai', 'filterName', 'psFlux', 'psFluxErr', 'totFlux', 'totFluxErr' ]
     
-class DiaAlert(models.Model):
+class DiaAlert(Createable):
     alertId = models.BigIntegerField( primary_key=True, unique=True, db_index=True )
     diaSource = models.ForeignKey( DiaSource, on_delete=models.CASCADE, null=True )
     diaObject = models.ForeignKey( DiaObject, on_delete=models.CASCADE, null=True )
     # cutoutDifference
     # cutoutTemplate
 
+    _pk = 'alertId'
+    _create_kws = [ 'alertId', 'diaSource', 'diaObject' ]
+    
 # Perhaps I should be using django ManyToMany here?
 # I do this manually because it mapps directly to
 # SQL, so if somebody hits the table with SQL
@@ -276,7 +308,7 @@ class DiaTruth(models.Model):
 #
 # For each one of those, we generate an BrokerMessage in the database.
 # From the alert directly, we set:
-#   alertId --> links back to ROB YOU NEED TO CREATE THIS **
+#   alertId --> links back to DiaAlert **
 #   diaSourceId --> links back to DiaSource table **
 #   elasticcPublishTimestamp
 #   brokerIngestTimestamp
@@ -299,8 +331,9 @@ class DiaTruth(models.Model):
 #     Probably I should make them nullable in case they didn't come from there.
 #     or, another table to track kafka stream topic etc.  ROB THINK.
 #
-# In addition, in the avro alert, there is further stuff.  We will dig
-# into the classifications array and:
+# In addition, in the avro alert, there is further stuff.  When adding a
+# message to the database, We will dig into the classifications array
+# and:
 #  * See if an BrokerClassifier already exists based on
 #       * brokerName, brokerVersion from the alert
 #       * classifierName, classifierParams from the classifications array

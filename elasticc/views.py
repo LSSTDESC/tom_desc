@@ -82,52 +82,36 @@ class MaybeAddAlert(PermissionRequiredMixin, django.views.View):
     permission_required = 'elasticc.elasticc_admin'
     raise_exception = True
 
-    def load_one_object( self, data ):
-        # Load the main object
-        curobj = DiaObject.load_or_create( data['diaObject'] )
-        # Load the main source
-        data['diaSource']['diaObject'] = curobj
-        cursrc = DiaSource.load_or_create( data['diaSource'] )
-        # Load the previous sources
-        prevs = []
-        if data['prvDiaSources'] is not None:
-            for prvdata in data['prvDiaSources']:
-                prvdata['diaObject'] = curobj
-                prevs.append( DiaSource.load_or_create( prvdata ) )
-        # Load the previous forced sources
-        forced = []
-        if data['prvDiaForcedSources'] is not None:
-            for forceddata in data['prvDiaForcedSources']:
-                forceddata['diaObject'] = curobj
-                forced.append( DiaForcedSource.load_or_create( forceddata ) )
-        # Load the alert
-        # TODO : check to see if the alertId already exists???
-        # Right now, this will error out due to the unique constraint
-        curalert = DiaAlert( alertId = data['alertId'], diaSource = cursrc, diaObject = curobj )
-        curalert.save()
-        # Load the linkages to the previouses
-        for prv in prevs:
-            tmp = DiaAlertPrvSource( diaAlert=curalert, diaSource=prv )
-            tmp.save()
-        for prv in forced:
-            tmp = DiaAlertPrvForcedSource( diaAlert=curalert, diaForcedSource=prv )
-            tmp.save()
-                          
-        return { 'alertId': curalert.alertId,
-                 'diaSourceId': cursrc.diaSourceId,
-                 'diaObjectId': curobj.diaObjectId,
-                 'prvDiaSourceIds': [ prv.diaSourceId for prv in prevs ],
-                 'prvDiaForcedSourceIds': [ prv.diaForcedSourceId for prv in forced ] }
-        
     def post(self, request, *args, **kwargs):
         try:
             data = json.loads( request.body )
-            loaded = []
             if isinstance( data, dict ):
-                loaded.append( self.load_one_object( data ) )
-            else:
-                for item in data:
-                    loaded.append( self.load_one_object( item ) )
+                data = [ data ]
+            loaded = {}
+
+            # Load the objects
+            objdata = [ entry['diaObject'] for entry in data ]
+            objects = DiaObject.bulk_load_or_create( objdata )
+            loaded['objects'] = [ i.diaObjectId for i in objects ]
+            objdict = { obj.diaObjectId: obj for obj in objects }
+
+            # Load the sources
+            for entry in data:
+                entry['diaSource']['diaObject'] = objdict[ entry['diaObject']['diaObjectId'] ]
+            sourcedata = [ entry['diaSource'] for entry in data ]
+            sources = DiaSource.bulk_load_or_create( sourcedata )
+            loaded['sources'] = [ i.diaSourceId for i in sources ]
+            srcdict = { src.diaSourceId: src for src in sources }
+
+            # Load the alerts
+            alertdata = []
+            for entry in data:
+                alertdata.append( { 'alertId': entry['alertId'],
+                                    'diaSource': srcdict[ entry['diaSource']['diaSourceId'] ],
+                                    'diaObject': objdict[ entry['diaObject']['diaObjectId'] ] } )
+            alerts = DiaAlert.bulk_load_or_create( alertdata )
+            loaded['alerts'] = [ i.alertId for i in alerts ]
+            
             resp = { 'status': 'ok', 'message': loaded }
             return JsonResponse( resp )
         except Exception as e:
