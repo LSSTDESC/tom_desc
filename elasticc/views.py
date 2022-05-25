@@ -158,28 +158,44 @@ class MaybeAddAlert(PermissionRequiredMixin, django.views.View):
                 data = [ data ]
             loaded = {}
 
+            # Note: I pass all of the things, not just the things that are
+            #  are not already there, to bulk_load_or_create so that I'll
+            #  have those objects available if necessary for a later step.
+            # (cf: the objdata=, srcdata= comprehensions)
+            
             # Load the objects
+            objids = { entry['diaObject']['diaObjectId'] for entry in data }
+            curobjids = set( DiaObject.which_exist( objids ) )
+            newobjids = objids - curobjids
+            # objdata = [ entry['diaObject'] for entry in data if entry['diaObject']['diaObjectId'] in newobjids ]
             objdata = [ entry['diaObject'] for entry in data ]
             objects = DiaObject.bulk_load_or_create( objdata )
-            loaded['objects'] = [ i.diaObjectId for i in objects ]
+            loaded['objects'] = [ i.diaObjectId for i in objects if i.diaObjectId in newobjids ]
             objdict = { obj.diaObjectId: obj for obj in objects }
 
             # Load the sources
+            srcids = { entry['diaSource']['diaSourceId'] for entry in data }
+            cursrcids = set( DiaSource.which_exist( srcids ) )
+            newsrcids = srcids - cursrcids
             for entry in data:
                 entry['diaSource']['diaObject'] = objdict[ entry['diaObject']['diaObjectId'] ]
-            sourcedata = [ entry['diaSource'] for entry in data ]
+            # sourcedata = [ entry['diaSource'] for entry in data if entry['diaSource']['diaSourceId'] in newsrcids ]
+            sourcedata = [ entry['diaSource'] for entry in data if entry['diaSource']['diaSourceId'] ]
             sources = DiaSource.bulk_load_or_create( sourcedata )
-            loaded['sources'] = [ i.diaSourceId for i in sources ]
+            loaded['sources'] = [ i.diaSourceId for i in sources if i.diaSourceId in newsrcids ]
             srcdict = { src.diaSourceId: src for src in sources }
 
             # Load the alerts
+            alertids = { entry['alertId'] for entry in data }
+            curalertids = set( DiaAlert.which_exist( alertids ) )
+            newalertids = alertids - curalertids
             alertdata = []
             for entry in data:
                 alertdata.append( { 'alertId': entry['alertId'],
                                     'diaSource': srcdict[ entry['diaSource']['diaSourceId'] ],
                                     'diaObject': objdict[ entry['diaObject']['diaObjectId'] ] } )
             alerts = DiaAlert.bulk_load_or_create( alertdata )
-            loaded['alerts'] = [ i.alertId for i in alerts ]
+            loaded['alerts'] = [ i.alertId for i in alerts if i.alertId in newalertids ]
             
             resp = { 'status': 'ok', 'message': loaded }
             # _logger.info( f'objloadtime={self.objloadtime}, sourceloadtime={self.sourceloadtime}, '

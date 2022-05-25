@@ -53,6 +53,12 @@ class Createable(models.Model):
             return cls.create( data )
 
     @classmethod
+    def which_exist( cls, pks ):
+        """Pass a list of primary key, get a list of the ones that already exist."""
+        q = cls.objects.filter( pk__in=pks )
+        return [ getattr(i, i._pk) for i in q ]
+        
+    @classmethod
     def bulk_load_or_create( cls, data ):
         """Pass an array of dicts."""
         pks = [ i[cls._pk] for i in data ]
