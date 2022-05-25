@@ -3,7 +3,9 @@ import re
 import io
 import traceback
 import json
+import time
 import datetime
+import logging
 import django.urls
 from django.http import HttpResponse, JsonResponse
 from django.utils.decorators import method_decorator
@@ -23,6 +25,18 @@ from elasticc.models import DiaAlertPrvSource, DiaAlertPrvForcedSource
 from elasticc.models import BrokerMessage, BrokerClassifier, BrokerClassification
 from elasticc.serializers import DiaObjectSerializer, DiaTruthSerializer
 from elasticc.serializers import DiaForcedSourceSerializer, DiaSourceSerializer, DiaAlertSerializer
+
+# I tried inherting from the root logger, but it
+#  doesn't seem to have the formatting built in;
+#  I guess djano makes its own formatting instead
+#  of using logging's.  Sigh.
+_logger = logging.getLogger(__name__)
+_logout = logging.StreamHandler( sys.stderr )
+_formatter = logging.Formatter( f'[%(asctime)s - %(levelname)s] - %(message)s' )
+_logout.setFormatter( _formatter )
+_logger.propagate = False
+_logger.addHandler( _logout )
+_logger.setLevel( logging.INFO )
 
 # ======================================================================
 
@@ -82,8 +96,63 @@ class MaybeAddAlert(PermissionRequiredMixin, django.views.View):
     permission_required = 'elasticc.elasticc_admin'
     raise_exception = True
 
+    def load_one_object( self, data ):
+        # Load the main object
+        # t0 = time.perf_counter()
+        curobj = DiaObject.load_or_create( data['diaObject'] )
+        # self.objloadtime += time.perf_counter() - t0
+        # Load the main source
+        # t0 = time.perf_counter()
+        data['diaSource']['diaObject'] = curobj
+        cursrc = DiaSource.load_or_create( data['diaSource'] )
+        # self.sourceloadtime += time.perf_counter() - t0
+        if False:
+            # Load the previous sources
+            prevs = []
+            if data['prvDiaSources'] is not None:
+                for prvdata in data['prvDiaSources']:
+                    if not DiaSource.objects.filter(pk=prvdata['diaSourceId']).exists():
+                        prvdata['diaObject'] = curobj
+                        DiaSource.load_or_create( prvdata )
+                    prevs.append( prvdata['diaSourceId'] )
+            # Load the previous forced sources
+            forced = []
+            # if data['prvDiaForcedSources'] is not None:
+            #     for forceddata in data['prvDiaForcedSources']:
+            #         forceddata['diaObject'] = curobj
+            #         forced.append( DiaForcedSource.load_or_create( forceddata ) )
+        else:
+            prevs = []
+            forced = []
+        # Load the alert
+        # TODO : check to see if the alertId already exists???
+        # Right now, this will error out due to the unique constraint
+        # t0 = time.perf_counter()
+        curalert = DiaAlert( alertId = data['alertId'], diaSource = cursrc, diaObject = curobj )
+        # curalert.save()
+        self.alertloadtime += time.perf_counter() - t0
+        if False:
+            # Load the linkages to the previouses
+            for prv in prevs:
+                tmp = DiaAlertPrvSource( diaAlert=curalert, diaSource=prv )
+                tmp.save()
+            for prv in forced:
+                tmp = DiaAlertPrvForcedSource( diaAlert=curalert, diaForcedSource=prv )
+                tmp.save()
+                          
+        return { 'alertId': curalert.alertId,
+                 }
+                 # 'diaSourceId': cursrc.diaSourceId,
+                 # 'diaObjectId': curobj.diaObjectId,
+                 # 'prvDiaSourceIds': prevs,
+                 # 'prvDiaForcedSourceIds': forced }
+        
     def post(self, request, *args, **kwargs):
         try:
+            # _logger.info( "Starting MaybeAddAlert.post" )
+            # self.objloadtime = 0
+            # self.sourceloadtime = 0
+            # self.alertloadtime = 0
             data = json.loads( request.body )
             if isinstance( data, dict ):
                 data = [ data ]
@@ -113,6 +182,9 @@ class MaybeAddAlert(PermissionRequiredMixin, django.views.View):
             loaded['alerts'] = [ i.alertId for i in alerts ]
             
             resp = { 'status': 'ok', 'message': loaded }
+            # _logger.info( f'objloadtime={self.objloadtime}, sourceloadtime={self.sourceloadtime}, '
+            #               f'alertloadtime={self.alertloadtime}' )
+            # _logger.info( f'Returning {sys.getsizeof(resp)} byte response.' )
             return JsonResponse( resp )
         except Exception as e:
             strstream = io.StringIO()
