@@ -24,7 +24,7 @@ class Command(BaseCommand):
 
     def add_arguments( self, parser ):
         parser.add_argument( '-t', '--topic', required=True, help="Topic to poll" )
-        parser.add_argument( '-g', '--groupid', default='rob_elasticc-test-38', help="Group ID to use" )
+        parser.add_argument( '-g', '--groupid', default='rob_elasticc-test-7', help="Group ID to use" )
         parser.add_argument( '-s', '--server', default='brahms.lbl.gov:9092', help="Kafka server" )
 
     def handle( self, *args, **options ):

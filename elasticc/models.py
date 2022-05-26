@@ -15,6 +15,7 @@ _logout.setFormatter( _formatter )
 _logger.propagate = False
 _logger.addHandler( _logout )
 _logger.setLevel( logging.INFO )
+# _logger.setLevel( logging.DEBUG )
 
 # Create your models here.
 
@@ -479,7 +480,7 @@ class BrokerMessage(models.Model):
                 _logger.debug( "Message with no classifications" )
                 continue
             keymess = ( f"{msg['msgoffset']}_{msg['topic']}_{msg['msg']['alertId']}" )
-            _logger.debug( f'kemess = {keymess}' )
+            # _logger.debug( f'kemess = {keymess}' )
             if keymess not in messageobjects.keys():
                 kwargs = { 'streamMessageId': msg['msgoffset'],
                            'topicName': msg['topic'],
@@ -552,7 +553,10 @@ class BrokerMessage(models.Model):
             for curcfer in newcfers:
                 keycfer = ( f"{curcfer.brokerName}_{curcfer.brokerVersion}_"
                             f"{curcfer.classifierName}_{curcfer.classifierParams}" )
-                classifiers[ keycfer ] 
+                classifiers[ keycfer ] = curcfer
+                # _logger.debug( f'key: {keycfer}; brokerName: {curcfer.brokerName}; '
+                #                f'brokerVersion: {curcfer.brokerVersion}; classifierName: {curcfer.ClassifierName}; '
+                #                f'classifierParams: {curcfer.classifierParams}' )
 
         # Add the new classifications
         #
@@ -564,7 +568,7 @@ class BrokerMessage(models.Model):
             if len( msg['msg']['classifications'] ) == 0:
                 continue
             keymess = ( f"{msg['msgoffset']}_{msg['topic']}_{msg['msg']['alertId']}" )
-            for cficiation in msg['msg']['classifications']:
+            for cfication in msg['msg']['classifications']:
                 keycfer = ( f"{msg['msg']['brokerName']}_{msg['msg']['brokerVersion']}_"
                             f"{cfication['classifierName']}_{cfication['classifierParams']}" )
                 kwargs = { 'dbMessage': messageobjects[keymess],
@@ -572,6 +576,7 @@ class BrokerMessage(models.Model):
                            'classId': cfication['classId'],
                            'probability': cfication['probability'] }
                 kwargses.append( kwargs )
+                # _logger.debug( f"Adding {kwargs}" )
         _logger.debug( f'Adding {len(kwargses)} new classifications.' )
         objs = ( BrokerClassification( **k ) for k in kwargses )
         batch = list( itertools.islice( objs, len(kwargses) ) )
