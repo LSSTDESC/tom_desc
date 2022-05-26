@@ -15,3 +15,5 @@ fink-client~=2.0
 tom-pittgoogle==0.1.11
 hop-client==0.5.0
 avro==1.10.2
+fastavro
+kafka-python
