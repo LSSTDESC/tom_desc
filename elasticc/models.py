@@ -3,6 +3,7 @@ import math
 import datetime
 import logging
 import itertools
+import collections
 from django.db import models
 from django.utils.functional import cached_property
 import django.contrib.postgres.indexes as indexes
@@ -418,6 +419,37 @@ class BrokerMessage(models.Model):
             models.Index( fields=[ 'diaSourceId' ] ),
         ]
 
+
+    def to_dict( self ):
+        resp = {
+            'dbMessageIndex': self.dbMessageIndex,
+            'alertId': self.alertId,
+            'diaSourceId': self.diaSourceId,
+            'elasticcPublishTimestamp': int( self.elasticcPublishTimestamp.timestamp() * 1e6 ),
+            'brokerIngestTimestamp': int( self.brokerIngestTimestamp.timestamp() * 1e6 ),
+            'brokerName': "<unknown>",
+            'brokerVersion': "<unknown>",
+            'classifications': []
+            }
+        clsfctions = BrokerClassification.objects.all().filter( dbMessage=self )
+        first = True
+        for classification in clsfctions:
+            clsifer = classification.dbClassifier
+            if first:
+                resp['brokerName'] = clsifer.brokerName
+                resp['brokerVersion'] = clsifer.brokerVersion
+                first = False
+            else:
+                if ( ( clsifer.brokerName != resp['brokerName'] ) or
+                     ( clsifer.brokerVersion != resp['brokerVersion'] ) ):
+                    raise ValueError( "Mismatching brokerName and brokerVersion in the database! "
+                                      "This shouldn't happen!" )
+            resp['classifications'].append( { 'classifierName': clsifer.classifierName,
+                                              'classifierParams': clsifer.classifierParams,
+                                              'classId': classification.classId,
+                                              'probability': classification.probability } )
+        return resp
+        
 
     @staticmethod
     def load_batch( messages ):

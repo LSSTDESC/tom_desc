@@ -243,13 +243,63 @@ class MaybeAddTruth(PermissionRequiredMixin, django.views.View):
             strstream.close()
             return JsonResponse( resp )
 
-
-class BrokerMessagePut(PermissionRequiredMixin, django.views.View):
-    permission_required = 'elasticc.elasticc_broker'
+class BrokerMessageView(PermissionRequiredMixin, django.views.View):
     raise_exception = True
 
-    def get( self, request ):
-        return JsonResponse( { 'status': 'Nothing to see here, move along.' } )
+    def has_permission( self ):
+        if self.request.method == 'PUT':
+            return self.request.user.has_perms( "elasticc.elasticc_broker" )
+        else:
+            return bool(self.request.user.is_authenticated)
+
+    def get_one_brokermessage( self, request, msgid ):
+        msgobj = BrokerMessage.objects.get(pk=msgid)
+        if msgobj is None:
+            return JsonResponse( {} )
+        else:
+            return JsonResponse( msgobj.to_dict() )
+
+    def get_brokermessage_for_alertid( self, alertid ):
+        msgobjs = BrokerMessage.objects.filter( alertId__in==str(alertid).split(",") )
+        return JsonResponse( [ msg.to_dict() for msg in msgobjs ], safe=False )
+
+    def get_brokermessage_for_sourceid( self, sourceid ):
+        msgobjs = BrokerMessage.objects.filter( diaSourceId__in=str(sourceid).split(",") )
+        return JsonResponse( [ msg.to_dict() for msg in msgobjs ], safe=False )
+
+    def get_brokermessage_for_objectid( self, objid ):
+        # django doesn't seem to have a native way to do joins on things that aren't foreign keys
+        msgobjs = BrokerMessage.objects.raw(
+            'SELECT * FROM elasticc_brokermessage b INNER JOIN elasticc_diasource s'
+            ' ON b."diaSourceId"=s."diaSourceId" WHERE s."diaObject_id" IN %(objids)s',
+            params={ 'objids': tuple( str(objid).split(",") ) } )
+        return JsonResponse( [ msg.to_dict() for msg in msgobjs ], safe=False )
+    
+    def get( self, request, info=None ):
+        if info is None:
+            return JsonResponse( { "error": f"Must qualify request" } )
+        
+        if isinstance( info, int ):
+            return self.get_one_brokermessage( request, info )
+
+        argre = re.compile( '^([a-z0-9]+)=(.*)$' )
+        args = {}
+        argstr = str(info).split("/")
+        for argtxt in argstr:
+            match = argre.search( argtxt )
+            if match is not None:
+                args[match.group(1).lower()] = match.group(2)
+            else:
+                args[argtxt] = None
+
+        if ( len(args) == 1 ) and ( "alertid" in args.keys() ):
+            return self.get_brokermessage_for_alertid( args['alertid'] )
+        elif ( len(args) == 1 ) and ( ( "objectid" in args.keys() ) or ( "diaobjectid" in args.keys() ) ):
+            return self.get_brokermessage_for_objectid( list(args.values())[0] )
+        elif ( len(args) == 1 ) and ( ( "sourceid" in args.keys() ) or ( "diasourceid" in args.keys() ) ):
+            return self.get_brokermessage_for_sourceid( list(args.values())[0] )
+        else:
+            return JsonResponse( { "error": f"Can't parse argument string \"{info}\"." } )
     
     def put( self, request, *args, **kwargs ):
         data = json.loads( request.body )
@@ -324,40 +374,29 @@ class BrokerMessagePut(PermissionRequiredMixin, django.views.View):
 
         return resp
 
-# I would sort of like to make this the same class as BrokerMessagePut, but I haven't
-# figure out how to tell the django method dispatcher to use a url pattern for only
-# some HTTP methods
-class BrokerMessageGet(LoginRequiredMixin, django.views.View):
-# class BrokerMessageGet(django.views.View):
-    raise_exception = True
+class Testing( PermissionRequiredMixin, django.views.View ):
 
-    def get( self, request, msgid ):
-        msgobj = BrokerMessage.objects.get(pk=msgid)
-        resp = {
-            'alertId': msgobj.alertId,
-            'diaSourceId': msgobj.diaSourceId,
-            'elasticcPublishTimestamp': int( msgobj.elasticcPublishTimestamp.timestamp() * 1e6 ),
-            'brokerIngestTimestamp': int( msgobj.brokerIngestTimestamp.timestamp() * 1e6 ),
-            'brokerName': "<unknown>",
-            'brokerVersion': "<unknown>",
-            'classifications': []
-            }
-        clsfctions = BrokerClassification.objects.all().filter( dbMessage=msgobj )
-        first = True
-        for classification in clsfctions:
-            clsifer = classification.dbClassifier
-            if first:
-                resp['brokerName'] = clsifer.brokerName
-                resp['brokerVersion'] = clsifer.brokerVersion
-                first = False
-            else:
-                if ( ( clsifer.brokerName != resp['brokerName'] ) or
-                     ( clsifer.brokerVersion != resp['brokerVersion'] ) ):
-                    raise ValueError( "Mismatching brokerName and brokerVersion in the database! "
-                                      "This shouldn't happen!" )
-            resp['classifications'].append( { 'classifierName': clsifer.classifierName,
-                                              'classifierParams': clsifer.classifierParams,
-                                              'classId': classification.classId,
-                                              'probability': classification.probability } )
+    def has_permission( self ):
+        if self.request.method == 'PUT':
+            return self.request.user.has_perms( "elasticc.elasticc_broker" )
+        else:
+            return bool(self.request.user.is_authenticated)
 
-        return JsonResponse( resp )
+    def get( self, request, info=None ):
+        text = "<!DOCTYPE html>\n<html>\n<body>\n"
+        text += "<h3>Testing Get</h3>\n"
+        text += f"<p>Path thingy: \"{request.path_info}\"</p>\n"
+        text += f"<p>Info is integer?: \"{isinstance(info, int)}\"</p>\n"
+        text += f"<p>info: \"{info}\"</p>\n"
+        text += f"<p>{len(request.GET)} GET parameters:</p>\n<ul>\n"
+        for key, val in request.GET.items():
+            text += f"<li>\"{key}\" = \"{val}\"</li>\n"
+        text += f"</ul>\n<p>{len(request.POST)} POST parameters:</p>\n<ul>\n"
+        for key, val in request.POST.items():
+            text += f"<li>\"{key}\" = \"{val}\"</li>\n"
+        text += "</ul>\n</body></html>"
+        return HttpResponse( text )
+
+    def post( self, request ):
+        return self.get( request )
+            

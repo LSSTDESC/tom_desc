@@ -15,8 +15,13 @@ urlpatterns = [
     path('addelasticcalert', views.MaybeAddAlert.as_view()),
     path('addtruth', views.MaybeAddTruth.as_view()),
 
-    path('brokermessage/<int:msgid>/', views.BrokerMessageGet.as_view(), name='brokermesssage-get'),
-    path('brokermessage/', views.BrokerMessagePut.as_view(), name='brokermessage-put'),
+    path('brokermessage/<int:info>/', views.BrokerMessageView.as_view(), name='brokermesssage-int'),
+    path('brokermessage/<path:info>/', views.BrokerMessageView.as_view(), name='brokermessage-path'),
+    path('brokermessage/', views.BrokerMessageView.as_view(), name='brokermessage-noparam'),
 
+    path('testing/<int:info>', views.Testing.as_view(), name='testing' ),
+    path('testing/<path:info>', views.Testing.as_view(), name='testing' ),
+    path('testing/', views.Testing.as_view(), name='testing' ),
+    
     path('', include((router.urls, 'elasticc'), namespace=app_name)),
 ]
