@@ -116,7 +116,7 @@ class DiaObject(Createable):
     hostgal_ellipticity = models.FloatField( null=True )
     hostgal_sqradius = models.FloatField( null=True )
     hostgal_zspec = models.FloatField( null=True )
-    hostgal_zpec_err = models.FloatField( null=True )
+    hostgal_zspec_err = models.FloatField( null=True )
     hostgal_zphot = models.FloatField( null=True )
     hostgal_zphot_err = models.FloatField( null=True )
     hostgal_zphot_q000 = models.FloatField( null=True)
