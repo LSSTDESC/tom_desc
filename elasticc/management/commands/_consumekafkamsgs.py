@@ -2,6 +2,7 @@ import sys
 import io
 import time
 import datetime
+import atexit
 import collections
 import logging
 import json
@@ -36,6 +37,7 @@ class MsgConsumer(object):
 
         """
 
+        self.consumer = None
         self.logger = logger
         self.tot_handled = 0
         if topics is None:
@@ -58,10 +60,19 @@ class MsgConsumer(object):
             consumerconfig.update( extraconsumerconfig )
         self.logger.debug( f'Initializing Kafka consumer with\n{json.dumps(consumerconfig, indent=4)}' )
         self.consumer = confluent_kafka.Consumer( consumerconfig )
+        atexit.register( self.__del__ )
 
         self.subscribed = False
         self.subscribe( self.topics )
 
+    def close( self ):
+        if self.consumer is not None:
+            self.consumer.close()
+            self.consumer = None
+        
+    def __del__( self ):
+        self.close()
+        
     def subscribe( self, topics ):
         if topics is not None and len(topics) > 0:
             self.consumer.subscribe( topics, on_assign=self._sub_callback )

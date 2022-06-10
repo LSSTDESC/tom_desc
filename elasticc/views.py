@@ -249,7 +249,7 @@ class BrokerMessageView(PermissionRequiredMixin, django.views.View):
 
     def has_permission( self ):
         if self.request.method == 'PUT':
-            return self.request.user.has_perms( "elasticc.elasticc_broker" )
+            return self.request.user.has_perm( "elasticc.elasticc_broker" )
         else:
             return bool(self.request.user.is_authenticated)
 
