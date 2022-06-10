@@ -432,6 +432,7 @@ class BrokerMessage(models.Model):
             'dbMessageIndex': self.dbMessageIndex,
             'alertId': self.alertId,
             'diaSourceId': self.diaSourceId,
+            'descIngestTimestamp': self.descIngestTimestamp.isoformat(),
             'elasticcPublishTimestamp': int( self.elasticcPublishTimestamp.timestamp() * 1e6 ),
             'brokerIngestTimestamp': int( self.brokerIngestTimestamp.timestamp() * 1e6 ),
             'brokerName': "<unknown>",
