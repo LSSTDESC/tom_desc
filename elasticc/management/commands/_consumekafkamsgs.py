@@ -102,9 +102,13 @@ class MsgConsumer(object):
         self.logger.info( f'Committing partition offsets.' )
         self.consumer.commit( offsets=partlist )
             
-    def print_topics( self ):
+    def print_topics( self, newlines=False ):
         cluster_meta = self.consumer.list_topics()
-        self.logger.info( f"\nTopics: {', '.join([ n for n in cluster_meta.topics])}" )
+        if not newlines:
+            self.logger.info( f"\nTopics: {', '.join([ n for n in cluster_meta.topics])}" )
+        else:
+            topics = '\n  '.join([n for n in cluster_meta.topics])
+            self.logger.info( f"\nTopics:\n  {topics}" )
 
     def _get_positions( self, partitions ):
         return self.consumer.position( partitions )
