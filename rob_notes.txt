@@ -6,7 +6,7 @@ Rob's workflow
   * At /global/cfs/cdirs/m1727/tom/deploy_dev/tom_desc
      * git pull
   * On the spin dev server
-     * Run python manage.py makemigrations
+     * Run python manage.py makemigrations -n <short name>
      * Fix bugs until that works, editing code in deploy_dev/tom_desc
          ( edit on cori, not the spin server, which doesn't have emacs )
      * Run python manage.py migrate

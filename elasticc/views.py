@@ -21,7 +21,7 @@ from rest_framework import viewsets
 from rest_framework import response
 
 from elasticc.models import DiaObject, DiaSource, DiaForcedSource
-from elasticc.models import DiaAlert, DiaTruth
+from elasticc.models import DiaAlert, DiaTruth, DiaObjectTruth
 from elasticc.models import DiaAlertPrvSource, DiaAlertPrvForcedSource
 from elasticc.models import BrokerMessage, BrokerClassifier, BrokerClassification
 from elasticc.serializers import DiaObjectSerializer, DiaTruthSerializer
@@ -219,19 +219,15 @@ class MaybeAddTruth(PermissionRequiredMixin, django.views.View):
     permission_required = 'elasticc.elasticc_admin'
     raise_exception = True
 
-    def load_one_object( self, data ):
-        curobj = DiaTruth.load_or_create( data )
-        return curobj.diaSourceId
-    
     def post( self, request, *args, **kwargs ):
         try:
             data = json.loads( request.body )
             loaded = []
             if isinstance( data, dict ):
-                loaded.append( self.load_one_object( data ) )
+                loaded.append( DiaTruth.load_or_create( data ) ).diaSourceId
             else:
-                for item in data:
-                    loaded.append( self.load_one_object( item ) )
+                objs = DiaTruth.bulk_load_or_create( data )
+                loaded.extend( [ obj.diaSourceId for obj in objs ] )
             resp = { 'status': 'ok', 'message': loaded }
             return JsonResponse( resp )
         except Exception as e:
@@ -244,6 +240,31 @@ class MaybeAddTruth(PermissionRequiredMixin, django.views.View):
             strstream.close()
             return JsonResponse( resp )
 
+class MaybeAddObjectTruth(PermissionRequiredMixin, django.views.View):
+    permission_required = 'elasticc.elasticc_admin'
+    raise_exception =  True
+
+    def post( self, request, *args, **kwargs ):
+        try:
+            data = json.loads( request.body )
+            loaded = []
+            if isinstance( data, dict ):
+                loaded.append( DiaObjectTruth.load_or_create( data ) ).diaObjectId
+            else:
+                objs = DiaObjectTruth.bulk_load_or_create( data )
+                loaded.extend( [ obj.diaObjectId for obj in objs ] )
+            resp = { 'status':'ok', 'message': loaded }
+            return JsonResponse( resp )
+        except Exception as e:
+            strstream = io.StringIO()
+            traceback.print_exc( file=strstream )
+            resp = { 'status': 'error',
+                     'message': f'Exception in {self.__class__.__name__}',
+                     'exception': str(e),
+                     'traceback': strstream.getvalue() }
+            strstream.close()
+            return JsonResponse( resp )
+                
 class BrokerMessageView(PermissionRequiredMixin, django.views.View):
     raise_exception = True
 

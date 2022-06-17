@@ -61,7 +61,7 @@ class Createable(models.Model):
         """Pass a list of primary key, get a list of the ones that already exist."""
         q = cls.objects.filter( pk__in=pks )
         return [ getattr(i, i._pk) for i in q ]
-        
+
     @classmethod
     def bulk_load_or_create( cls, data ):
         """Pass an array of dicts."""
@@ -270,59 +270,60 @@ class DiaAlertPrvForcedSource(models.Model):
     diaAlert = models.ForeignKey( DiaAlert, on_delete=models.CASCADE, null=True )
     diaForcedSource = models.ForeignKey( DiaForcedSource, on_delete=models.CASCADE, null=True )
     
-class DiaTruth(models.Model):
+class DiaTruth(Createable):
     # I can't use a foreign key constraint here because there will be truth entries for
     # sources for which there was no alert, and as such which will not be in the
-    # DiaSource table.
-    diaSourceId = models.BigIntegerField( null=True )
-    diaObjectId = models.BigIntegerField( null=True )
+    # DiaSource table.  But, DiaSource will be unique, so make it the primary key.
+    diaSourceId = models.BigIntegerField( primary_key=True )
+    diaObjectId = models.BigIntegerField( null=True, db_index=True )
+    mjd = models.FloatField( null=True )
     detect = models.BooleanField( null=True )
     true_gentype = models.IntegerField( null=True )
     true_genmag = models.FloatField( null=True )
 
-    class Meta:
-        indexes = [
-            models.Index( fields=['diaSourceId'] ),
-            models.Index( fields=['diaObjectId'] )
-        ]
-
-    @staticmethod
-    def create( data ):
-        try:
-            source = DiaSource.objects.get( diaSourceId=data['SourceID'] )
-            if source.diaObject_id != data['SNID']:
-                raise ValueError( f"SNID {data['SNID']} doesn't match "
-                                  f"diaSource diaObject_id {source.diaObject_id} "
-                                  f"for diaSource {source.diaSourceId}" )
-            if math.fabs( float( data['MJD'] - source.midPointTai ) > 0.01 ):
-                raise ValueError( f"MJD {data['MJD']} doesn't match "
-                                  f"diaSource midPointTai {source.midPointTai} "
-                                  f"for diaSource {source.diaSoruceId}" )
-        except DiaSource.DoesNotExist:
-            if data['DETECT']:
-                raise ValueError( f'No SourceID {data["SourceID"]} for a DETECT=true truth entry' )
-        curtruth = DiaTruth(
-            diaSourceId = int( data['SourceID'] ),
-            diaObjectId = int( data['SNID'] ),
-            detect = bool( data['DETECT'] ),
-            true_gentype = int( data['TRUE_GENTYPE'] ),
-            true_genmag = float( data['TRUE_GENMAG'] )
-        )
-        curtruth.save()
-        return curtruth
+    _pk = 'diaSourceId'
+    _create_kws = [ 'diaSourceId', 'diaObjectId', 'mjd', 'detect', 'true_gentype', 'true_genmag' ]
     
-    @staticmethod
-    def load_or_create( data ):
-        try:
-            curtruth = DiaTruth.objects.get( diaSourceId=data['SourceID'] )
-            # VERIFY THAT STUFF MATCHES?????
-            return curtruth
-        except DiaTruth.DoesNotExist:
-            return DiaTruth.create( data )
+    # @staticmethod
+    # def create( data ):
+    #     try:
+    #         source = DiaSource.objects.get( diaSourceId=data['SourceID'] )
+    #         if source.diaObject_id != data['SNID']:
+    #             raise ValueError( f"SNID {data['SNID']} doesn't match "
+    #                               f"diaSource diaObject_id {source.diaObject_id} "
+    #                               f"for diaSource {source.diaSourceId}" )
+    #         if math.fabs( float( data['MJD'] - source.midPointTai ) > 0.01 ):
+    #             raise ValueError( f"MJD {data['MJD']} doesn't match "
+    #                               f"diaSource midPointTai {source.midPointTai} "
+    #                               f"for diaSource {source.diaSoruceId}" )
+    #     except DiaSource.DoesNotExist:
+    #         if data['DETECT']:
+    #             raise ValueError( f'No SourceID {data["SourceID"]} for a DETECT=true truth entry' )
+    #     curtruth = DiaTruth(
+    #         diaSourceId = int( data['SourceID'] ),
+    #         diaObjectId = int( data['SNID'] ),
+    #         detect = bool( data['DETECT'] ),
+    #         true_gentype = int( data['TRUE_GENTYPE'] ),
+    #         true_genmag = float( data['TRUE_GENMAG'] )
+    #     )
+    #     curtruth.save()
+    #     return curtruth
+    
+    # @staticmethod
+    # def load_or_create( data ):
+    #     try:
+    #         curtruth = DiaTruth.objects.get( diaSourceId=data['SourceID'] )
+    #         # VERIFY THAT STUFF MATCHES?????
+    #         return curtruth
+    #     except DiaTruth.DoesNotExist:
+    #         return DiaTruth.create( data )
 
-class DiaObjectTruth(models.Model):
-    # diaObjectId = models.BigIntegerField( )
-    diaObjectId = models.ForeignKey( DiaObject, on_delete=models.CASCADE, null=False, db_index=True )
+class DiaObjectTruth(Createable):
+    # Rather than making diaObjectId a Foreign Key, make it a primary key.
+    # It should be unique, so it's a good primary key, and that lets
+    # me use the Createable methods to load CSV files easily.
+    # diaObjectId = models.ForeignKey( DiaObject, on_delete=models.CASCADE, null=False, db_index=True )
+    diaObjectId = models.BigIntegerField( primary_key=True )
     libid = models.IntegerField( )
     sim_searcheff_mask = models.IntegerField( )
     gentype = models.IntegerField( )
@@ -336,12 +337,12 @@ class DiaObjectTruth(models.Model):
     galid = models.BigIntegerField( )
     galzphot = models.FloatField( )
     galzphoterr = models.FloatField( )
-    galsnep = models.FloatField( )
+    galsnsep = models.FloatField( )
     galsnddlr = models.FloatField( )
     rv = models.FloatField( )
     av = models.FloatField( )
     mu = models.FloatField( )
-    lensedmu = models.FloatField( )
+    lensdmu = models.FloatField( )
     peakmjd = models.FloatField( ) 
     mjd_detect_first = models.FloatField( )
     mjd_detect_last = models.FloatField( )
@@ -357,6 +358,15 @@ class DiaObjectTruth(models.Model):
     snrmax3 = models.FloatField( )
     nobs = models.IntegerField( )
     nobs_saturate = models.IntegerField( )
+
+    _pk = 'diaObjectId'
+    _create_kws = [ 'diaObjectId', 'libid', 'sim_searcheff_mask', 'gentype', 'sim_template_index',
+                    'zcmb', 'zhelio', 'zcmb_smear', 'ra', 'dec', 'mwebv', 'galid', 'galzphot',
+                    'galzphoterr', 'galsnsep', 'galsnddlr', 'rv', 'av', 'mu', 'lensdmu', 'peakmjd',
+                    'mjd_detect_first', 'mjd_detect_last', 'dtseason_peak', 'peakmag_u', 'peakmag_g',
+                    'peakmag_r', 'peakmag_i', 'peakmag_z', 'peakmag_Y', 'snrmax', 'snrmax2', 'snrmax3',
+                    'nobs', 'nobs_saturate' ]
+
 
 
 # ======================================================================

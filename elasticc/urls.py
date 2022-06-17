@@ -14,6 +14,7 @@ urlpatterns = [
     path('adddiaobject', views.MaybeAddDiaObject.as_view()),
     path('addelasticcalert', views.MaybeAddAlert.as_view()),
     path('addtruth', views.MaybeAddTruth.as_view()),
+    path('addobjecttruth', views.MaybeAddObjectTruth.as_view()),
 
     path('brokermessage/<int:info>/', views.BrokerMessageView.as_view(), name='brokermesssage-int'),
     path('brokermessage/<path:info>/', views.BrokerMessageView.as_view(), name='brokermessage-path'),
