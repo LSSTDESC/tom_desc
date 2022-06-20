@@ -19,6 +19,9 @@ if not _logger.hasHandlers():
 # _logger.setLevel( logging.INFO )
 _logger.setLevel( logging.DEBUG )
 
+def _donothing( *args, **kwargs ):
+    pass
+
 class MsgConsumer(object):
     def __init__( self, server, groupid, topics, schema,
                   extraconsumerconfig=None, consume_nmsgs=10, consume_timeout=5, nomsg_sleeptime=1,
@@ -40,14 +43,7 @@ class MsgConsumer(object):
         self.consumer = None
         self.logger = logger
         self.tot_handled = 0
-        if topics is None:
-            self.topics = []
-        elif isinstance( topics, str ):
-            self.topics = [ topics ]
-        elif isinstance( topics, collections.abc.Sequence ):
-            self.topics = list( topics )
-        else:
-            raise ValueError( f'topics must be either a string or a list' )
+
         self.schema = fastavro.schema.load_schema( schema )
         self.consume_nmsgs = consume_nmsgs
         self.consume_timeout = consume_timeout
@@ -63,10 +59,11 @@ class MsgConsumer(object):
         atexit.register( self.__del__ )
 
         self.subscribed = False
-        self.subscribe( self.topics )
+        self.subscribe( topics )
 
     def close( self ):
         if self.consumer is not None:
+            self.logger.info( "Closing MsgConsumer" )
             self.consumer.close()
             self.consumer = None
         
@@ -74,7 +71,16 @@ class MsgConsumer(object):
         self.close()
         
     def subscribe( self, topics ):
-        if topics is not None and len(topics) > 0:
+        if topics is None:
+            self.topics = []
+        elif isinstance( topics, str ):
+            self.topics = [ topics ]
+        elif isinstance( topics, collections.abc.Sequence ):
+            self.topics = list( topics )
+        else:
+            raise ValueError( f'topics must be either a string or a list' )
+
+        if self.topics is not None and len(topics) > 0:
             self.consumer.subscribe( topics, on_assign=self._sub_callback )
         else:
             self.logger.warning( f'No topics given, not subscribing.' )
@@ -82,12 +88,10 @@ class MsgConsumer(object):
     def reset_to_start( self, topic ):
         partitions = self.consumer.list_topics( topic ).topics[topic].partitions
         self.logger.info( f'Resetting partitions for topic {topic}\n' )
-        # partitions is a kmap
+        # partitions is a map
         partlist = []
-        # for partid, partinfo in partitions.items():
-        #     self.logger.info( f'...resetting {partid} ( {partinfo} )' )
-        #     # Is this next one redundant?  partinfo should already have the right stuff!
-        #     curpart = confluent_kafka.TopicPartition( topic, partinfo.id )
+        # Must consume one message to really hook up to the topic
+        self.consume_one_message( handler=_donothing, timeout=10 )
         for i in range(len(partitions)):
             self.logger.info( f'...resetting partition {i}' )
             curpart = confluent_kafka.TopicPartition( topic, i )
@@ -101,6 +105,7 @@ class MsgConsumer(object):
             partlist.append( curpart )
         self.logger.info( f'Committing partition offsets.' )
         self.consumer.commit( offsets=partlist )
+        self.tot_handled = 0
             
     def print_topics( self, newlines=False ):
         cluster_meta = self.consumer.list_topics()
@@ -135,13 +140,13 @@ class MsgConsumer(object):
         self.logger.info( ofp.getvalue() )
         ofp.close()
 
-    def poll_loop( self, handler=None, max_consumed=10000, max_runtime=datetime.timedelta(hours=1) ):
+    def poll_loop( self, handler=None, max_consumed=None, max_runtime=datetime.timedelta(hours=1) ):
         """Calls handler with batches of messages.
 
         handler : a callback that's called with batches of messages (the list
                   returned by confluent_kafka.Consumer.consume().
         max_consumed : Quit polling after this many messages have been
-                       consumed (default: 10000)
+                       consumed (default: no limit)
         max_runtime : Quit polling after this much time has elapsed;
                       must be a datetime.timedelta object.  (Default: 1h.)
 
@@ -157,30 +162,32 @@ class MsgConsumer(object):
                 self.logger.info( f"No messages, sleeping {self.nomsg_sleeptime} sec" )
                 time.sleep( self.nomsg_sleeptime )
             else:
+                self.tot_handled += len(msgs)
                 if handler is not None:
                     handler( msgs )
                 else:
                     self.default_handle_message_batch( msgs )
             nconsumed += len( msgs )
             runtime = datetime.datetime.now() - starttime
-            if ( nconsumed >= max_consumed ) or ( runtime > max_runtime ):
+            if ( ( ( max_consumed is not None ) and ( nconsumed >= max_consumed ) ) or ( runtime > max_runtime ) ):
                 keepgoing = False
         self.logger.info( f"Stopping poll loop after consuming {nconsumed} messages during {runtime}" )
 
-    def consume_one_message( self, handler=None ):
+    def consume_one_message( self, timeout=None, handler=None ):
         """Both calls handler and returns a batch of 1 message."""
-        self.logger.info( f"Trying to consume one message with timeout {self.consume_timeout}...\n" )
-        msgs = self.consumer.consume( 1, timeout=self.consume_timeout )
+        timeout = self.consume_timeout if timeout is None else timeout
+        self.logger.info( f"Trying to consume one message with timeout {timeout}...\n" )
+        msgs = self.consumer.consume( 1, timeout=timeout )
         if len(msgs) == 0:
             return None
         else:
+            self.tot_handled += len(msgs)
             if handler is not None:
                 handler( msgs )
             else:
                 self.default_handle_message_batch( msgs )
 
     def default_handle_message_batch( self, msgs ):
-        self.tot_handled += len(msgs)
         self.logger.info( f'Got {len(msgs)}; have received {self._tot_handled} so far.' )
                 
     def echoing_handle_message_batch( self, msgs ):
@@ -193,7 +200,6 @@ class MsgConsumer(object):
             ofp.write( "\n" )
             self.logger.info( ofp.getvalue() )
             ofp.close()
-        self.tot_handled += len(msgs)
         self.logger.info( f'Have handled {self.tot_handled} messages so far' )
         # self.print_assignments()
 
