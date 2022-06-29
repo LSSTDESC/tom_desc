@@ -324,6 +324,78 @@ class DiaObjectTruth(Createable):
     # me use the Createable methods to load CSV files easily.
     # diaObjectId = models.ForeignKey( DiaObject, on_delete=models.CASCADE, null=False, db_index=True )
     diaObjectId = models.BigIntegerField( primary_key=True )
+=======
+    # class Meta:
+    #     indexes = [
+    #         models.Index( fields=['diaSourceId'] ),
+    #         models.Index( fields=['diaObjectId'] )
+    #     ]
+
+    @staticmethod
+    def create( data ):
+        try:
+            source = DiaSource.objects.get( diaSourceId=data['SourceID'] )
+            if source.diaObject_id != data['SNID']:
+                raise ValueError( f"SNID {data['SNID']} doesn't match "
+                                  f"diaSource diaObject_id {source.diaObject_id} "
+                                  f"for diaSource {source.diaSourceId}" )
+            if math.fabs( float( data['MJD'] - source.midPointTai ) > 0.01 ):
+                raise ValueError( f"MJD {data['MJD']} doesn't match "
+                                  f"diaSource midPointTai {source.midPointTai} "
+                                  f"for diaSource {source.diaSoruceId}" )
+        except DiaSource.DoesNotExist:
+            if data['DETECT']:
+                raise ValueError( f'No SourceID {data["SourceID"]} for a DETECT=true truth entry' )
+        curtruth = DiaTruth(
+            diaSourceId = int( data['SourceID'] ),
+            diaObjectId = int( data['SNID'] ),
+            detect = bool( data['DETECT'] ),
+            true_gentype = int( data['TRUE_GENTYPE'] ),
+            true_genmag = float( data['TRUE_GENMAG'] )
+        )
+        curtruth.save()
+        return curtruth
+    
+    @staticmethod
+    def load_or_create( data ):
+        try:
+            curtruth = DiaTruth.objects.get( diaSourceId=data['SourceID'] )
+            # VERIFY THAT STUFF MATCHES?????
+            return curtruth
+        except DiaTruth.DoesNotExist:
+            return DiaTruth.create( data )
+
+    @staticmethod
+    def bulk_load_or_create( data ):
+        """Pass a list of dicts."""
+        dsids = [ i['SourceID'] for i in data ]
+        curobjs = list( DiaTruth.objects.filter( diaSourceId__in=dsids ) )
+        exists = set( [ i.diaSourceId for i in curobjs ] )
+        sources = set( DiaSource.objects.values_list( 'diaSourceId', flat=True ).filter( diaSourceId__in=dsids ) )
+        newobjs = set()
+        missingsources = set()
+        for newdata in data:
+            if newdata['SourceID'] in exists:
+                continue
+            if newdata['SourceID'] not in sources and newdata['DETECT']:
+                missingsources.add( newdata['SourceID'] )
+                continue
+            # ROB : you don't verify that the diaSourceId exists in the source table!
+            newobjs.add( DiaTruth( diaSourceId = int( newdata['SourceID'] ),
+                                   diaObjectId = int( newdata['SNID'] ),
+                                   detect = bool( newdata['DETECT'] ),
+                                   true_gentype = int( newdata['TRUE_GENTYPE'] ),
+                                   true_genmag = float( newdata['TRUE_GENMAG'] ) ) )
+        if len(newobjs) > 0:
+            addedobjs = DiaTruth.objects.bulk_create( newobjs )
+            curobjs.extend( addedobjs )
+        return curobjs, missingsources
+            
+        
+class DiaObjectTruth(models.Model):
+    # diaObjectId = models.BigIntegerField( )
+    diaObjectId = models.ForeignKey( DiaObject, on_delete=models.CASCADE, null=False, db_index=True )
+>>>>>>> main
     libid = models.IntegerField( )
     sim_searcheff_mask = models.IntegerField( )
     gentype = models.IntegerField( )
