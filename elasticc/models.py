@@ -274,17 +274,17 @@ class DiaTruth(models.Model):
     # I can't use a foreign key constraint here because there will be truth entries for
     # sources for which there was no alert, and as such which will not be in the
     # DiaSource table.
-    diaSourceId = models.BigIntegerField( null=True )
-    diaObjectId = models.BigIntegerField( null=True )
+    diaSourceId = models.BigIntegerField( primary_key=True, db_index=True )
+    diaObjectId = models.BigIntegerField( null=True, db_index=True )
     detect = models.BooleanField( null=True )
     true_gentype = models.IntegerField( null=True )
     true_genmag = models.FloatField( null=True )
 
-    class Meta:
-        indexes = [
-            models.Index( fields=['diaSourceId'] ),
-            models.Index( fields=['diaObjectId'] )
-        ]
+    # class Meta:
+    #     indexes = [
+    #         models.Index( fields=['diaSourceId'] ),
+    #         models.Index( fields=['diaObjectId'] )
+    #     ]
 
     @staticmethod
     def create( data ):
@@ -320,6 +320,33 @@ class DiaTruth(models.Model):
         except DiaTruth.DoesNotExist:
             return DiaTruth.create( data )
 
+    @staticmethod
+    def bulk_load_or_create( data ):
+        """Pass a list of dicts."""
+        dsids = [ i['SourceID'] for i in data ]
+        curobjs = list( DiaTruth.objects.filter( diaSourceId__in=dsids ) )
+        exists = set( [ i.diaSourceId for i in curobjs ] )
+        sources = set( DiaSource.objects.values_list( 'diaSourceId', flat=True ).filter( diaSourceId__in=dsids ) )
+        newobjs = set()
+        missingsources = set()
+        for newdata in data:
+            if newdata['SourceID'] in exists:
+                continue
+            if newdata['SourceID'] not in sources and newdata['DETECT']:
+                missingsources.add( newdata['SourceID'] )
+                continue
+            # ROB : you don't verify that the diaSourceId exists in the source table!
+            newobjs.add( DiaTruth( diaSourceId = int( newdata['SourceID'] ),
+                                   diaObjectId = int( newdata['SNID'] ),
+                                   detect = bool( newdata['DETECT'] ),
+                                   true_gentype = int( newdata['TRUE_GENTYPE'] ),
+                                   true_genmag = float( newdata['TRUE_GENMAG'] ) ) )
+        if len(newobjs) > 0:
+            addedobjs = DiaTruth.objects.bulk_create( newobjs )
+            curobjs.extend( addedobjs )
+        return curobjs, missingsources
+            
+        
 class DiaObjectTruth(models.Model):
     # diaObjectId = models.BigIntegerField( )
     diaObjectId = models.ForeignKey( DiaObject, on_delete=models.CASCADE, null=False, db_index=True )

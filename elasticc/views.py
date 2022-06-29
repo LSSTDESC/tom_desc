@@ -197,6 +197,8 @@ class MaybeAddAlert(PermissionRequiredMixin, django.views.View):
                                     'diaObject': objdict[ entry['diaObject']['diaObjectId'] ] } )
             alerts = DiaAlert.bulk_load_or_create( alertdata )
             loaded['alerts'] = [ i.alertId for i in alerts if i.alertId in newalertids ]
+
+            # TODO : previous sources, previous forced photometry
             
             resp = { 'status': 'ok', 'message': loaded }
             # _logger.info( f'objloadtime={self.objloadtime}, sourceloadtime={self.sourceloadtime}, '
@@ -219,20 +221,20 @@ class MaybeAddTruth(PermissionRequiredMixin, django.views.View):
     permission_required = 'elasticc.elasticc_admin'
     raise_exception = True
 
-    def load_one_object( self, data ):
-        curobj = DiaTruth.load_or_create( data )
-        return curobj.diaSourceId
+    # def load_one_object( self, data ):
+    #     curobj = DiaTruth.load_or_create( data )
+    #     return curobj.diaSourceId
     
     def post( self, request, *args, **kwargs ):
         try:
             data = json.loads( request.body )
-            loaded = []
             if isinstance( data, dict ):
-                loaded.append( self.load_one_object( data ) )
+                curobj = DiaTruth.load_or_create( data )
+                loaded = [ curobj.diaSourceId ]
             else:
-                for item in data:
-                    loaded.append( self.load_one_object( item ) )
-            resp = { 'status': 'ok', 'message': loaded }
+                objs, missing = DiaTruth.bulk_load_or_create( data )
+                loaded = [ i.diaSourceId for i in objs ]
+            resp = { 'status': 'ok', 'message': loaded, 'missing': list( missing ) }
             return JsonResponse( resp )
         except Exception as e:
             strstream = io.StringIO()
@@ -271,7 +273,7 @@ class BrokerMessageView(PermissionRequiredMixin, django.views.View):
 
             if ( len(args) == 1 ) and ( "alertid" in args.keys() ):
                 alertid = args['alertid']
-                msgs = BrokerMessage.objects.filter( alertId__in==str(alertid).split(",") )
+                msgs = BrokerMessage.objects.filter( alertId__in=str(alertid).split(",") )
 
             elif ( len(args) == 1 ) and ( ( "objectid" in args.keys() ) or ( "diaobjectid" in args.keys() ) ):
                 objid = list(args.values())[0]
