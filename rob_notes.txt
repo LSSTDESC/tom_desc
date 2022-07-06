@@ -63,3 +63,17 @@ did a chown of 101:104 (the postgres user and group in my postgres
 image) on the persistent mount.
 
  
+======================================================================
+
+Env vars from the old tom that we might need again:
+
+FINK_GROUP_ID lsstfr-johann
+FINK_SERVER 134.158.74.95:24499,
+FINK_TOPIC fink_early_sn_candidates_ztf
+FINK_USERNAME tom-rknop-dev-postgres-7fc9fb874c-77nj4
+GOOGLE_APPLICATION_CREDENTIALS /secrets/GCP_auth_key-pitt_broker_user_project.json
+GOOGLE_CLOUD_PROJECT pitt-broker-user-project
+
+There's also the secret
+
+GCP_auth_key-pitt_broker_user_project.json

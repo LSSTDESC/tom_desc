@@ -1,3 +1,7 @@
+# DESC TOM
+
+Based on the [Tom Toolkit](https://lco.global/tomtoolkit/)
+
 # Using the TOM
 
 The "production" server at nersc is `https://desc-tom.lbl.gov` ; ask Rob
@@ -91,8 +95,8 @@ a private version for hacking.
 The server runs on NERSC Spin, in the `desc-tom` namespace of production
 m1727.  It reads its container image from
 `registry.services.nersc.gov/raknop/tom-desc-production`; that container
-image is built from the Dockerfile in the top level directory of this
-archive.
+image is built the Dockerfile in the "docker" subdirectory of this
+repository.
 
 The actual web ap software is *not* read from the docker image (although
 a version of the software is packaged in the image).  Rather, the
@@ -107,130 +111,50 @@ it's updated, things need to happen *on* the Spin server (migrations,
 telling the server to reload the software).  My (Rob's) notes on this
 are in `rob_notes.txt`.
 
-# Local deployment
+## Steps for deployment
 
-## [Experimental] Development with Docker Compose
+This is assuming a deployment from scratch.  You probably don't want to
+do this on the production server, as you stand a chance of wiping out
+the existing database!
 
-You can try deploying the TOM Toolkit and a Postgres (w/ PostGIS) database via
-`docker-compose`:
+- Create the postgres workload at spin.
+  - image: registry.services.nersc.gov/raknop/tom-desc-postgres
+  - env var: POSTGRES_DATA_DIR=/var/lib/postgresql/data
+  - volume: persistent storage claim mounted at /var/lib/postgresql/data
+  - Otherwise standard spin stuff (I think)
+  - Fix an annoying spin permissions issue so that postgres can read the volume
+      - Don't start the postgres workload (make it a scalable deployment of 0 pods)
+      - Make a temporary workload that gives you a linux shell and mounts the same volume
+      - chown <uid>:<gid> on the mounted volume inside a pod running that temporary workload
+          where uid and gid are of the postgres user (101 and 104 in my case)
+      - Now set the postgres workload to a scalable deployment of 1 pod; it should run happily.
+- Create the tom workload with:
+   - image registry.services.nersc.gov/raknop/tom-desc-production (or -dev)
+   - env vars:
+       - DB_HOST=<name of the postgres workload>
+       - DB_NAME=tom_desc
+       - DB_PASS=fragile
+       - DB_USER=postgres
+   - Volumes
+       - a secrets volume mounted at /secrets with
+           - django_secret_key equal to something long and secure
+           - postgres_password equal to fragile
+           - postgres_ro_password equal to SOMETHING
+       - a bind mount of the CFS directory where there is a checkout of this archive; mount this at /tom_desc
+   - Under "Command", User ID must have the uid that owns the CFS directory, and Filesystem Group the gid
+   - Under "Security and Host Config"
+       - Run as non-root must be "Yes"
+       - Instead of the usual spin recommendations *only* add the NET_BIND_SERVICE capability
+   - Ingress, etc.           
 
-```
-git clone https://github.com/LSSTDESC/tom_desc
-cd tom_desc
-docker-compose up
-```
+Note that in order to get some of the right files in tom_desc
+(settings.py and some others), I originally mounted the workload with an
+entrypoint of /bin/bash (so that it wouldn't run gunicorn).
 
-This will spin up the TOM and create a superuser `root:password`. It runs in
-development mode so should hot-reload any changes you make. An exception is
-database changes. The environment will run database migrations the first time
-that you start it but if you make changes to models you will have to apply them
-manually:
 
-```
-docker-compose exec tom python manage.py makemigrations
-docker-compose exec tom python manage.py migrate
-```
+# Branch Management
 
-You can pass additional environment variables to the TOM container in
-`docker-compose.yml` by adding to the `services.tom.enviroment` field.
+The branch `main` has the current production code.
 
-## Installing the TOM Toolkit locally
-
-The toolkit github repository is at https://github.com/LSSTDESC/tom_desc.  Install it locally.
-
-The use of a virutal environment is recommended.
-
-```bash
-python3 -m venv tom_env/
-```
-Now that we have created the virtual environment, we can activate it:
-```bash
-source tom_env/bin/activate
-```
-
-Install the requisite packages into the virtual environment
-
-```bash
-pip install -r requirements.txt
-```
-## Local deployment environment variables
-
-Authentication is handled by environment variables.  These are consumed by
-`tom_desc/settings.py`.  The `DB` variables are required for the database.
-The other variables are needed if you want to access streams.
-
-```
-DB_PASS
-DB_HOST=localhost
-
-ANTARES_KEY
-ANTARES_SECRET
-
-HOPSKOTCH_USER
-HOPSKOTCH_PASSWORD
-
-FINK_USERNAME
-FINK_GROUP_ID
-FINK_SERVER
-FINK_TOPIC
-
-GOOGLE_CLOUD_PROJECT
-GOOGLE_APPLICATION_CREDENTIALS
-```
-
-## Local Database Server
-
-Getting a dockerized  database up and running is a required. Here's how:
-```bash
- export DB_HOST=127.0.0.1
- docker run --name tom-desc-postgres -v /var/lib/postgresql/data -p 5432:5432 -e POSTGRES_PASSWORD=<PG_PASS> -d postgis/postgis:11-2.5-alpine
-
-docker exec -it tom-desc-postgres /bin/bash  # start a shell inside the postgres container
-
-createdb -U postgres tom_desc                # create the tom_demo database
-exit                                         # leave the container, back to your shell
-```
-
-If this is your first time creating the `tom_desc` database, you must create the tables and put
-some data in the database that you just created.
-```bash
-# make sure you are in your virtual environment, then
-./manage.py migrate           # create the tables
-./manage.py collectstatic     # gather up the static files for serving
-```
-#
-
-## Running the TOM
-Now that you have a database server up and running on your local machine, consider these alternatives for local development your TOM:
-
-### Aternative 1: Running `tom-desc` in your virtual environment, via `./manage.py runserver`
-<details>
-
-```bash
-./manage.py runserver &
-# see the output "Starting development server at <URL>" for where to point your browser.
-```
-</details>
-
-### Alternative 2: Running `tom-desc` dockerized, via `docker run`
-<details>
-
-```bash
-docker build -t tom-desc .
-```
-
-According to TOM instructions this works but it didn't on my Mac.
-```bash
-docker build -t tom-desc .                     # build a docker image of your current sandbox
-docker run --network="host" tom-desc &
-# point your browser at localhost 
-```
-
-To get it working on my Mac I had to do the following
-```bash
-docker network create tom-net
-docker network connect tom-net tom-desc-postgres
-docker run -p 8080:8080 --network=tom-net tom-desc &
-# point your browser at localhost:8080
-```
-</details>
+Make a branch `/u/<yourname>/<name>` to do dev work, which (if
+appropriate) may later be merged into `main`.
