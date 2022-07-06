@@ -43,6 +43,23 @@ migrations would have required PostGIS to work.  What I did:
  * python manage.py makemigrations <app>
  * python manage.py migrate <app>
 
+To preserve users when doing this:
+
+  pg_dump -a -t auth_user > users.sql
+
+Manually edit this to remove the line with the anonymous user.
+
+(I did this in /var/lib/postgresql/data since I could write there.  I
+then connected with my hack/admin workload that mounts that directory,
+and scp'ed it out.  (The postgres image doesn't have scp in it.))
+
+Then, once the database is set back up, on the pod for the workload:
+
+  psql -U postgres -h tom-rknop-dev-postgres tom_desc -f users.sql
+
+You will still manually need to make groups and permissions and add them
+back.
+
 ======================================================================
 
 Adding a group permission
@@ -51,6 +68,8 @@ Adding a group permission
   perm = Permission.objects.get( codename='elasticc_admin' )
   g = Group.objects.get( name='elasticc_admin' )
   g.permissions.add( perm )
+
+To show permissions, to g.permissions.all()
 
 ======================================================================
 

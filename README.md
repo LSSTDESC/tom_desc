@@ -117,17 +117,33 @@ This is assuming a deployment from scratch.  You probably don't want to
 do this on the production server, as you stand a chance of wiping out
 the existing database!
 
+- Create a secrets volume with
+     - django_secret_key equal to something long and secure
+     - postgres_password equao to fragile
+     - postgres_ro_password equal to SOMETHING
 - Create the postgres workload at spin.
   - image: registry.services.nersc.gov/raknop/tom-desc-postgres
-  - env var: POSTGRES_DATA_DIR=/var/lib/postgresql/data
+  - env vars
+      - POSTGRES_DATA_DIR=/var/lib/postgresql/data
+      - POSTGRES_PASSWORD_FILE=/secrets/postgres-password
+      - POSTGRES_USER=postgres
   - volume: persistent storage claim mounted at /var/lib/postgresql/data
+  - secrets described above mounted at /secrets
   - Otherwise standard spin stuff (I think)
   - Fix an annoying spin permissions issue so that postgres can read the volume
       - Don't start the postgres workload (make it a scalable deployment of 0 pods)
       - Make a temporary workload that gives you a linux shell and mounts the same volume
       - chown <uid>:<gid> on the mounted volume inside a pod running that temporary workload
           where uid and gid are of the postgres user (101 and 104 in my case)
-      - Now set the postgres workload to a scalable deployment of 1 pod; it should run happily.
+      - Now set the postgres workload to a scalable deployment of 1 pod;
+      - it should run happily.
+  - Create the postgres_ro user used by the db app:
+      - CREATE USER postgres_ro PASSWORD '<password>';   (password is what you put in secrets)
+      - GRANT CONNECT ON DATABASE tom_desc TO postgres_ro;
+      - In the tom_desc database:
+          - GRANT USAGE ON SCHEMA public TO postgres_ro;
+          - GRANT SELECT ON ALL TALBES IN SCHEMA public TO postgres_ro;
+          - ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO postgres_ro;
 - Create the tom workload with:
    - image registry.services.nersc.gov/raknop/tom-desc-production (or -dev)
    - env vars:
@@ -136,10 +152,7 @@ the existing database!
        - DB_PASS=fragile
        - DB_USER=postgres
    - Volumes
-       - a secrets volume mounted at /secrets with
-           - django_secret_key equal to something long and secure
-           - postgres_password equal to fragile
-           - postgres_ro_password equal to SOMETHING
+       - secrets described above mounted at /secrets
        - a bind mount of the CFS directory where there is a checkout of this archive; mount this at /tom_desc
    - Under "Command", User ID must have the uid that owns the CFS directory, and Filesystem Group the gid
    - Under "Security and Host Config"
@@ -149,7 +162,10 @@ the existing database!
 
 Note that in order to get some of the right files in tom_desc
 (settings.py and some others), I originally mounted the workload with an
-entrypoint of /bin/bash (so that it wouldn't run gunicorn).
+entrypoint of /bin/bash (so that it wouldn't run gunicorn).  I then ran
+"./manage.py migrate" to get the database tables all created.  I then
+made the entrypoint the standard, and redeployed the workload.  This is
+only necessary when first getting started.
 
 
 # Branch Management
