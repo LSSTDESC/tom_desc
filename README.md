@@ -98,7 +98,6 @@ m1727.  It reads its container image from
 image is built the Dockerfile in the "docker" subdirectory of this
 repository.
 
-
 The actual web ap software is *not* read from the docker image (although
 a version of the software is packaged in the image).  Rather, the
 directory `/tom_desc` inside the container is mounted from the NERSC csf
@@ -111,6 +110,34 @@ Right now, that deployment is just handled as a git checkout.  After
 it's updated, things need to happen *on* the Spin server (migrations,
 telling the server to reload the software).  My (Rob's) notes on this
 are in `rob_notes.txt`.
+
+## Steps for deployment
+
+This is assuming a deployment from scratch.  You probably don't want to
+do this on the production server, as you stand a chance of wiping out
+the existing database!
+
+- Create the postgres workload at spin.
+  - image: registry.services.nersc.gov/raknop/tom-desc-postgres
+  - env var: POSTGRES_DATA_DIR=/var/lib/postgresql/data
+  - volume: persistent storage claim mounted at /var/lib/postgresql/data
+  - Otherwise standard spin stuff (I think)
+  - Fix an annoying spin permissions issue so that postgres can read the volume
+      - Don't start the postgres workload (make it a scalable deployment of 0 pods)
+      - Make a temporary workload that gives you a linux shell and mounts the same volume
+      - chown <uid>:<gid> on the mounted volume inside a pod running that temporary workload
+          where uid and gid are of the postgres user (101 and 104 in my case)
+      - Now set the postgres workload to a scalable deployment of 1 pod; it should run happily.
+- Create the tom workload with:
+   - image registry.services.nersc.gov/raknop/tom-desc-production (or -dev)
+   - env vars:
+       - DB_HOST=<name of the postgres workload>
+       - DB_NAME=tom_desc
+       - DB_PASS=fragile
+       - DB_USER=postgres
+       - DJANGO_SECRET_KEY=
+       
+
 
 # Branch Management
 

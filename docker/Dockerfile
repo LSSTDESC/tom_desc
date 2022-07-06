@@ -6,7 +6,7 @@ ENV HOME /
 RUN DEBIAN_FRONTEND="noninteractive" \
    apt-get update && \
    apt-get -y upgrade && \
-   apt-get install postgesql-client gdal-bin librdkafka-dev && \
+   apt-get -y install postgresql-client librdkafka-dev && \
    apt-get clean && \
    rm -rf /var/lib/apt/lists/*
 
@@ -69,7 +69,7 @@ RUN pip install --no-cache --disable-pip-version-check \
 RUN mkdir -p /.astropy
 RUN chmod -R 777 /.astropy
 
-EXPOSE 808
+EXPOSE 8080
 ENTRYPOINT [ \
         "gunicorn", \
         "--bind=0.0.0.0:8080", \
@@ -78,6 +78,6 @@ ENTRYPOINT [ \
         "--timeout=300", \
         "--access-logfile=-", \
         "--error-logfile=-", \
-        "dockertom.wsgi:application" \
+        "tom_desc.wsgi:application" \
         ]
 
