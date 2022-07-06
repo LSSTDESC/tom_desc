@@ -36,7 +36,12 @@ RUN cat /etc/postgresql/13/main/postgresql.conf | \
     && mv /etc/postgresql/13/main/postgresql.conf.new /etc/postgresql/13/main/postgresql.conf
 
 # Make sure this matches what is in the config file (created just above)
-ADD run_postgres.sh /run_postgres.sh
+# (There is some futzing about here to make sure the right permissions are
+# on the file regardless of the permissions as it exists on the machine
+# where the docker image is built.  I don't know why a simple ADD
+# followed by CHMOD didn't work.)
+ADD run_postgres.sh /tmp/run_postgres.sh
+RUN cp /tmp/run_postgres.sh /run_postgres.sh && chmod 755 /run_postgres.sh
 
 USER postgres
 ENV POSTGRES_DATA_DIR=/var/lib/postgresql/data
