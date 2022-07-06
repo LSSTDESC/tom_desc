@@ -135,8 +135,11 @@ class MaybeAddAlert(PermissionRequiredMixin, django.views.View):
         curalert = DiaAlert( alertId = data['alertId'], diaSource = cursrc, diaObject = curobj )
         # curalert.save()
         self.alertloadtime += time.perf_counter() - t0
+
+        # Load linkages to the previouses.  I'm not sure I really want to
+        #   do this.  These will become very big tables, and we could
+        #   figure it all out algorithmically.
         if True:
-            # Load the linkages to the previouses
             for prv in prevs:
                 tmp = DiaAlertPrvSource( diaAlert=curalert, diaSource=prv )
                 tmp.save()
