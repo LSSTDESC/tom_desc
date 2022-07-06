@@ -7,3 +7,6 @@ FINK_USERNAME tom-rknop-dev-postgres-7fc9fb874c-77nj4
 GOOGLE_APPLICATION_CREDENTIALS /secrets/GCP_auth_key-pitt_broker_user_project.json
 GOOGLE_CLOUD_PROJECT pitt-broker-user-project
 
+There's also the secret
+
+GCP_auth_key-pitt_broker_user_project.json

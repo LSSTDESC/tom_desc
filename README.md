@@ -135,8 +135,21 @@ the existing database!
        - DB_NAME=tom_desc
        - DB_PASS=fragile
        - DB_USER=postgres
-       - DJANGO_SECRET_KEY=
-       
+   - Volumes
+       - a secrets volume mounted at /secrets with
+           - django_secret_key equal to something long and secure
+           - postgres_password equal to fragile
+           - postgres_ro_password equal to SOMETHING
+       - a bind mount of the CFS directory where there is a checkout of this archive; mount this at /tom_desc
+   - Under "Command", User ID must have the uid that owns the CFS directory, and Filesystem Group the gid
+   - Under "Security and Host Config"
+       - Run as non-root must be "Yes"
+       - Instead of the usual spin recommendations *only* add the NET_BIND_SERVICE capability
+   - Ingress, etc.           
+
+Note that in order to get some of the right files in tom_desc
+(settings.py and some others), I originally mounted the workload with an
+entrypoint of /bin/bash (so that it wouldn't run gunicorn).
 
 
 # Branch Management

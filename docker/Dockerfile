@@ -6,7 +6,7 @@ ENV HOME /
 RUN DEBIAN_FRONTEND="noninteractive" \
    apt-get update && \
    apt-get -y upgrade && \
-   apt-get -y install postgresql-client librdkafka-dev && \
+   apt-get -y install postgresql-client librdkafka-dev tmux && \
    apt-get clean && \
    rm -rf /var/lib/apt/lists/*
 
@@ -24,6 +24,7 @@ RUN pip install --no-cache --disable-pip-version-check \
    cryptography==37.0.4 \
    cycler==0.11.0 \
    Django==4.0.6 \
+   djangorestframework==3.13.1 \
    django-bootstrap4==22.1 \
    django-contrib-comments==2.2.0 \
    django-crispy-forms==1.14.0 \
