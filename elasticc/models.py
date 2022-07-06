@@ -392,7 +392,7 @@ class DiaTruth(models.Model):
             newobjs.add( DiaTruth( diaSourceId = int( newdata['SourceID'] ),
                                    diaObjectId = int( newdata['SNID'] ),
                                    detect = bool( newdata['DETECT'] ),
-                                   mjd = float( data['MJD'] ),
+                                   mjd = float( newdata['MJD'] ),
                                    true_gentype = int( newdata['TRUE_GENTYPE'] ),
                                    true_genmag = float( newdata['TRUE_GENMAG'] ) ) )
         if len(newobjs) > 0:
