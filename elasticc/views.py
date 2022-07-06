@@ -40,6 +40,7 @@ _logger.addHandler( _logout )
 _logger.setLevel( logging.INFO )
 
 # ======================================================================
+# DJango REST interfaces
 
 class DiaObjectViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
@@ -73,6 +74,8 @@ class DiaAlertViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = DiaAlertSerializer
     
 # ======================================================================
+# Interfaces for loading alerts into the database
+
 # I think that using the REST API and serializers is a better way to do
 # this, but I'm still learning how all that works.  For now, put this here
 # with a lot of manual work so that I can at least get stuff in
@@ -107,21 +110,21 @@ class MaybeAddAlert(PermissionRequiredMixin, django.views.View):
         data['diaSource']['diaObject'] = curobj
         cursrc = DiaSource.load_or_create( data['diaSource'] )
         # self.sourceloadtime += time.perf_counter() - t0
-        if False:
+        if True:
             # Load the previous sources
             prevs = []
             if data['prvDiaSources'] is not None:
                 for prvdata in data['prvDiaSources']:
-                    if not DiaSource.objects.filter(pk=prvdata['diaSourceId']).exists():
-                        prvdata['diaObject'] = curobj
-                        DiaSource.load_or_create( prvdata )
-                    prevs.append( prvdata['diaSourceId'] )
+                    prvdata['diaObject'] = curobj
+                    prvobj = DiaSource.load_or_create( prvdata )
+                    prevs.append( prvobj )
             # Load the previous forced sources
             forced = []
-            # if data['prvDiaForcedSources'] is not None:
-            #     for forceddata in data['prvDiaForcedSources']:
-            #         forceddata['diaObject'] = curobj
-            #         forced.append( DiaForcedSource.load_or_create( forceddata ) )
+            if data['prvDiaForcedSources'] is not None:
+                for forceddata in data['prvDiaForcedSources']:
+                    forceddata['diaObject'] = curobj
+                    forcedobj = DiaForcedSource.load_or_create( forceddata )
+                    forced.append( forcedobj )
         else:
             prevs = []
             forced = []
@@ -132,7 +135,7 @@ class MaybeAddAlert(PermissionRequiredMixin, django.views.View):
         curalert = DiaAlert( alertId = data['alertId'], diaSource = cursrc, diaObject = curobj )
         # curalert.save()
         self.alertloadtime += time.perf_counter() - t0
-        if False:
+        if True:
             # Load the linkages to the previouses
             for prv in prevs:
                 tmp = DiaAlertPrvSource( diaAlert=curalert, diaSource=prv )
@@ -184,8 +187,50 @@ class MaybeAddAlert(PermissionRequiredMixin, django.views.View):
             sourcedata = [ entry['diaSource'] for entry in data if entry['diaSource']['diaSourceId'] ]
             sources = DiaSource.bulk_load_or_create( sourcedata )
             loaded['sources'] = [ i.diaSourceId for i in sources if i.diaSourceId in newsrcids ]
-            srcdict = { src.diaSourceId: src for src in sources }
 
+            # Load the previous sources
+            prvdiasources = []
+            prvdiasourceids = set()
+            for alert in data:
+                if alert['prvDiaSources'] is not None:
+                    for prvdiasource in alert['prvDiaSources']:
+                        if prvdiasource['diaSourceId'] in prvdiasourceids:
+                            # The same previous source will probably show up
+                            #  in multiple alerts among the batch we're loading
+                            continue
+                        prvdiasource['diaObject'] = objdict[ alert['diaObject']['diaObjectId'] ]
+                        prvdiasources.append( prvdiasource )
+                        prvdiasourceids.add( prvdiasource['diaSourceId' ] )
+            curprvdiasourceids = set( DiaSource.which_exist( prvdiasourceids ) )
+            newprvdiasourceids = prvdiasourceids - curprvdiasourceids
+            prvsourceobjs = DiaSource.bulk_load_or_create( prvdiasources )
+            loaded['sources'].extend( [ i.diaSourceId for i in prvsourceobjs if i.diaSourceId in newprvdiasourceids ] )
+
+            # Make the dictionary of sources including previous
+            sources.extend( prvsourceobjs )
+            srcdict = { src.diaSourceId: src for src in sources }
+                                         
+                                         
+            # Load the forceds ources
+            forced = []
+            forcedids = set()
+            for alert in data:
+                if alert['prvDiaForcedSources'] is not None:
+                    for forcedsource in alert['prvDiaForcedSources']:
+                        if forcedsource['diaForcedSourceId'] in forcedids:
+                            # The same forced source will probably show up
+                            # in multiple alerts among the batch we're loading
+                            continue
+                        forcedsource['diaObject'] = objdict[ alert['diaObject']['diaObjectId' ] ]
+                        forced.append( forcedsource )
+                        forcedids.add( forcedsource['diaForcedSourceId'] )
+            curforcedids = set( DiaForcedSource.which_exist( forcedids ) )
+            newforcedids = forcedids - curforcedids
+            forcedobjs = DiaForcedSource.bulk_load_or_create( forced )
+            loaded['forcedsources'] = [ i.diaForcedSourceId for i in forcedobjs
+                                        if i.diaForcedSourceId in newforcedids ]
+            forceddict = { fs.diaForcedSourceId: fs for fs in forcedobjs }
+            
             # Load the alerts
             alertids = { entry['alertId'] for entry in data }
             curalertids = set( DiaAlert.which_exist( alertids ) )
@@ -198,7 +243,23 @@ class MaybeAddAlert(PermissionRequiredMixin, django.views.View):
             alerts = DiaAlert.bulk_load_or_create( alertdata )
             loaded['alerts'] = [ i.alertId for i in alerts if i.alertId in newalertids ]
 
-            # TODO : previous sources, previous forced photometry
+            # Load the previous source linkages
+            sourcelinks = []
+            for entry in data:
+                if entry['prvDiaSources'] is not None:
+                    sourcelinks.extend( [ { 'diaAlert_id': entry['alertId'],
+                                            'diaSource_id': i['diaSourceId'] }
+                                          for i in entry['prvDiaSources'] ] )
+            DiaAlertPrvSource.bulk_load_or_create( sourcelinks )
+            
+            # Load the forced source linkages
+            forcedlinks = []
+            for entry in data:
+                if entry['prvDiaForcedSources'] is not None:
+                    forcedlinks.extend( [ { 'diaAlert_id': entry['alertId'],
+                                            'diaForcedSource_id': i['diaForcedSourceId'] }
+                                          for i in entry['prvDiaForcedSources'] ] )
+            DiaAlertPrvForcedSource.bulk_load_or_create( forcedlinks )
             
             resp = { 'status': 'ok', 'message': loaded }
             # _logger.info( f'objloadtime={self.objloadtime}, sourceloadtime={self.sourceloadtime}, '
@@ -266,7 +327,15 @@ class MaybeAddObjectTruth(PermissionRequiredMixin, django.views.View):
                      'traceback': strstream.getvalue() }
             strstream.close()
             return JsonResponse( resp )
-                
+
+
+# ======================================================================
+# A REST interface (but not using the Django REST framework) for
+# viewing and posting broker messages.  Posting broker messages
+# (via the PUT method) requires the elasticc.elasticc_broker
+# permission.
+
+        
 class BrokerMessageView(PermissionRequiredMixin, django.views.View):
     raise_exception = True
 
@@ -439,6 +508,23 @@ class BrokerMessageView(PermissionRequiredMixin, django.views.View):
 
         return resp
 
+# ======================================================================
+# ======================================================================
+# ======================================================================
+# Interactive views
+
+class AlertExplorer( LoginRequiredMixin, django.views.View ):
+
+    def get( self, request, info=None ):
+        return self.post( request, info )
+
+    def post( self, request, info=None ):
+        pass
+
+# ======================================================================
+# ======================================================================
+# ======================================================================
+                                                              
 class Testing( PermissionRequiredMixin, django.views.View ):
 
     def has_permission( self ):

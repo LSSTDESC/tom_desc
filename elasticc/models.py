@@ -265,10 +265,63 @@ class DiaAlertPrvSource(models.Model):
     diaAlert = models.ForeignKey( DiaAlert, on_delete=models.CASCADE, null=True )
     diaSource = models.ForeignKey( DiaSource, on_delete=models.CASCADE, null=True )
 
+    class Meta:
+        unique_together = ( 'diaAlert', 'diaSource' )
+    
+    @classmethod
+    def bulk_load_or_create( cls, data ):
+        # searchkeys = [ f"{i['diaAlert_id']} {i['diaSource_id']}" for i in data ]
+        # queryset = cls.objects.annotate( srch=models.functions.Concat( 'diaAlert_id',
+        #                                                                models.Value(' '),
+        #                                                                'diaSource_id',
+        #                                                                output_field=models.TextField() ) )
+        # curobjs = list( queryset.filter( srch__in=searchkeys  ) )
+        # exists = set( [ f"{c.diaAlert_id} {c.diaSource_id}" for c in curobjs ] )
+        # newobjs = []
+        # for newdata in data:
+        #     if f"{newdata['diaAlert_id']} {newdata['diaSource_id']}" in exists:
+        #         continue
+        #     newobjs.append( cls(**newdata) )
+        # if len(newobjs) > 0:
+        #     addedobjs = cls.objects.bulk_create( newobjs )
+        #     curobjs.extend( addedobjs )
+        # return curobjs
+        objs = []
+        for newdata in data:
+            objs.append( cls(**newdata) )
+        cls.objects.bulk_create( objs, ignore_conflicts=True )
+        
 class DiaAlertPrvForcedSource(models.Model):
     id = models.BigAutoField( primary_key=True )
     diaAlert = models.ForeignKey( DiaAlert, on_delete=models.CASCADE, null=True )
     diaForcedSource = models.ForeignKey( DiaForcedSource, on_delete=models.CASCADE, null=True )
+
+    class Meta:
+        unique_together = ( 'diaAlert', 'diaForcedSource' )
+
+    # This is distressingly similar to DiaAlertPrvSoruce.bulk_load_or_create
+    @classmethod
+    def bulk_load_or_create( cls, data ):
+        # searchkeys = [ f"{i['diaAlert_id']} {i['diaForcedSource_id']}" for i in data ]
+        # queryset = cls.objects.annotate( srch=models.functions.Concat( 'diaAlert_id',
+        #                                                                models.Value(' '),
+        #                                                                'diaForcedSource_id',
+        #                                                                output_field=models.TextField()) )
+        # curobjs = list( queryset.filter( srch__in=searchkeys ) )
+        # exists = set( [ f"{c.diaAlert_id} {c.diaForcedSource_id}" for c in curobjs ] )
+        # newobjs = []
+        # for newdata in data:
+        #     if f"{newdata['diaAlert_id']} {newdata['diaForcedSource_id']}" in exists:
+        #         continue
+        #     newobjs.append( cls(**newdata) )
+        # if len(newobjs) > 0:
+        #     addedobjs = cls.objects.bulk_create( newobjs )
+        #     curobjs.extend( addedobjs )
+        # return curobjs
+        objs = []
+        for newdata in data:
+            objs.append( cls(**newdata) )
+        cls.objects.bulk_create( objs, ignore_conflicts=True )
     
 class DiaTruth(models.Model):
     # I can't use a foreign key constraint here because there will be truth entries for
