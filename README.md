@@ -133,12 +133,12 @@ the existing database!
   - Fix an annoying spin permissions issue so that postgres can read the volume
       - Don't start the postgres workload (make it a scalable deployment of 0 pods)
       - Make a temporary workload that gives you a linux shell and mounts the same volume
-      - chown <uid>:<gid> on the mounted volume inside a pod running that temporary workload
+      - chown {uid}:{gid} on the mounted volume inside a pod running that temporary workload
           where uid and gid are of the postgres user (101 and 104 in my case)
       - Now set the postgres workload to a scalable deployment of 1 pod;
       - it should run happily.
   - Create the postgres_ro user used by the db app:
-      - CREATE USER postgres_ro PASSWORD '<password>';   (password is what you put in secrets)
+      - CREATE USER postgres_ro PASSWORD '{password}';   (password is what you put in secrets)
       - GRANT CONNECT ON DATABASE tom_desc TO postgres_ro;
       - In the tom_desc database:
           - GRANT USAGE ON SCHEMA public TO postgres_ro;
@@ -147,7 +147,7 @@ the existing database!
 - Create the tom workload with:
    - image registry.services.nersc.gov/raknop/tom-desc-production (or -dev)
    - env vars:
-       - DB_HOST=<name of the postgres workload>
+       - DB_HOST={name of the postgres workload}
        - DB_NAME=tom_desc
        - DB_PASS=fragile
        - DB_USER=postgres
@@ -172,5 +172,5 @@ only necessary when first getting started.
 
 The branch `main` has the current production code.
 
-Make a branch `/u/<yourname>/<name>` to do dev work, which (if
+Make a branch `/u/{yourname}/{name}` to do dev work, which (if
 appropriate) may later be merged into `main`.
