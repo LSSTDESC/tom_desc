@@ -1,5 +1,4 @@
-FROM python:3.8
-RUN pip install --upgrade pip
+FROM rknop/devuan-chimaera-rknop
 
 WORKDIR /tom_desc
 ENV HOME /
@@ -12,9 +11,13 @@ RUN DEBIAN_FRONTEND="noninteractive" \
 
 RUN DEBIAN_FRONTEND="noninteractive" \
    apt-get update && \
-   apt-get install -y gdal-bin librdkafka-dev && \
+   apt-get install -y gdal-bin python3 python3-pip librdkafka-dev tmux libpq-dev postgresql-client && \
    apt-get clean && \
    rm -rf /var/lib/apt/lists/*
+
+RUN ln -s /usr/bin/python3 /usr/bin/python
+
+RUN pip install --upgrade pip
 
 COPY requirements.txt .
 RUN pip install \
