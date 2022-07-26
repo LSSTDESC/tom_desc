@@ -13,7 +13,7 @@ import django.views
 # A low-level query interface.
 #
 # That is, of course, EXTREMELY scary.  This is why you need to make
-# sure the postgres user tom_desc_ro is a readonly user.  Still scary,
+# sure the postgres user postgres_ro is a readonly user.  Still scary,
 # but not Cthulhuesque.
 
 class RunSQLQuery(LoginRequiredMixin, django.views.View):
@@ -30,10 +30,13 @@ class RunSQLQuery(LoginRequiredMixin, django.views.View):
             password = ifp.readline()
         password.strip()
         dbconn = psycopg2.connect( dbname=os.getenv('DB_NAME'), host=os.getenv('DB_HOST'),
-                                   user='tom_desc_ro', password=password,
+                                   user='postgres_ro', password=password,
                                    cursor_factory=psycopg2.extras.RealDictCursor )
         # sys.stderr.write( f'Query is {data["query"]}, subdict is {subdict}\n' )
         cursor = dbconn.cursor()
-        cursor.execute( data['query'], subdict )
+        try:
+            cursor.execute( data['query'], subdict )
+        except Exception as ex:
+            return JsonResponse( { 'status': 'error', 'error': str(ex) } )
         return JsonResponse( { 'status': 'ok', 'rows': cursor.fetchall() } )
         

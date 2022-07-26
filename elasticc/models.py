@@ -190,8 +190,8 @@ class DiaObject(Createable):
     for _gal in [ "", "2" ]:
         _create_kws.append( f'hostgal{_gal}_zspec' )
         _create_kws.append( f'hostgal{_gal}_zspec_err' )
-        _create_kws.append( f'hostgal{_gal}_zspec' )
-        _create_kws.append( f'hostgal{_gal}_zspec_err' )
+        _create_kws.append( f'hostgal{_gal}_zphot' )
+        _create_kws.append( f'hostgal{_gal}_zphot_err' )
         _create_kws.append( f'hostgal{_gal}_ra' )
         _create_kws.append( f'hostgal{_gal}_dec' )
         _create_kws.append( f'hostgal{_gal}_snsep' )
@@ -401,12 +401,12 @@ class DiaTruth(models.Model):
         return curobjs, missingsources
             
         
-class DiaObjectTruth(models.Model):
-    diaObjectId = models.ForeignKey( DiaObject, on_delete=models.CASCADE, null=False, primary_key=True )
+class DiaObjectTruth(Createable):
+    diaObject = models.ForeignKey( DiaObject, on_delete=models.CASCADE, null=False, primary_key=True )
     libid = models.IntegerField( )
     sim_searcheff_mask = models.IntegerField( )
-    gentype = models.IntegerField( )
-    sim_template_index = models.IntegerField( )
+    gentype = models.IntegerField( db_index=True )
+    sim_template_index = models.IntegerField( db_index=True )
     zcmb = models.FloatField( )
     zhelio = models.FloatField( )
     zcmb_smear = models.FloatField( )
@@ -438,16 +438,31 @@ class DiaObjectTruth(models.Model):
     nobs = models.IntegerField( )
     nobs_saturate = models.IntegerField( )
 
-    # _pk = 'diaObjectId'
-    # _create_kws = [ 'diaObjectId', 'libid', 'sim_searcheff_mask', 'gentype', 'sim_template_index',
-    #                 'zcmb', 'zhelio', 'zcmb_smear', 'ra', 'dec', 'mwebv', 'galid', 'galzphot',
-    #                 'galzphoterr', 'galsnsep', 'galsnddlr', 'rv', 'av', 'mu', 'lensdmu', 'peakmjd',
-    #                 'mjd_detect_first', 'mjd_detect_last', 'dtseason_peak', 'peakmag_u', 'peakmag_g',
-    #                 'peakmag_r', 'peakmag_i', 'peakmag_z', 'peakmag_Y', 'snrmax', 'snrmax2', 'snrmax3',
-    #                 'nobs', 'nobs_saturate' ]
+    _pk = 'diaObject_id'
+    _create_kws = [ 'diaObject_id', 'libid', 'sim_searcheff_mask', 'gentype', 'sim_template_index',
+                    'zcmb', 'zhelio', 'zcmb_smear', 'ra', 'dec', 'mwebv', 'galid', 'galzphot',
+                    'galzphoterr', 'galsnsep', 'galsnddlr', 'rv', 'av', 'mu', 'lensdmu', 'peakmjd',
+                    'mjd_detect_first', 'mjd_detect_last', 'dtseason_peak', 'peakmag_u', 'peakmag_g',
+                    'peakmag_r', 'peakmag_i', 'peakmag_z', 'peakmag_Y', 'snrmax', 'snrmax2', 'snrmax3',
+                    'nobs', 'nobs_saturate' ]
 
-
-
+    # This is a little bit ugly.  For my own dubious reasons, I wanted
+    # to be able to pass in things with diaObject_id that weren't
+    # actually in the database (to save myself some pain on the other
+    # end).  So, filter those out here before calling the Createable's
+    # bulk_load_or_create
+    @classmethod
+    def bulk_load_or_create( cls, data ):
+        """Pass an array of dicts."""
+        pks = [ i[cls._pk] for i in data ]
+        diaobjs = list( DiaObject.objects.filter( pk__in=pks ) )
+        objids = set( [ i.diaObjectId for i in diaobjs ] )
+        datatoload = [ i for i in data if i['diaObject_id'] in objids ]
+        if len(datatoload) > 0:
+            return super().bulk_load_or_create( datatoload )
+        else:
+            return []
+    
 # ======================================================================
 # The Broker* don't correspond as directly to the avro alerts
 #
