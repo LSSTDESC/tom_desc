@@ -265,8 +265,9 @@ class DiaAlertPrvSource(models.Model):
     diaAlert = models.ForeignKey( DiaAlert, on_delete=models.CASCADE, null=True )
     diaSource = models.ForeignKey( DiaSource, on_delete=models.CASCADE, null=True )
 
-    class Meta:
-        unique_together = ( 'diaAlert', 'diaSource' )
+    # I don't know why, but I was getting a django migraiton error with this in
+    # class Meta:
+    #     unique_together = ( 'diaAlert', 'diaSource' )
     
     @classmethod
     def bulk_load_or_create( cls, data ):
@@ -296,8 +297,9 @@ class DiaAlertPrvForcedSource(models.Model):
     diaAlert = models.ForeignKey( DiaAlert, on_delete=models.CASCADE, null=True )
     diaForcedSource = models.ForeignKey( DiaForcedSource, on_delete=models.CASCADE, null=True )
 
-    class Meta:
-        unique_together = ( 'diaAlert', 'diaForcedSource' )
+    # I don't know why, but I was getting a django migraiton error with this in
+    # class Meta:
+    #     unique_together = ( 'diaAlert', 'diaForcedSource' )
 
     # This is distressingly similar to DiaAlertPrvSoruce.bulk_load_or_create
     @classmethod
