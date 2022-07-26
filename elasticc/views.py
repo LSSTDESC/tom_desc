@@ -246,23 +246,27 @@ class MaybeAddAlert(PermissionRequiredMixin, django.views.View):
             alerts = DiaAlert.bulk_load_or_create( alertdata )
             loaded['alerts'] = [ i.alertId for i in alerts if i.alertId in newalertids ]
 
-            # Load the previous source linkages
-            sourcelinks = []
-            for entry in data:
-                if entry['prvDiaSources'] is not None:
-                    sourcelinks.extend( [ { 'diaAlert_id': entry['alertId'],
-                                            'diaSource_id': i['diaSourceId'] }
-                                          for i in entry['prvDiaSources'] ] )
-            DiaAlertPrvSource.bulk_load_or_create( sourcelinks )
+            # Not loading the previous source images
+            # These tables will have hundreds of millions or billions
+            # of lines, and we can figure it all out algorithmically
             
-            # Load the forced source linkages
-            forcedlinks = []
-            for entry in data:
-                if entry['prvDiaForcedSources'] is not None:
-                    forcedlinks.extend( [ { 'diaAlert_id': entry['alertId'],
-                                            'diaForcedSource_id': i['diaForcedSourceId'] }
-                                          for i in entry['prvDiaForcedSources'] ] )
-            DiaAlertPrvForcedSource.bulk_load_or_create( forcedlinks )
+            # # Load the previous source linkages
+            # sourcelinks = []
+            # for entry in data:
+            #     if entry['prvDiaSources'] is not None:
+            #         sourcelinks.extend( [ { 'diaAlert_id': entry['alertId'],
+            #                                 'diaSource_id': i['diaSourceId'] }
+            #                               for i in entry['prvDiaSources'] ] )
+            # DiaAlertPrvSource.bulk_load_or_create( sourcelinks )
+            
+            # # Load the forced source linkages
+            # forcedlinks = []
+            # for entry in data:
+            #     if entry['prvDiaForcedSources'] is not None:
+            #         forcedlinks.extend( [ { 'diaAlert_id': entry['alertId'],
+            #                                 'diaForcedSource_id': i['diaForcedSourceId'] }
+            #                               for i in entry['prvDiaForcedSources'] ] )
+            # DiaAlertPrvForcedSource.bulk_load_or_create( forcedlinks )
             
             resp = { 'status': 'ok', 'message': loaded }
             # _logger.info( f'objloadtime={self.objloadtime}, sourceloadtime={self.sourceloadtime}, '
@@ -318,7 +322,7 @@ class MaybeAddObjectTruth(PermissionRequiredMixin, django.views.View):
                 loaded.append( DiaObjectTruth.load_or_create( data ) ).diaObjectId
             else:
                 objs = DiaObjectTruth.bulk_load_or_create( data )
-                loaded.extend( [ obj.diaObjectId for obj in objs ] )
+                loaded.extend( [ obj.diaObject_id for obj in objs ] )
             resp = { 'status':'ok', 'message': loaded }
             return JsonResponse( resp )
         except Exception as e:
