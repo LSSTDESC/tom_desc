@@ -16,22 +16,22 @@ if not _logger.hasHandlers():
     _formatter = logging.Formatter( f'[msgconsumer - %(asctime)s - %(levelname)s] - %(message)s',
                                     datefmt='%Y-%m-%d %H:%M:%S' )
     _logout.setFormatter( _formatter )
-# _logger.setLevel( logging.INFO )
-_logger.setLevel( logging.DEBUG )
+_logger.setLevel( logging.INFO )
+# _logger.setLevel( logging.DEBUG )
 
 def _donothing( *args, **kwargs ):
     pass
 
 class MsgConsumer(object):
-    def __init__( self, server, groupid, topics, schema,
+    def __init__( self, server, groupid, schema, topics=None,
                   extraconsumerconfig=None, consume_nmsgs=10, consume_timeout=5, nomsg_sleeptime=1,
                   logger=_logger ):
         """Wraps a confluent_kafka.Consumer.
 
         server : the bootstrap.servers value
         groupid : the group.id value
-        topics : topic name, or list of topic names, to subscribe to
         schema : filename where the schema of messages to be consumed can be found
+        topics : topic name, or list of topic names, to subscribe to
         extraconsumerconfig : (optional) additional consumer config (dict)
         consume_nmsgs : number of messages to pull from the server at once (default 10)
         consume_timeout : timeout after waiting on the server for this many seconds
@@ -81,13 +81,14 @@ class MsgConsumer(object):
             raise ValueError( f'topics must be either a string or a list' )
 
         if self.topics is not None and len(topics) > 0:
+            self.logger.info( f'Subscribing to topics: {", ".join( topics )}' )
             self.consumer.subscribe( topics, on_assign=self._sub_callback )
         else:
             self.logger.warning( f'No topics given, not subscribing.' )
 
     def reset_to_start( self, topic ):
         partitions = self.consumer.list_topics( topic ).topics[topic].partitions
-        self.logger.info( f'Resetting partitions for topic {topic}\n' )
+        self.logger.info( f'Resetting partitions for topic {topic}' )
         # partitions is a map
         partlist = []
         # Must consume one message to really hook up to the topic
@@ -106,14 +107,18 @@ class MsgConsumer(object):
         self.logger.info( f'Committing partition offsets.' )
         self.consumer.commit( offsets=partlist )
         self.tot_handled = 0
-            
-    def print_topics( self, newlines=False ):
+
+    def get_topics( self ):
         cluster_meta = self.consumer.list_topics()
+        return [ n for n in cluster_meta.topics ]
+        
+    def print_topics( self, newlines=False ):
+        topics = self.get_topics()
         if not newlines:
-            self.logger.info( f"\nTopics: {', '.join([ n for n in cluster_meta.topics])}" )
+            self.logger.info( f"\nTopics: {', '.join(topics)}" )
         else:
-            topics = '\n  '.join([n for n in cluster_meta.topics])
-            self.logger.info( f"\nTopics:\n  {topics}" )
+            topicstr = '\n  '.join( topics )
+            self.logger.info( f"\nTopics:\n  {topicstr}" )
 
     def _get_positions( self, partitions ):
         return self.consumer.position( partitions )
@@ -156,12 +161,13 @@ class MsgConsumer(object):
         keepgoing = True
         while keepgoing:
             self.logger.info( f"Trying to consume {self.consume_nmsgs} messages "
-                              f"with timeout {self.consume_timeout}...\n" )
+                              f"with timeout {self.consume_timeout}..." )
             msgs = self.consumer.consume( self.consume_nmsgs, timeout=self.consume_timeout )
             if len(msgs) == 0:
                 self.logger.info( f"No messages, sleeping {self.nomsg_sleeptime} sec" )
                 time.sleep( self.nomsg_sleeptime )
             else:
+                self.logger.info( f"...got {len(msgs)} messages" )
                 self.tot_handled += len(msgs)
                 if handler is not None:
                     handler( msgs )
@@ -169,7 +175,9 @@ class MsgConsumer(object):
                     self.default_handle_message_batch( msgs )
             nconsumed += len( msgs )
             runtime = datetime.datetime.now() - starttime
-            if ( ( ( max_consumed is not None ) and ( nconsumed >= max_consumed ) ) or ( runtime > max_runtime ) ):
+            if ( ( ( max_consumed is not None ) and ( nconsumed >= max_consumed ) )
+                 or
+                 ( ( max_runtime is not None ) and ( runtime > max_runtime ) ) ):
                 keepgoing = False
         self.logger.info( f"Stopping poll loop after consuming {nconsumed} messages during {runtime}" )
 

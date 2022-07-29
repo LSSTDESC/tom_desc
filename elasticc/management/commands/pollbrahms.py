@@ -1,3 +1,5 @@
+raise RuntimeError( "Broken" )
+
 import sys
 import io
 import pathlib

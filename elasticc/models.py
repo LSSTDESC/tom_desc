@@ -1,6 +1,7 @@
 import sys
 import math
 import datetime
+import pytz
 import logging
 import itertools
 import collections
@@ -517,6 +518,7 @@ class BrokerMessage(models.Model):
     # diaSource = models.ForeignKey( DiaSource, on_delete=models.PROTECT, null=True )
     
     # timestamps as datetime.datetime (DateTimeField)
+    msgHdrTimestamp = models.DateTimeField(null=True)
     descIngestTimestamp = models.DateTimeField(auto_now_add=True)  # auto-generated
     elasticcPublishTimestamp = models.DateTimeField(null=True)
     brokerIngestTimestamp = models.DateTimeField(null=True)
@@ -536,8 +538,10 @@ class BrokerMessage(models.Model):
     def to_dict( self ):
         resp = {
             'dbMessageIndex': self.dbMessageIndex,
+            'streamMessageId': self.streamMessageId,
             'alertId': self.alertId,
             'diaSourceId': self.diaSourceId,
+            'msgHdrTimestamp': self.msgHdrTimestamp.isoformat(),
             'descIngestTimestamp': self.descIngestTimestamp.isoformat(),
             'elasticcPublishTimestamp': int( self.elasticcPublishTimestamp.timestamp() * 1e6 ),
             'brokerIngestTimestamp': int( self.brokerIngestTimestamp.timestamp() * 1e6 ),
@@ -566,7 +570,7 @@ class BrokerMessage(models.Model):
         
 
     @staticmethod
-    def load_batch( messages ):
+    def load_batch( messages, logger=_logger ):
         """Load an array of messages into BrokerMessage and associated tables.
 
         messages is an array of dicts with keys topic, msgoffset, and msg.
@@ -584,21 +588,28 @@ class BrokerMessage(models.Model):
         # at worst that this will lead to useless message objects
         # in the database that we can ignore.  I think.
 
-        _logger.debug( f'In BrokerMessage.load_batch, received {len(messages)} messages.' );
+        logger.debug( f'In BrokerMessage.load_batch, received {len(messages)} messages.' );
 
         messageobjects = {}
         kwargses = []
+        utc = pytz.timezone( "UTC" )
         for msg in messages:
+            timestamp = msg['timestamp']
             if len( msg['msg']['classifications'] ) == 0:
-                _logger.debug( "Message with no classifications" )
+                logger.debug( "Message with no classifications" )
                 continue
             keymess = ( f"{msg['msgoffset']}_{msg['topic']}_{msg['msg']['alertId']}" )
-            # _logger.debug( f'kemess = {keymess}' )
+            # logger.debug( f'kemess = {keymess}' )
             if keymess not in messageobjects.keys():
+                # logger.debug( f"[msg['msg']['elasticcPublishTimestamp'] = {msg['msg']['elasticcPublishTimestamp']}; "
+                #               f"timestamp = {timestamp}" )
+                msghdrtimestamp = datetime.datetime.fromtimestamp( timestamp / 1000 )
+                msghdrtimestamp = utc.localize( msghdrtimestamp )
                 kwargs = { 'streamMessageId': msg['msgoffset'],
                            'topicName': msg['topic'],
                            'alertId': msg['msg']['alertId'],
                            'diaSourceId': msg['msg']['diaSourceId'],
+                           'msgHdrTimestamp': msghdrtimestamp,
                            'descIngestTimestamp': datetime.datetime.now(),
                            'elasticcPublishTimestamp': msg['msg']['elasticcPublishTimestamp'],
                            'brokerIngestTimestamp': msg['msg']['brokerIngestTimestamp'],
@@ -609,8 +620,8 @@ class BrokerMessage(models.Model):
                 }
                 kwargses.append( kwargs )
             else:
-                _logger.error( f'Key {keymess} showed up more than once in a message batch!' )
-        _logger.debug( f'Bulk creating {len(kwargses)} messages.' )
+                logger.error( f'Key {keymess} showed up more than once in a message batch!' )
+        logger.debug( f'Bulk creating {len(kwargses)} messages.' )
         if len(kwargses) > 0:
             # This is byzantine, but I'm copying django documentation here
             objs = ( BrokerMessage( **k ) for k in kwargses )
@@ -629,20 +640,28 @@ class BrokerMessage(models.Model):
 
         classifiers = {}
         
+        logger.debug( f"Looking for pre-existing classifiers" )
         cferconds = models.Q()
+        i = 0
+        condcache = set()
         for msg in messages:
+            i += 1
             for cfication in msg['msg']['classifications']:
-                newcond = ( models.Q( brokerName = msg['msg']['brokerName'] ) &
-                            models.Q( brokerVersion = msg['msg']['brokerVersion'] ) &
-                            models.Q( classifierName = cfication['classifierName'] ) &
-                            models.Q( classifierParams = cfication['classifierParams'] ) )
-                cferconds |= newcond
+                sigstr = ( f"{msg['msg']['brokerName']}_{msg['msg']['brokerVersion']}_"
+                           f"{cfication['classifierName']}_{cfication['classifierParams']}" )
+                if sigstr not in condcache:
+                    newcond = ( models.Q( brokerName = msg['msg']['brokerName'] ) &
+                                models.Q( brokerVersion = msg['msg']['brokerVersion'] ) &
+                                models.Q( classifierName = cfication['classifierName'] ) &
+                                models.Q( classifierParams = cfication['classifierParams'] ) )
+                    cferconds |= newcond
+                condcache.add( sigstr )
             curcfers = BrokerClassifier.objects.filter( cferconds )
             for cur in curcfers:
                 keycfer = ( f"{cur.brokerName}_{cur.brokerVersion}_"
                             f"{cur.classifierName}_{cur.classifierParams}" )
                 classifiers[ keycfer ] = cur
-        _logger.debug( f'Found {len(classifiers)} existing classifiers.' )
+        logger.debug( f'Found {len(classifiers)} existing classifiers.' )
                 
         # Create new classifiers as necessary
 
@@ -658,7 +677,7 @@ class BrokerMessage(models.Model):
                                        'classifierName': cfication['classifierName'],
                                        'classifierParams': cfication['classifierParams'] } )
                     addedkeys.add( keycfer )
-        _logger.debug( f'Adding {len(kwargses)} new classifiers.' )
+        logger.debug( f'Adding {len(kwargses)} new classifiers.' )
         if len(kwargses) > 0:
             objs = ( BrokerClassifier( **k ) for k in kwargses )
             batch = list( itertools.islice( objs, len(kwargses) ) )
@@ -667,7 +686,7 @@ class BrokerMessage(models.Model):
                 keycfer = ( f"{curcfer.brokerName}_{curcfer.brokerVersion}_"
                             f"{curcfer.classifierName}_{curcfer.classifierParams}" )
                 classifiers[ keycfer ] = curcfer
-                # _logger.debug( f'key: {keycfer}; brokerName: {curcfer.brokerName}; '
+                # logger.debug( f'key: {keycfer}; brokerName: {curcfer.brokerName}; '
                 #                f'brokerVersion: {curcfer.brokerVersion}; classifierName: {curcfer.ClassifierName}; '
                 #                f'classifierParams: {curcfer.classifierParams}' )
 
@@ -689,8 +708,8 @@ class BrokerMessage(models.Model):
                            'classId': cfication['classId'],
                            'probability': cfication['probability'] }
                 kwargses.append( kwargs )
-                # _logger.debug( f"Adding {kwargs}" )
-        _logger.debug( f'Adding {len(kwargses)} new classifications.' )
+                # logger.debug( f"Adding {kwargs}" )
+        logger.debug( f'Adding {len(kwargses)} new classifications.' )
         objs = ( BrokerClassification( **k ) for k in kwargses )
         batch = list( itertools.islice( objs, len(kwargses) ) )
         newcfications = BrokerClassification.objects.bulk_create( batch, len(kwargses) )
