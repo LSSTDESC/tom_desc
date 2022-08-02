@@ -1,0 +1,23 @@
+{% extends 'tom_common/base.html' %}
+{% load static %}
+{% block title %}
+ELAsTiCC Admin Summary
+{% endblock %}
+{% block additional_css %}
+<link rel="stylesheet" href="{% static 'elasticc/elasticc.css' %}">
+{% endblock %}
+{% block content %}
+<h2>ELAsTiCC Admin Summary</h2>
+
+<h3>Objects, Sources, and Alerts</h3>
+
+<table class="elasticc_table1">
+  <tr><th>Table</th><th># Rows</th></tr>
+  {% for row in tabcounts %}
+  <tr><td>{{ row.name }}</td><td> {{row.count}} </td></tr>
+  {% endfor %}
+</table>
+
+<h3>Object truth: numbers of objects</h3>
+
+{% endblock %}

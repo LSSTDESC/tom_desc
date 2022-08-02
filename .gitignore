@@ -62,8 +62,7 @@ coverage.xml
 *.log
 local_settings.py
 db.sqlite3
-_static/
-static/
+
 
 # DB dumps
 *.pg_dump

@@ -9,6 +9,7 @@ import logging
 import django.db
 import django.urls
 from django.http import HttpResponse, JsonResponse
+from django.template import loader
 from django.utils.decorators import method_decorator
 from django.shortcuts import render, get_object_or_404
 from django.contrib.auth.decorators import login_required, permission_required
@@ -528,6 +529,38 @@ class AlertExplorer( LoginRequiredMixin, django.views.View ):
     def post( self, request, info=None ):
         pass
 
+# ======================================================================
+    
+class ElasticcSummary( LoginRequiredMixin, django.views.View ):
+                       
+    def get( self, request, info=None ):
+        return self.post( request, info )
+
+    def post( self, request, info=None ):
+        pass
+
+# ======================================================================
+    
+class ElasticcAdminSummary( PermissionRequiredMixin, django.views.View ):
+    permission_required = 'elasticc.elasticc_admin'
+    raise_exception = True
+
+    def get( self, request, info=None ):
+        return self.post( request, info )
+
+    def post( self, request, info=None ):
+        templ = loader.get_template( "elasticc/admin_summary.html" )
+        context = { "testing": "Hello, world!" }
+
+        context['tabcounts'] = []
+        # context['tabcounts'] = [ { 'name': 'blah', 'count': 42 } ]
+        for tab in [ DiaObject, DiaSource, DiaForcedSource,
+                     DiaAlert, DiaTruth, DiaObjectTruth ]:
+            context['tabcounts'].append( { 'name': tab.__name__,
+                                           'count': tab.objects.count() } )
+        # _logger.info( f'context = {context}' )
+        return HttpResponse( templ.render( context, request ) )
+        
 # ======================================================================
 # ======================================================================
 # ======================================================================

@@ -1,0 +1,10 @@
+table.elasticc_table1 { border: 2px solid black; }
+table.elasticc_table1 tr { padding-top: 2px;
+                           padding-bottom: 2px;
+                           border-top: 2px solid black;
+                           border-bottom: 2px solid black;
+                         }
+table.elasticc_table1 td { padding-left: 1ex;
+                           padding-right: 1ex;
+                         }
+                          

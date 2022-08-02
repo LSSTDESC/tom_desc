@@ -16,6 +16,8 @@ urlpatterns = [
     path('addtruth', views.MaybeAddTruth.as_view()),
     path('addobjecttruth', views.MaybeAddObjectTruth.as_view()),
 
+    path('adminsummary', views.ElasticcAdminSummary.as_view()),
+    
     path('brokermessage/<int:info>/', views.BrokerMessageView.as_view(), name='brokermesssage-int'),
     path('brokermessage/<path:info>/', views.BrokerMessageView.as_view(), name='brokermessage-path'),
     path('brokermessage/', views.BrokerMessageView.as_view(), name='brokermessage-noparam'),

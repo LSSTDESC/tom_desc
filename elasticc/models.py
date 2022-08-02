@@ -467,6 +467,15 @@ class DiaObjectTruth(Createable):
             return []
     
 # ======================================================================
+
+class ClassificationMap(models.Model):
+    id = models.AutoField( primary_key=True )
+    classId = models.IntegerField( db_index=True )
+    snana_gentype = models.IntegerField( db_index=True, null=True )
+    description = models.TextField()
+
+
+# ======================================================================
 # The Broker* don't correspond as directly to the avro alerts
 #
 # The avro alert schema is elasticc.v0_9.brokerClassification.avsc
