@@ -72,6 +72,9 @@ class BrokerConsumer:
             timestamptype, timestamp = msg.timestamp()
             if timestamptype == confluent_kafka.TIMESTAMP_NOT_AVAILABLE:
                 timestamp = None
+            else:
+                timestamp = datetime.datetime.fromtimestamp( timestamp / 1000,
+                                                             tz=datetime.timezone.utc )
             payload = msg.value()
             if not self.schemaless:
                 raise RuntimeError( "I only know how to handle schemaless streams" )
