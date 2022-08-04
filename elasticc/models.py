@@ -627,8 +627,7 @@ class BrokerMessage(models.Model):
             if keymess not in messageobjects.keys():
                 # logger.debug( f"[msg['msg']['elasticcPublishTimestamp'] = {msg['msg']['elasticcPublishTimestamp']}; "
                 #               f"timestamp = {timestamp}" )
-                msghdrtimestamp = datetime.datetime.fromtimestamp( timestamp / 1000 )
-                msghdrtimestamp = utc.localize( msghdrtimestamp )
+                msghdrtimestamp = timestamp
                 kwargs = { 'streamMessageId': msg['msgoffset'],
                            'topicName': msg['topic'],
                            'alertId': msg['msg']['alertId'],

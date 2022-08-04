@@ -591,7 +591,6 @@ class BrokerMessageView(PermissionRequiredMixin, django.views.View):
         messageinfo = []
         # Reformulate the data array into what BrokerMessage.load_batch is expecting
         for datum in data:
-            datum['timestamp'] = datetime.datetime.now( tz=datetime.timezone.utc )
             datum['elasticcPublishTimestamp'] = datetime.datetime.fromtimestamp( datum['elasticcPublishTimestamp']
                                                                                  / 1000,
                                                                                  tz=datetime.timezone.utc )
@@ -599,6 +598,7 @@ class BrokerMessageView(PermissionRequiredMixin, django.views.View):
                                                                               / 1000,
                                                                               tz=datetime.timezone.utc )
             messageinfo.append( { 'topic': 'REST_push',
+                                  'timestamp': datetime.datetime.now( tz=datetime.timezone.utc ),
                                   'msgoffset': -1,
                                   'msg': datum } )
             
@@ -615,7 +615,7 @@ class BrokerMessageView(PermissionRequiredMixin, django.views.View):
         loc = re.sub( '\?.*$', '', fullpath )
         if loc[-1] != "/":
             loc += "/"
-        resp.headers['Location'] =  f'{loc}{msgobj.dbMessageIndex}'
+        resp.headers['Location'] =  f'{loc}{dex}'
 
 
         # # Make the BrokerMessage object
@@ -750,12 +750,13 @@ class ElasticcSummary( LoginRequiredMixin, django.views.View ):
                         if ( ( cfer.brokerName == brokername ) and ( cfer.brokerVersion == version )
                              and ( cfer.classifierName == cfername ) ):
                             cferparams.add( cfer.classifierParams )
+                    cferparams = list(cferparams)
                     cferparams.sort()
                     for cferparam in cferparams:
                         for cfer in allcfers:
                             if ( ( cfer.brokerName == brokername ) and ( cfer.brokerVersion == version )
                              and ( cfer.classifierName == cfername )  and ( cfer.classifierParams == cferparam ) ):
-                                brokers[brokername][version][cfername][cferparam] = cfercount[ cfer.dbClassifierIndex ]
+                                brokers[brokername][version][cfername][cferparam] = cfercounts[cfer.dbClassifierIndex]
 
         context['brokers'] = brokers
         return HttpResponse( templ.render( context, request ) )
