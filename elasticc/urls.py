@@ -17,6 +17,10 @@ urlpatterns = [
     path('addobjecttruth', views.MaybeAddObjectTruth.as_view()),
 
     path('adminsummary', views.ElasticcAdminSummary.as_view()),
+    path('summary', views.ElasticcSummary.as_view()),
+
+    path('getalerts', views.GetAlerts.as_view()),
+    path('getalertsandtruth', views.GetAlertsAndTruth.as_view()),
     
     path('brokermessage/<int:info>/', views.BrokerMessageView.as_view(), name='brokermesssage-int'),
     path('brokermessage/<path:info>/', views.BrokerMessageView.as_view(), name='brokermessage-path'),

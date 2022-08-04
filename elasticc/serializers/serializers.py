@@ -23,7 +23,6 @@ class DiaTruthSerializer(serializers.ModelSerializer):
         model = DiaTruth
         exclude = [ 'id' ]
 
-
 class DiaAlertSerializer(serializers.BaseSerializer):
     def to_representation( self, alert ):
         srcserzer = DiaSourceSerializer( alert.diaSource )

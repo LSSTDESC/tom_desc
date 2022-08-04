@@ -7,6 +7,7 @@ import time
 import datetime
 import logging
 import django.db
+from django.db import transaction, connection
 import django.urls
 from django.http import HttpResponse, JsonResponse
 from django.template import loader
@@ -38,7 +39,8 @@ _formatter = logging.Formatter( f'[%(asctime)s - %(levelname)s] - %(message)s' )
 _logout.setFormatter( _formatter )
 _logger.propagate = False
 _logger.addHandler( _logout )
-_logger.setLevel( logging.INFO )
+# _logger.setLevel( logging.INFO )
+_logger.setLevel( logging.DEBUG )
 
 # ======================================================================
 # DJango REST interfaces
@@ -74,6 +76,8 @@ class DiaAlertViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = DiaAlert.objects.all()
     serializer_class = DiaAlertSerializer
     
+# ======================================================================
+# ======================================================================
 # ======================================================================
 # Interfaces for loading alerts into the database
 
@@ -338,6 +342,143 @@ class MaybeAddObjectTruth(PermissionRequiredMixin, django.views.View):
 
 
 # ======================================================================
+# ======================================================================
+# ======================================================================
+# API interfaces for getting stuff
+
+def get_alerts( offset, num, truth=False ):
+    with connection.cursor() as cursor:
+        cursor.execute( 'SELECT DISTINCT ON (a."alertId") a."alertId",o."diaObjectId",'
+                        's."diaSourceId",s."midPointTai",ps."diaSourceId" AS firstsource,'
+                        'ps."midPointTai" AS firstmjd FROM elasticc_diaalert a '
+                        'INNER JOIN elasticc_diaobject o ON a."diaObject_id"=o."diaObjectId" '
+                        'INNER JOIN elasticc_diasource s ON a."diaSource_id"=s."diaSourceId" '
+                        'INNER JOIN elasticc_diasource ps ON ps."diaObject_id"=o."diaObjectId" '
+                        'ORDER BY a."alertId",ps."midPointTai" LIMIT %(num)s OFFSET %(offset)s',
+                        { "num": num, "offset": offset } )
+        rows = cursor.fetchall()
+    # I wish there were a dict cursor
+    alertid_dex = 0
+    diaobjectid_dex = 1
+    diasourceid_dex = 2
+    midpointtai_dex = 3
+    firstsource_dex = 4
+    firstmjd_dex = 5
+    alerts = []
+    truthyness = []
+    objids = []
+    for row in rows:
+        alertobj = DiaAlert.objects.get( pk=row[alertid_dex] )
+        prvsources = ( DiaSource.objects
+                       .filter( diaObject_id=alertobj.diaObject.diaObjectId )
+                       .filter( midPointTai__lt=alertobj.diaSource.midPointTai ) )
+        prvforced = ( [] if alertobj.diaSource.midPointTai < row[firstmjd_dex] + 0.5
+                      else ( DiaForcedSource.objects
+                             .filter( diaObject_id=alertobj.diaObject.diaObjectId )
+                             .filter( midPointTai__gt=row[firstmjd_dex]-30 )
+                             .filter( midPointTai__lt=alertobj.diaSource.midPointTai ) ) )
+        alert = { 'alertId': alertobj.alertId,
+                  'diaSource': alertobj.diaSource.to_dict(),
+                  'prvDiaSources': [ s.to_dict() for s in prvsources ],
+                  'prvDiaForcedSources': [ s.to_dict() for s in prvforced ],
+                  'prvDiaNondetectionLimits': None,
+                  'diaObject': alertobj.diaObject.to_dict(),
+                  'cutoutDifference': None,
+                  'cutoutTemplate': None }
+        if ( alertobj.diaSource.midPointTai >= row[firstmjd_dex] + 0.5 ):
+            alert['prvDiaForcedSources'] = list( 
+            )
+        alerts.append( alert )
+        if alertobj.diaObject.diaObjectId not in objids:
+            objids.append( alertobj.diaObject.diaObjectId )
+        if truth:
+            # _logger.info( f"About to try to get DiaTruth pk {alertobj.diaSource.diaSourceId}" )
+            truthobj = DiaTruth.objects.get( pk=alertobj.diaSource.diaSourceId )
+            truthyness.append( truthobj.to_dict() )
+
+    objtruth = {}
+    if truth:
+        for objid in objids:
+            objtruthobj = DiaObjectTruth.objects.get( pk=objid )
+            objtruth[ objid ] = objtruthobj.to_dict()
+
+    return alerts, truthyness, objtruth
+
+class GetAlerts(LoginRequiredMixin, django.views.View):
+    def get( self, request, *args, **kwargs ):
+        return self.post( request, *args, **kwargs )
+
+    def post( self, request, *args, **kwargs ):
+        try:
+            data = json.loads( request.body )
+            # TODO : specific alertid
+            offset = int( data['offset'] )
+            num = int( data['num'] )
+            totnum = DiaAlert.objects.count()
+            if offset > totnum:
+                return JsonResponse( { 'status': 'ok',
+                                       'offset': offset,
+                                       'num': 0,
+                                       'totnum': totnum,
+                                       'alerts': [] } )
+
+            alerts, junk, morejunk = get_alerts( offset, num, False )
+            return JsonResponse( { 'status': 'ok',
+                                   'offset': offset,
+                                   'num': len(alerts),
+                                   'totnum': totnum,
+                                   'alerts': alerts } )
+            
+        except Exception as e:
+            strstream = io.StringIO()
+            traceback.print_exc( file=strstream )
+            resp = { 'status': 'error',
+                     'message': 'Exception in GetAlerts',
+                     'exception': str(e),
+                     'traceback': strstream.getvalue() }
+            strstream.close()
+            return JsonResponse( resp )
+
+class GetAlertsAndTruth(LoginRequiredMixin, django.views.View):
+    def get( self, request, *args, **kwargs ):
+        return self.post( request, *args, **kwargs )
+
+    def post( self, request, *args, **kwargs ):
+        try:
+            data = json.loads( request.body )
+            # TODO : specific alertid
+            offset = int( data['offset'] )
+            num = int( data['num'] )
+            totnum = DiaAlert.objects.count()
+            if offset > totnum:
+                return JsonResponse( { 'status': 'ok',
+                                       'offset': offset,
+                                       'num': 0,
+                                       'totnum': totnum,
+                                       'alerts': [],
+                                       'truth': [],
+                                       'objecttruth': {} } )
+
+            alerts, truth, objecttruth = get_alerts( offset, num, True )
+            return JsonResponse( { 'status': 'ok',
+                                   'offset': offset,
+                                   'num': len(alerts),
+                                   'totnum': totnum,
+                                   'alerts': alerts,
+                                   'truth': truth,
+                                   'objecttruth': objecttruth } )
+            
+        except Exception as e:
+            strstream = io.StringIO()
+            traceback.print_exc( file=strstream )
+            resp = { 'status': 'error',
+                     'message': 'Exception in GetAlerts',
+                     'exception': str(e),
+                     'traceback': strstream.getvalue() }
+            strstream.close()
+            return JsonResponse( resp )
+
+# ======================================================================
 # A REST interface (but not using the Django REST framework) for
 # viewing and posting broker messages.  Posting broker messages
 # (via the PUT method) requires the elasticc.elasticc_broker
@@ -445,66 +586,28 @@ class BrokerMessageView(PermissionRequiredMixin, django.views.View):
         
     def put( self, request, *args, **kwargs ):
         data = json.loads( request.body )
+        if not isinstance( data, list ):
+            data = [ data ]
+        messageinfo = []
+        # Reformulate the data array into what BrokerMessage.load_batch is expecting
+        for datum in data:
+            datum['timestamp'] = datetime.datetime.now( tz=datetime.timezone.utc )
+            datum['elasticcPublishTimestamp'] = datetime.datetime.fromtimestamp( datum['elasticcPublishTimestamp']
+                                                                                 / 1000,
+                                                                                 tz=datetime.timezone.utc )
+            datum['brokerIngestTimestamp'] = datetime.datetime.fromtimestamp( datum['brokerIngestTimestamp']
+                                                                              / 1000,
+                                                                              tz=datetime.timezone.utc )
+            messageinfo.append( { 'topic': 'REST_push',
+                                  'msgoffset': -1,
+                                  'msg': datum } )
+            
 
-        # Make the BrokerMessage object
-        # This could lead to duplication; if the same classification
-        # is sent more than once from a broker, it will get saved multiple
-        # times.
-        msgobj = BrokerMessage(
-            alertId = data['alertId'],
-            diaSourceId = data['diaSourceId'],
-            # Note: an IEEE double can hold ~16 digits of precision
-            # Given that it's ~10⁹ seconds since the Epoch now, the
-            # IEEE double should be able to hold the number of microseconds
-            # with integrity.  So, just divide by 1e6 to go from number of
-            # microseconds to POSIX timestamp.
-            elasticcPublishTimestamp = datetime.datetime.fromtimestamp( data['elasticcPublishTimestamp']/1e6,
-                                                                        tz=datetime.timezone.utc ),
-            brokerIngestTimestamp = datetime.datetime.fromtimestamp( data['brokerIngestTimestamp']/1e6,
-                                                                     tz=datetime.timezone.utc )
-        )
-        msgobj.save()
+        addedmsgs = BrokerMessage.load_batch( messageinfo, logger=_logger )
 
-
-        # Next, dig in, and make sure we know all the BrokerClassifier things
-        broker_name = data['brokerName']
-        broker_version = data['brokerVersion']
-        classifiers = {}
-        for classification in data['classifications']:
-            # There's the _possibility_ of confusion here, but I'm going to write
-            #  it off as not very likely.
-            # (The ghost of Bobby Tables will haunt me forever.)
-            cferkey = f'Name: {classification["classifierName"]} Params: {classification["classifierParams"]}'
-            if cferkey in classifiers.keys():
-                continue
-            curcfers = BrokerClassifier.objects.all().filter(
-                brokerName = broker_name,
-                brokerVersion = broker_version,
-                classifierName = classification['classifierName'],
-                classifierParams = classification['classifierParams'] )
-            if len(curcfers) > 0:
-                cfer = curcfers[0]
-            else:
-                cfer = BrokerClassifier(
-                    brokerName = broker_name,
-                    brokerVersion = broker_version,
-                    classifierName = classification['classifierName'],
-                    classifierParams = classification['classifierParams'] )
-                cfer.save()
-            classifiers[cferkey] = cfer
-
-        # Now, save all the classifications
-        for classification in data['classifications']:
-            cfer = classifiers[f'Name: {classification["classifierName"]} '
-                               f'Params: {classification["classifierParams"]}']
-            cfication = BrokerClassification(
-                dbMessage = msgobj,
-                dbClassifier = cfer,
-                classId = classification['classId'],
-                probability = classification['probability'] )
-            cfication.save()
-
-        resp = JsonResponse( { 'dbMessageIndex': msgobj.dbMessageIndex }, status=201 )
+        dex = addedmsgs[0].dbMessageIndex if len(addedmsgs) > 0 else -1
+        resp = JsonResponse( { 'dbMessageIndex': dex,
+                               'num_loaded': len(addedmsgs) }, status=201 )
         # I really wish there were a django function for this, as I'm not sure that
         # my string replace will always do the right thing.  What I'm after is the
         # url of the current view, but without any parameters passed
@@ -513,6 +616,75 @@ class BrokerMessageView(PermissionRequiredMixin, django.views.View):
         if loc[-1] != "/":
             loc += "/"
         resp.headers['Location'] =  f'{loc}{msgobj.dbMessageIndex}'
+
+
+        # # Make the BrokerMessage object
+        # # This could lead to duplication; if the same classification
+        # # is sent more than once from a broker, it will get saved multiple
+        # # times.
+        # msgobj = BrokerMessage(
+        #     alertId = data['alertId'],
+        #     diaSourceId = data['diaSourceId'],
+        #     # Note: an IEEE double can hold ~16 digits of precision
+        #     # Given that it's ~10⁹ seconds since the Epoch now, the
+        #     # IEEE double should be able to hold the number of microseconds
+        #     # with integrity.  So, just divide by 1e6 to go from number of
+        #     # microseconds to POSIX timestamp.
+        #     elasticcPublishTimestamp = datetime.datetime.fromtimestamp( data['elasticcPublishTimestamp']/1e6,
+        #                                                                 tz=datetime.timezone.utc ),
+        #     brokerIngestTimestamp = datetime.datetime.fromtimestamp( data['brokerIngestTimestamp']/1e6,
+        #                                                              tz=datetime.timezone.utc )
+        # )
+        # msgobj.save()
+
+
+        # # Next, dig in, and make sure we know all the BrokerClassifier things
+        # broker_name = data['brokerName']
+        # broker_version = data['brokerVersion']
+        # classifiers = {}
+        # for classification in data['classifications']:
+        #     # There's the _possibility_ of confusion here, but I'm going to write
+        #     #  it off as not very likely.
+        #     # (The ghost of Bobby Tables will haunt me forever.)
+        #     cferkey = f'Name: {classification["classifierName"]} Params: {classification["classifierParams"]}'
+        #     if cferkey in classifiers.keys():
+        #         continue
+        #     curcfers = BrokerClassifier.objects.all().filter(
+        #         brokerName = broker_name,
+        #         brokerVersion = broker_version,
+        #         classifierName = classification['classifierName'],
+        #         classifierParams = classification['classifierParams'] )
+        #     if len(curcfers) > 0:
+        #         cfer = curcfers[0]
+        #     else:
+        #         cfer = BrokerClassifier(
+        #             brokerName = broker_name,
+        #             brokerVersion = broker_version,
+        #             classifierName = classification['classifierName'],
+        #             classifierParams = classification['classifierParams'] )
+        #         cfer.save()
+        #     classifiers[cferkey] = cfer
+
+        # # Now, save all the classifications
+        # for classification in data['classifications']:
+        #     cfer = classifiers[f'Name: {classification["classifierName"]} '
+        #                        f'Params: {classification["classifierParams"]}']
+        #     cfication = BrokerClassification(
+        #         dbMessage = msgobj,
+        #         dbClassifier = cfer,
+        #         classId = classification['classId'],
+        #         probability = classification['probability'] )
+        #     cfication.save()
+
+        # resp = JsonResponse( { 'dbMessageIndex': msgobj.dbMessageIndex }, status=201 )
+        # # I really wish there were a django function for this, as I'm not sure that
+        # # my string replace will always do the right thing.  What I'm after is the
+        # # url of the current view, but without any parameters passed
+        # fullpath = request.build_absolute_uri()
+        # loc = re.sub( '\?.*$', '', fullpath )
+        # if loc[-1] != "/":
+        #     loc += "/"
+        # resp.headers['Location'] =  f'{loc}{msgobj.dbMessageIndex}'
 
         return resp
 
@@ -537,8 +709,57 @@ class ElasticcSummary( LoginRequiredMixin, django.views.View ):
         return self.post( request, info )
 
     def post( self, request, info=None ):
-        pass
+        templ = loader.get_template( "elasticc/summary.html" )
+        context = { 'tabcounts': [] }
 
+        for tab in [ DiaAlert, DiaObject, DiaSource, DiaForcedSource ]:
+            context['tabcounts'].append( { 'name': tab.__name__,
+                                           'count': tab.objects.count() } )
+
+        # There is probably a way less cumbersome way of doing this
+        allcfers = BrokerClassifier.objects.all()
+        brokernames = set()
+        cfercounts = {}
+        for cfer in allcfers:
+            brokernames.add( cfer.brokerName )
+            cfercounts[cfer.dbClassifierIndex] = ( BrokerClassification.objects
+                                                   .filter( dbClassifier_id=cfer.dbClassifierIndex ).count() )
+        brokernames = list( brokernames )
+        brokernames.sort()
+        brokers = {}
+        for brokername in brokernames:
+            brokers[brokername] = {}
+            versions = set()
+            for cfer in allcfers:
+                if ( cfer.brokerName == brokername ):
+                    versions.add( cfer.brokerVersion )
+            versions = list( versions )
+            versions.sort()
+            for version in versions:
+                brokers[brokername][version] = {}
+                cfernames = set()
+                for cfer in allcfers:
+                    if ( cfer.brokerName == brokername ) and ( cfer.brokerVersion == version ):
+                        cfernames.add( cfer.classifierName )
+                cfernames = list( cfernames )
+                cfernames.sort()
+                for cfername in cfernames:
+                    brokers[brokername][version][cfername] = {}
+                    cferparams = set()
+                    for cfer in allcfers:
+                        if ( ( cfer.brokerName == brokername ) and ( cfer.brokerVersion == version )
+                             and ( cfer.classifierName == cfername ) ):
+                            cferparams.add( cfer.classifierParams )
+                    cferparams.sort()
+                    for cferparam in cferparams:
+                        for cfer in allcfers:
+                            if ( ( cfer.brokerName == brokername ) and ( cfer.brokerVersion == version )
+                             and ( cfer.classifierName == cfername )  and ( cfer.classifierParams == cferparam ) ):
+                                brokers[brokername][version][cfername][cferparam] = cfercount[ cfer.dbClassifierIndex ]
+
+        context['brokers'] = brokers
+        return HttpResponse( templ.render( context, request ) )
+                                
 # ======================================================================
     
 class ElasticcAdminSummary( PermissionRequiredMixin, django.views.View ):

@@ -39,6 +39,12 @@ class Createable(models.Model):
     class Meta:
         abstract = True
 
+    def to_dict( self ):
+        selfdict = {}
+        for key in self._dict_kws:
+            selfdict[key] = getattr( self, key )
+        return selfdict
+                
     @classmethod
     def create( cls, data ):
         kwargs = {}
@@ -63,6 +69,15 @@ class Createable(models.Model):
         q = cls.objects.filter( pk__in=pks )
         return [ getattr(i, i._pk) for i in q ]
 
+    # NOTE -- this version returns all the objects that were
+    #   either loaded or created.  I've got other classes that
+    #   have their own "bulk_load_or_create" that don't return
+    #   the objects, and that use the database unique checks
+    #   to avoid duplication.  I should think about merging
+    #   them.
+    # This one only detects existing objects based on the
+    #   primary key, which is *not enough* for some of the
+    #   other things I'm missing.
     @classmethod
     def bulk_load_or_create( cls, data ):
         """Pass an array of dicts."""
@@ -164,6 +179,7 @@ class DiaObject(Createable):
     hostgal2_zphot_q080 = models.FloatField( null=True )
     hostgal2_zphot_q090 = models.FloatField( null=True )
     hostgal2_zphot_q100 = models.FloatField( null=True )
+    hostgal2_zphot_p50 = models.FloatField( null=True )
     hostgal2_mag_u = models.FloatField( null=True )
     hostgal2_mag_g = models.FloatField( null=True )
     hostgal2_mag_r = models.FloatField( null=True )
@@ -187,7 +203,7 @@ class DiaObject(Createable):
         ]
 
     _pk = 'diaObjectId'
-    _create_kws = [ 'diaObjectId', 'ra', 'decl', 'mwebv', 'mwebv_err', 'z_final', 'z_final_err' ]
+    _create_kws = [ 'diaObjectId', 'simVersion', 'ra', 'decl', 'mwebv', 'mwebv_err', 'z_final', 'z_final_err' ]
     for _gal in [ "", "2" ]:
         _create_kws.append( f'hostgal{_gal}_zspec' )
         _create_kws.append( f'hostgal{_gal}_zspec_err' )
@@ -198,12 +214,14 @@ class DiaObject(Createable):
         _create_kws.append( f'hostgal{_gal}_snsep' )
         _create_kws.append( f'hostgal{_gal}_ellipticity' )
         _create_kws.append( f'hostgal{_gal}_sqradius' )
+        _create_kws.append( f'hostgal{_gal}_zphot_p50' )
         for _phot in [ 'q000', 'q010', 'q020', 'q030', 'q040', 'q050', 'q060', 'q070', 'q080', 'q090', 'q100' ]:
             _create_kws.append( f'hostgal{_gal}_zphot_{_phot}' )
         for _band in [ 'u', 'g', 'r', 'i', 'z', 'Y' ]:
             for _err in [ '', 'err' ]:
                 _create_kws.append( f'hostgal{_gal}_mag{_err}_{_band}' )
-    
+
+    _dict_kws = _create_kws
 
 class DiaSource(Createable):
     diaSourceId = models.BigIntegerField( primary_key=True, unique=True, db_index=True )
@@ -211,7 +229,7 @@ class DiaSource(Createable):
     diaObject = models.ForeignKey( DiaObject, on_delete=models.CASCADE, null=True )
     # I'm not using a foreign key for parentDiaSource to allow things to be loaded out of order
     parentDiaSourceId = models.BigIntegerField( null=True )
-    midPointTai = models.FloatField()
+    midPointTai = models.FloatField( db_index=True )
     filterName = models.TextField()
     ra = models.FloatField( )
     decl = models.FloatField( )
@@ -229,12 +247,13 @@ class DiaSource(Createable):
     _pk = 'diaSourceId'
     _create_kws = [ 'diaSourceId', 'ccdVisitId', 'diaObject', 'parentDiaSourceId',
                     'midPointTai', 'filterName', 'ra', 'decl', 'psFlux', 'psFluxErr', 'snr', 'nobs' ]
+    _dict_kws = [ 'diaObject_id' if i == 'diaObject' else i for i in _create_kws ]
     
 class DiaForcedSource(Createable):
     diaForcedSourceId = models.BigIntegerField( primary_key=True, unique=True, db_index=True )
     ccdVisitId = models.BigIntegerField( )
     diaObject = models.ForeignKey( DiaObject, on_delete=models.CASCADE )
-    midPointTai = models.FloatField()
+    midPointTai = models.FloatField( db_index=True )
     filterName = models.TextField()
     psFlux = models.FloatField()
     psFluxErr = models.FloatField()
@@ -244,6 +263,7 @@ class DiaForcedSource(Createable):
     _pk = 'diaForcedSourceId'
     _create_kws = [ 'diaForcedSourceId', 'ccdVisitId', 'diaObject',
                     'midPointTai', 'filterName', 'psFlux', 'psFluxErr', 'totFlux', 'totFluxErr' ]
+    _dict_kws = [ 'diaObject_id' if i == 'diaObject' else i for i in _create_kws ]
     
 class DiaAlert(Createable):
     alertId = models.BigIntegerField( primary_key=True, unique=True, db_index=True )
@@ -254,6 +274,7 @@ class DiaAlert(Createable):
 
     _pk = 'alertId'
     _create_kws = [ 'alertId', 'diaSource', 'diaObject' ]
+    _dict_kws = [ 'alertId', 'diaSource_id', 'diaObject_id' ]
     
 # Perhaps I should be using django ManyToMany here?
 # I do this manually because it mapps directly to
@@ -272,22 +293,6 @@ class DiaAlertPrvSource(models.Model):
     
     @classmethod
     def bulk_load_or_create( cls, data ):
-        # searchkeys = [ f"{i['diaAlert_id']} {i['diaSource_id']}" for i in data ]
-        # queryset = cls.objects.annotate( srch=models.functions.Concat( 'diaAlert_id',
-        #                                                                models.Value(' '),
-        #                                                                'diaSource_id',
-        #                                                                output_field=models.TextField() ) )
-        # curobjs = list( queryset.filter( srch__in=searchkeys  ) )
-        # exists = set( [ f"{c.diaAlert_id} {c.diaSource_id}" for c in curobjs ] )
-        # newobjs = []
-        # for newdata in data:
-        #     if f"{newdata['diaAlert_id']} {newdata['diaSource_id']}" in exists:
-        #         continue
-        #     newobjs.append( cls(**newdata) )
-        # if len(newobjs) > 0:
-        #     addedobjs = cls.objects.bulk_create( newobjs )
-        #     curobjs.extend( addedobjs )
-        # return curobjs
         objs = []
         for newdata in data:
             objs.append( cls(**newdata) )
@@ -340,6 +345,14 @@ class DiaTruth(models.Model):
     # I'm not making DiaTruth a subclass of Creatable here because the data coming
     #   in doesn't have the right keywords, and because I need to do some custom
     #   checks for existence of stuff in other tables.
+
+    def to_dict( self ):
+        return { 'diaSourceId': self.diaSourceId,
+                 'diaObjectId': self.diaObjectId,
+                 'mjd': self.mjd,
+                 'detect': self.detect,
+                 'true_gentype': self.true_gentype,
+                 'true_genmag': self.true_genmag }
     
     @staticmethod
     def create( data ):
@@ -448,7 +461,8 @@ class DiaObjectTruth(Createable):
                     'mjd_detect_first', 'mjd_detect_last', 'dtseason_peak', 'peakmag_u', 'peakmag_g',
                     'peakmag_r', 'peakmag_i', 'peakmag_z', 'peakmag_Y', 'snrmax', 'snrmax2', 'snrmax3',
                     'nobs', 'nobs_saturate' ]
-
+    _dict_kws = _create_kws
+    
     # This is a little bit ugly.  For my own dubious reasons, I wanted
     # to be able to pass in things with diaObject_id that weren't
     # actually in the database (to save myself some pain on the other
@@ -552,8 +566,8 @@ class BrokerMessage(models.Model):
             'diaSourceId': self.diaSourceId,
             'msgHdrTimestamp': self.msgHdrTimestamp.isoformat(),
             'descIngestTimestamp': self.descIngestTimestamp.isoformat(),
-            'elasticcPublishTimestamp': int( self.elasticcPublishTimestamp.timestamp() * 1e6 ),
-            'brokerIngestTimestamp': int( self.brokerIngestTimestamp.timestamp() * 1e6 ),
+            'elasticcPublishTimestamp': int( self.elasticcPublishTimestamp.timestamp() * 1e3 ),
+            'brokerIngestTimestamp': int( self.brokerIngestTimestamp.timestamp() * 1e3 ),
             'brokerName': "<unknown>",
             'brokerVersion': "<unknown>",
             'classifications': []
@@ -603,6 +617,7 @@ class BrokerMessage(models.Model):
         kwargses = []
         utc = pytz.timezone( "UTC" )
         for msg in messages:
+            logger.debug( f"Gonna try to load {msg}" ) 
             timestamp = msg['timestamp']
             if len( msg['msg']['classifications'] ) == 0:
                 logger.debug( "Message with no classifications" )
@@ -641,6 +656,8 @@ class BrokerMessage(models.Model):
             for addedmsg in addedmsgs:
                 keymess = f"{addedmsg.streamMessageId}_{addedmsg.topicName}_{addedmsg.alertId}"
                 messageobjects[ keymess ] = addedmsg
+        else:
+            addedmsgs = []
 
         # Figure out which classifiers already exist.
         # I need to figure out if there's a way to tell Django
@@ -723,7 +740,8 @@ class BrokerMessage(models.Model):
         batch = list( itertools.islice( objs, len(kwargses) ) )
         newcfications = BrokerClassification.objects.bulk_create( batch, len(kwargses) )
 
-        return len(newcfications)
+        # return newcfications
+        return list( addedmsgs )
         
 class BrokerClassifier(models.Model):
     """Model for a classifier producing an ELAsTiCC broker classification."""

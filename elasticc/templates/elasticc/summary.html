@@ -1,0 +1,37 @@
+{% extends 'tom_common/base.html' %}
+{% load static %}
+{% block title %}
+ELAsTiCC Summary Summary
+{% endblock %}
+{% block additional_css %}
+<link rel="stylesheet" href="{% static 'elasticc/elasticc.css' %}">
+{% endblock %}
+{% block content %}
+<h2>ELAsTiCC Summary</h2>
+
+<h3>Objects, Sources, and Alerts</h3>
+
+<table class="elasticc_table1">
+  <tr><th>Table</th><th># Rows</th></tr>
+  {% for row in tabcounts %}
+  <tr><td>{{ row.name }}</td><td> {{row.count}} </td></tr>
+  {% endfor %}
+</table>
+
+
+<h3>Brokers and Classifiers</h3>
+<table class="elasticc_table1">
+  <tr><th>Broker</th><th>Version</th><th>Classifier</th><th>Params</th><th>N. Classifications</th></tr>
+  {% for broker,versions in brokers.items %}
+    {% for version,classifiers in versions.items %}
+      {% for classifer,paramses in classifiers.items %}
+        {% for params,n in paramses.items %}
+  <tr><td>{{ broker }}</td><td>{{ version }}</td><td>{{ classifier }}</td>
+    <td>{{ params }}</td><td>{{ n }}</td></tr>
+        {% endfor %}
+      {% endfor %}
+    {% endfor %}
+  {% endfor %}
+</table>
+
+{% endblock %}
