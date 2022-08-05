@@ -32,11 +32,17 @@ def main():
         # I haven't found clean documentation on how to log into a django site
         # from an app like this using standard authentication stuff.  So, for
         # now, I'm counting on the HTML that happened to come back when
-        # I ran it with a failed login one time.
+        # I ran it with a failed login one time.  One of these days I'll actually
+        # figure out how Django auth works and make a version of /accounts/login/
+        # designed for use in API scripts like this one, rather than desgined
+        # for interactive users.
         raise RuntimeError( "Failed to log in.  I think.  Put in a debug break and look at res.text" )
     rqs.headers.update( { 'X-CSRFToken': rqs.cookies['csrftoken'] } )
 
-    # Next, send your query, passing the csrfheader with each request
+    # Next, send your query, passing the csrfheader with each request.
+    # (The rqs.headers.update call above makes that happen if you just
+    # keep using the rqs object.)
+    #
     # You send the query as a json-encoded dictionary with two fields:
     #   'query' : the SQL query, with %(name)s for things that should
     #                be substituted.  (This is standard psycopg2.)
@@ -45,15 +51,18 @@ def main():
     # The backend is to this web API call is readonly, so you can't
     # bobby tables this.  However, this does give you the freedom to
     # read anything from the tables if you know the schema.
+    #
+    # At some point in the near future, elasticc truth tables will be restricted
+    # to elasticc admins.
+    #
     # (Some relevant schema are at the bottom.)
     
     # Note that I have to double-quote the column name beacuse otherwise
     #  Postgres converts things to lc for some reason or another.
     query = 'SELECT * FROM elasticc_diasource WHERE "diaObject_id"=%(id)s ORDER BY "midPointTai"'
-    subdict = { "id": 1000221 }
+    subdict = { "id": 10208128  }
     result = rqs.post( f'{url}/db/runsqlquery/',
                        json={ 'query': query, 'subdict': subdict } )
-
 
     # Look at the response.  It will be a JSON encoded dict with two fields:
     #  { 'status': 'ok',
@@ -81,7 +90,7 @@ if __name__ == "__main__":
 
 
 # ======================================================================
-# elasticc tables as of 2022-06-17
+# elasticc tables as of 2022-08-05
 #
 # The order of the columns is what happens to be in the database, as a
 # result of the specific history of django databse migrations.  It's not
@@ -105,7 +114,6 @@ if __name__ == "__main__":
 # Referenced by:
 #     TABLE "elasticc_diaalertprvsource" CONSTRAINT "elasticc_diaalertprv_diaAlert_id_68c18d04_fk_elasticc_" FOREIGN KEY ("diaAlert_id") REFERENCES elasticc_diaalert("alertId") DEFERRABLE INITIALLY DEFERRED
 #     TABLE "elasticc_diaalertprvforcedsource" CONSTRAINT "elasticc_diaalertprv_diaAlert_id_ddb308dc_fk_elasticc_" FOREIGN KEY ("diaAlert_id") REFERENCES elasticc_diaalert("alertId") DEFERRABLE INITIALLY DEFERRED
-# 
 # 
 #                     Table "public.elasticc_diaobject"
 #         Column        |       Type       | Collation | Nullable | Default 
@@ -158,6 +166,18 @@ if __name__ == "__main__":
 #  hostgal2_zphot_q060  | double precision |           |          | 
 #  hostgal2_zphot_q070  | double precision |           |          | 
 #  hostgal2_zphot_q080  | double precision |           |          | 
+#  hostgal2_ellipticity | double precision |           |          | 
+#  hostgal2_sqradius    | double precision |           |          | 
+#  hostgal2_zphot       | double precision |           |          | 
+#  hostgal2_zphot_err   | double precision |           |          | 
+#  hostgal2_zphot_q010  | double precision |           |          | 
+#  hostgal2_zphot_q020  | double precision |           |          | 
+#  hostgal2_zphot_q030  | double precision |           |          | 
+#  hostgal2_zphot_q040  | double precision |           |          | 
+#  hostgal2_zphot_q050  | double precision |           |          | 
+#  hostgal2_zphot_q060  | double precision |           |          | 
+#  hostgal2_zphot_q070  | double precision |           |          | 
+#  hostgal2_zphot_q080  | double precision |           |          | 
 #  hostgal2_zphot_q090  | double precision |           |          | 
 #  hostgal2_zphot_q100  | double precision |           |          | 
 #  hostgal2_mag_u       | double precision |           |          | 
@@ -183,14 +203,15 @@ if __name__ == "__main__":
 #  hostgal_zphot_err    | double precision |           |          | 
 #  hostgal_zphot_p50    | double precision |           |          | 
 #  hostgal_zphot_q000   | double precision |           |          | 
+#  hostgal2_zphot_p50   | double precision |           |          | 
 # Indexes:
 #     "elasticc_diaobject_pkey" PRIMARY KEY, btree ("diaObjectId")
 #     "idx_elasticc_diaobject_q3c" btree (q3c_ang2ipix(ra, decl))
 # Referenced by:
 #     TABLE "elasticc_diaalert" CONSTRAINT "elasticc_diaalert_diaObject_id_809a8089_fk_elasticc_" FOREIGN KEY ("diaObject_id") REFERENCES elasticc_diaobject("diaObjectId") DEFERRABLE INITIALLY DEFERRED
 #     TABLE "elasticc_diaforcedsource" CONSTRAINT "elasticc_diaforcedso_diaObject_id_8b1bc498_fk_elasticc_" FOREIGN KEY ("diaObject_id") REFERENCES elasticc_diaobject("diaObjectId") DEFERRABLE INITIALLY DEFERRED
+#     TABLE "elasticc_diaobjecttruth" CONSTRAINT "elasticc_diaobjecttr_diaObject_id_b5103ef2_fk_elasticc_" FOREIGN KEY ("diaObject_id") REFERENCES elasticc_diaobject("diaObjectId") DEFERRABLE INITIALLY DEFERRED
 #     TABLE "elasticc_diasource" CONSTRAINT "elasticc_diasource_diaObject_id_3b88bc59_fk_elasticc_" FOREIGN KEY ("diaObject_id") REFERENCES elasticc_diaobject("diaObjectId") DEFERRABLE INITIALLY DEFERRED
-# 
 # 
 #                    Table "public.elasticc_diasource"
 #       Column       |       Type       | Collation | Nullable | Default 
@@ -206,9 +227,17 @@ if __name__ == "__main__":
 #  psFluxErr         | double precision |           | not null | 
 #  snr               | double precision |           | not null | 
 #  nobs              | double precision |           |          | 
-# 
-# 
-# 
+#  diaObject_id      | bigint           |           |          | 
+# Indexes:
+#     "elasticc_diasource_pkey" PRIMARY KEY, btree ("diaSourceId")
+#     "elasticc_diasource_diaObject_id_3b88bc59" btree ("diaObject_id")
+#     "elasticc_diasource_midPointTai_5766b47f" btree ("midPointTai")
+#     "idx_elasticc_diasource_q3c" btree (q3c_ang2ipix(ra, decl))
+# Foreign-key constraints:
+#     "elasticc_diasource_diaObject_id_3b88bc59_fk_elasticc_" FOREIGN KEY ("diaObject_id") REFERENCES elasticc_diaobject("diaObjectId") DEFERRABLE INITIALLY DEFERRED
+# Referenced by:
+#     TABLE "elasticc_diaalert" CONSTRAINT "elasticc_diaalert_diaSource_id_1f178060_fk_elasticc_" FOREIGN KEY ("diaSource_id") REFERENCES elasticc_diasource("diaSourceId") DEFERRABLE INITIALLY DEFERRED
+#     TABLE "elasticc_diaalertprvsource" CONSTRAINT "elasticc_diaalertprv_diaSource_id_91fa84a3_fk_elasticc_" FOREIGN KEY ("diaSource_id") REFERENCES elasticc_diasource("diaSourceId") DEFERRABLE INITIALLY DEFERRED
 # 
 #                 Table "public.elasticc_diaforcedsource"
 #       Column       |       Type       | Collation | Nullable | Default 
@@ -225,41 +254,11 @@ if __name__ == "__main__":
 # Indexes:
 #     "elasticc_diaforcedsource_pkey" PRIMARY KEY, btree ("diaForcedSourceId")
 #     "elasticc_diaforcedsource_diaObject_id_8b1bc498" btree ("diaObject_id")
+#     "elasticc_diaforcedsource_midPointTai_a80b03af" btree ("midPointTai")
 # Foreign-key constraints:
 #     "elasticc_diaforcedso_diaObject_id_8b1bc498_fk_elasticc_" FOREIGN KEY ("diaObject_id") REFERENCES elasticc_diaobject("diaObjectId") DEFERRABLE INITIALLY DEFERRED
 # Referenced by:
 #     TABLE "elasticc_diaalertprvforcedsource" CONSTRAINT "elasticc_diaalertprv_diaForcedSource_id_783ade34_fk_elasticc_" FOREIGN KEY ("diaForcedSource_id") REFERENCES elasticc_diaforcedsource("diaForcedSourceId") DEFERRABLE INITIALLY DEFERRED
-# 
-# 
-#                                Table "public.elasticc_diaalertprvsource"
-#     Column    |  Type  | Collation | Nullable |                        Default                         
-# --------------+--------+-----------+----------+--------------------------------------------------------
-#  id           | bigint |           | not null | nextval('elasticc_diaalertprvsource_id_seq'::regclass)
-#  diaAlert_id  | bigint |           |          | 
-#  diaSource_id | bigint |           |          | 
-# Indexes:
-#     "elasticc_diaalertprvsource_pkey" PRIMARY KEY, btree (id)
-#     "elasticc_diaalertprvsource_diaAlert_id_68c18d04" btree ("diaAlert_id")
-#     "elasticc_diaalertprvsource_diaSource_id_91fa84a3" btree ("diaSource_id")
-# Foreign-key constraints:
-#     "elasticc_diaalertprv_diaAlert_id_68c18d04_fk_elasticc_" FOREIGN KEY ("diaAlert_id") REFERENCES elasticc_diaalert("alertId") DEFERRABLE INITIALLY DEFERRED
-#     "elasticc_diaalertprv_diaSource_id_91fa84a3_fk_elasticc_" FOREIGN KEY ("diaSource_id") REFERENCES elasticc_diasource("diaSourceId") DEFERRABLE INITIALLY DEFERRED
-# 
-# 
-#                                   Table "public.elasticc_diaalertprvforcedsource"
-#        Column       |  Type  | Collation | Nullable |                           Default                            
-# --------------------+--------+-----------+----------+--------------------------------------------------------------
-#  id                 | bigint |           | not null | nextval('elasticc_diaalertprvforcedsource_id_seq'::regclass)
-#  diaAlert_id        | bigint |           |          | 
-#  diaForcedSource_id | bigint |           |          | 
-# Indexes:
-#     "elasticc_diaalertprvforcedsource_pkey" PRIMARY KEY, btree (id)
-#     "elasticc_diaalertprvforcedsource_diaAlert_id_ddb308dc" btree ("diaAlert_id")
-#     "elasticc_diaalertprvforcedsource_diaForcedSource_id_783ade34" btree ("diaForcedSource_id")
-# Foreign-key constraints:
-#     "elasticc_diaalertprv_diaAlert_id_ddb308dc_fk_elasticc_" FOREIGN KEY ("diaAlert_id") REFERENCES elasticc_diaalert("alertId") DEFERRABLE INITIALLY DEFERRED
-#     "elasticc_diaalertprv_diaForcedSource_id_783ade34_fk_elasticc_" FOREIGN KEY ("diaForcedSource_id") REFERENCES elasticc_diaforcedsource("diaForcedSourceId") DEFERRABLE INITIALLY DEFERRED
-# 
 # 
 #                  Table "public.elasticc_diatruth"
 #     Column    |       Type       | Collation | Nullable | Default 
@@ -270,12 +269,10 @@ if __name__ == "__main__":
 #  true_gentype | integer          |           |          | 
 #  true_genmag  | double precision |           |          | 
 #  mjd          | double precision |           |          | 
-#
 # Indexes:
 #     "elasticc_diatruth_diaSourceId_648273bb_pk" PRIMARY KEY, btree ("diaSourceId")
 #     "elasticc_diatruth_diaObjectId_7dd96889" btree ("diaObjectId")
 #     "elasticc_diatruth_diaSourceId_648273bb_uniq" UNIQUE CONSTRAINT, btree ("diaSourceId")
-# 
 # 
 #                  Table "public.elasticc_diaobjecttruth"
 #        Column       |       Type       | Collation | Nullable | Default 
@@ -314,12 +311,27 @@ if __name__ == "__main__":
 #  snrmax3            | double precision |           | not null | 
 #  nobs               | integer          |           | not null | 
 #  nobs_saturate      | integer          |           | not null | 
-#  diaObjectId        | bigint           |           | not null | 
+#  diaObject_id       | bigint           |           | not null | 
 # Indexes:
-#     "elasticc_diaobjecttruth_diaObjectId_16c6d728_pk" PRIMARY KEY, btree ("diaObjectId")
-#     "elasticc_diaobjecttruth_diaObjectId_16c6d728_uniq" UNIQUE CONSTRAINT, btree ("diaObjectId")
+#     "elasticc_diaobjecttruth_pkey" PRIMARY KEY, btree ("diaObject_id")
+#     "elasticc_diaobjecttruth_gentype_480cd308" btree (gentype)
+#     "elasticc_diaobjecttruth_sim_template_index_b33f9ab4" btree (sim_template_index)
+# Foreign-key constraints:
+#     "elasticc_diaobjecttr_diaObject_id_b5103ef2_fk_elasticc_" FOREIGN KEY ("diaObject_id") REFERENCES elasticc_diaobject("diaObjectId") DEFERRABLE INITIALLY DEFERRED
 # 
+#                                 Table "public.elasticc_classificationmap"
+#     Column     |  Type   | Collation | Nullable |                        Default                         
+# ---------------+---------+-----------+----------+--------------------------------------------------------
+#  id            | integer |           | not null | nextval('elasticc_classificationmap_id_seq'::regclass)
+#  classId       | integer |           | not null | 
+#  snana_gentype | integer |           |          | 
+#  description   | text    |           | not null | 
+# Indexes:
+#     "elasticc_classificationmap_pkey" PRIMARY KEY, btree (id)
+#     "elasticc_classificationmap_classId_27acf0d1" btree ("classId")
+#     "elasticc_classificationmap_snana_gentype_63c19152" btree (snana_gentype)
 # 
+# tom_desc=# \d elasticc_brokermessage
 #                                                      Table "public.elasticc_brokermessage"
 #           Column          |           Type           | Collation | Nullable |                             Default                              
 # --------------------------+--------------------------+-----------+----------+------------------------------------------------------------------
@@ -332,6 +344,7 @@ if __name__ == "__main__":
 #  elasticcPublishTimestamp | timestamp with time zone |           |          | 
 #  brokerIngestTimestamp    | timestamp with time zone |           |          | 
 #  modified                 | timestamp with time zone |           | not null | 
+#  msgHdrTimestamp          | timestamp with time zone |           |          | 
 # Indexes:
 #     "elasticc_brokermessage_pkey" PRIMARY KEY, btree ("dbMessageIndex")
 #     "elasticc_br_alertId_b419c9_idx" btree ("alertId")
@@ -340,7 +353,6 @@ if __name__ == "__main__":
 #     "elasticc_br_topicNa_73f5a4_idx" btree ("topicName", "streamMessageId")
 # Referenced by:
 #     TABLE "elasticc_brokerclassification" CONSTRAINT "elasticc_brokerclass_dbMessage_id_b8bd04da_fk_elasticc_" FOREIGN KEY ("dbMessage_id") REFERENCES elasticc_brokermessage("dbMessageIndex") DEFERRABLE INITIALLY DEFERRED
-# 
 # 
 #                                                    Table "public.elasticc_brokerclassifier"
 #       Column       |           Type           | Collation | Nullable |                                Default                                 
