@@ -32,11 +32,17 @@ def main():
         # I haven't found clean documentation on how to log into a django site
         # from an app like this using standard authentication stuff.  So, for
         # now, I'm counting on the HTML that happened to come back when
-        # I ran it with a failed login one time.
+        # I ran it with a failed login one time.  One of these days I'll actually
+        # figure out how Django auth works and make a version of /accounts/login/
+        # designed for use in API scripts like this one, rather than desgined
+        # for interactive users.
         raise RuntimeError( "Failed to log in.  I think.  Put in a debug break and look at res.text" )
     rqs.headers.update( { 'X-CSRFToken': rqs.cookies['csrftoken'] } )
 
-    # Next, send your query, passing the csrfheader with each request
+    # Next, send your query, passing the csrfheader with each request.
+    # (The rqs.headers.update call above makes that happen if you just
+    # keep using the rqs object.)
+    #
     # You send the query as a json-encoded dictionary with two fields:
     #   'query' : the SQL query, with %(name)s for things that should
     #                be substituted.  (This is standard psycopg2.)
@@ -45,15 +51,18 @@ def main():
     # The backend is to this web API call is readonly, so you can't
     # bobby tables this.  However, this does give you the freedom to
     # read anything from the tables if you know the schema.
+    #
+    # At some point in the near future, elasticc truth tables will be restricted
+    # to elasticc admins.
+    #
     # (Some relevant schema are at the bottom.)
     
     # Note that I have to double-quote the column name beacuse otherwise
     #  Postgres converts things to lc for some reason or another.
     query = 'SELECT * FROM elasticc_diasource WHERE "diaObject_id"=%(id)s ORDER BY "midPointTai"'
-    subdict = { "id": 1000221 }
+    subdict = { "id": 10208128  }
     result = rqs.post( f'{url}/db/runsqlquery/',
                        json={ 'query': query, 'subdict': subdict } )
-
 
     # Look at the response.  It will be a JSON encoded dict with two fields:
     #  { 'status': 'ok',
