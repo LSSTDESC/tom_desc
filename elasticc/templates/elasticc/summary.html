@@ -22,6 +22,10 @@ ELAsTiCC Summary Summary
 <h3>Brokers and Classifiers</h3>
 <table class="elasticc_table1">
   <tr><th>Broker</th><th>Version</th><th>Classifier</th><th>Params</th><th>N. Classifications</th></tr>
+  {% for row in brokers %}
+  <tr><td>{{ row.0 }}</td><td>{{ row.1 }}</td><td>{{ row.2 }}</td><td>{{ row.3 }}</td><td>{{ row.4 }}</td></tr>
+  {% endfor %}
+{% comment %}
   {% for broker,versions in brokers.items %}
     {% for version,classifiers in versions.items %}
       {% for classifer,paramses in classifiers.items %}
@@ -32,6 +36,7 @@ ELAsTiCC Summary Summary
       {% endfor %}
     {% endfor %}
   {% endfor %}
+{% endcomment %}
 </table>
 
 {% endblock %}

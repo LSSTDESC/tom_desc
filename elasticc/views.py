@@ -716,49 +716,68 @@ class ElasticcSummary( LoginRequiredMixin, django.views.View ):
             context['tabcounts'].append( { 'name': tab.__name__,
                                            'count': tab.objects.count() } )
 
-        # There is probably a way less cumbersome way of doing this
-        allcfers = BrokerClassifier.objects.all()
-        brokernames = set()
-        cfercounts = {}
-        for cfer in allcfers:
-            brokernames.add( cfer.brokerName )
-            cfercounts[cfer.dbClassifierIndex] = ( BrokerClassification.objects
-                                                   .filter( dbClassifier_id=cfer.dbClassifierIndex ).count() )
-        brokernames = list( brokernames )
-        brokernames.sort()
-        brokers = {}
-        for brokername in brokernames:
-            brokers[brokername] = {}
-            versions = set()
-            for cfer in allcfers:
-                if ( cfer.brokerName == brokername ):
-                    versions.add( cfer.brokerVersion )
-            versions = list( versions )
-            versions.sort()
-            for version in versions:
-                brokers[brokername][version] = {}
-                cfernames = set()
-                for cfer in allcfers:
-                    if ( cfer.brokerName == brokername ) and ( cfer.brokerVersion == version ):
-                        cfernames.add( cfer.classifierName )
-                cfernames = list( cfernames )
-                cfernames.sort()
-                for cfername in cfernames:
-                    brokers[brokername][version][cfername] = {}
-                    cferparams = set()
-                    for cfer in allcfers:
-                        if ( ( cfer.brokerName == brokername ) and ( cfer.brokerVersion == version )
-                             and ( cfer.classifierName == cfername ) ):
-                            cferparams.add( cfer.classifierParams )
-                    cferparams = list(cferparams)
-                    cferparams.sort()
-                    for cferparam in cferparams:
-                        for cfer in allcfers:
-                            if ( ( cfer.brokerName == brokername ) and ( cfer.brokerVersion == version )
-                             and ( cfer.classifierName == cfername )  and ( cfer.classifierParams == cferparam ) ):
-                                brokers[brokername][version][cfername][cferparam] = cfercounts[cfer.dbClassifierIndex]
+        with connection.cursor() as cursor:
+            cursor.execute( 'SELECT cfer."brokerName",cfer."brokerVersion",'
+                            'cfer."classifierName",cfer."classifierParams",'
+                            'COUNT( cification."dbClassificationIndex" ) AS n '
+                            'FROM elasticc_brokerclassifier cfer '
+                            'INNER JOIN elasticc_brokerclassification cification '
+                            '  ON cification."dbClassifier_id"=cfer."dbClassifierIndex" '
+                            'GROUP BY cfer."brokerName",cfer."brokerVersion",'
+                            'cfer."classifierName",cfer."classifierParams" '
+                            'ORDER BY cfer."brokerName",cfer."brokerVersion",'
+                            'cfer."classifierName",cfer."classifierParams" ' )
+            rows = cursor.fetchall()
+            _logger.debug( f"Got {len(rows)} rows" )
 
-        context['brokers'] = brokers
+        # ... I don't know if it's my lack of agility with ORMs, but the single
+        # query above turned into this gigantic mess of code below when I tried
+        # to do it the django way.
+        #
+        # There is probably a way less cumbersome way of doing this
+        # allcfers = BrokerClassifier.objects.all()
+        # brokernames = set()
+        # cfercounts = {}
+        # for cfer in allcfers:
+        #     brokernames.add( cfer.brokerName )
+        #     cfercounts[cfer.dbClassifierIndex] = ( BrokerClassification.objects
+        #                                            .filter( dbClassifier_id=cfer.dbClassifierIndex ).count() )
+        # brokernames = list( brokernames )
+        # brokernames.sort()
+        # brokers = {}
+        # for brokername in brokernames:
+        #     brokers[brokername] = {}
+        #     versions = set()
+        #     for cfer in allcfers:
+        #         if ( cfer.brokerName == brokername ):
+        #             versions.add( cfer.brokerVersion )
+        #     versions = list( versions )
+        #     versions.sort()
+        #     for version in versions:
+        #         brokers[brokername][version] = {}
+        #         cfernames = set()
+        #         for cfer in allcfers:
+        #             if ( cfer.brokerName == brokername ) and ( cfer.brokerVersion == version ):
+        #                 cfernames.add( cfer.classifierName )
+        #         cfernames = list( cfernames )
+        #         cfernames.sort()
+        #         for cfername in cfernames:
+        #             brokers[brokername][version][cfername] = {}
+        #             cferparams = set()
+        #             for cfer in allcfers:
+        #                 if ( ( cfer.brokerName == brokername ) and ( cfer.brokerVersion == version )
+        #                      and ( cfer.classifierName == cfername ) ):
+        #                     cferparams.add( cfer.classifierParams )
+        #             cferparams = list(cferparams)
+        #             cferparams.sort()
+        #             for cferparam in cferparams:
+        #                 for cfer in allcfers:
+        #                     if ( ( cfer.brokerName == brokername ) and ( cfer.brokerVersion == version )
+        #                      and ( cfer.classifierName == cfername )  and ( cfer.classifierParams == cferparam ) ):
+        #                         brokers[brokername][version][cfername][cferparam] = cfercounts[cfer.dbClassifierIndex]
+        # context['brokers'] = brokers
+
+        context['brokers'] = rows
         return HttpResponse( templ.render( context, request ) )
                                 
 # ======================================================================
