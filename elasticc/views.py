@@ -331,7 +331,7 @@ class MaybeAddObjectTruth(PermissionRequiredMixin, django.views.View):
                 loaded.append( DiaObjectTruth.load_or_create( data ) ).diaObjectId
             else:
                 objs = DiaObjectTruth.bulk_load_or_create( data )
-                loaded.extend( [ obj.diaObject_id for obj in objs ] )
+                loaded.extend( [ obj.diaObjectId for obj in objs ] )
             resp = { 'status':'ok', 'message': loaded }
             return JsonResponse( resp )
         except Exception as e:
@@ -374,11 +374,11 @@ def get_alerts( offset, num, truth=False ):
     for row in rows:
         alertobj = DiaAlert.objects.get( pk=row[alertid_dex] )
         prvsources = ( DiaSource.objects
-                       .filter( diaObject_id=alertobj.diaObject.diaObjectId )
+                       .filter( diaObjectId=alertobj.diaObject.diaObjectId )
                        .filter( midPointTai__lt=alertobj.diaSource.midPointTai ) )
         prvforced = ( [] if alertobj.diaSource.midPointTai < row[firstmjd_dex] + 0.5
                       else ( DiaForcedSource.objects
-                             .filter( diaObject_id=alertobj.diaObject.diaObjectId )
+                             .filter( diaObjectId=alertobj.diaObject.diaObjectId )
                              .filter( midPointTai__gt=row[firstmjd_dex]-30 )
                              .filter( midPointTai__lt=alertobj.diaSource.midPointTai ) ) )
         alert = { 'alertId': alertobj.alertId,
