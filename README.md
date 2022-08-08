@@ -19,8 +19,7 @@ There are a few ways to use it:
 * There are a few REST-like interfaces for ELAsTiCC you can use to pull down information
 * You can access the database directly by passing SQL to a thin http
 interface; see `sql_query_tom_db.py` or (similar code as a Jupyter
-notebook) `sql_query_tom_db.ipynb`; see [Database Schema and
-* Notes](#database-schema-and-notes) for more information.
+notebook) `sql_query_tom_db.ipynb`; see [Database Schema and Notes](#database-schema-and-notes) for more information.
 
 ## Example REST interface usage
 
