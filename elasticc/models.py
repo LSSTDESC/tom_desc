@@ -271,6 +271,7 @@ class DiaForcedSource(Createable):
     
 class DiaAlert(Createable):
     alertId = models.BigIntegerField( primary_key=True, unique=True, db_index=True )
+    alertSentTimestamp = models.DateTimeField( null=True )
     diaSource = models.ForeignKey( DiaSource, db_column='diaSourceId', on_delete=models.CASCADE, null=True )
     diaObject = models.ForeignKey( DiaObject, db_column='diaObjectId', on_delete=models.CASCADE, null=True )
     # cutoutDifference
@@ -278,7 +279,7 @@ class DiaAlert(Createable):
 
     _pk = 'alertId'
     _create_kws = [ 'alertId', 'diaSource', 'diaObject' ]
-    _dict_kws = [ 'alertId', 'diaSourceId', 'diaObjectId' ]
+    _dict_kws = [ 'alertId', 'diaSourceId', 'diaObjectId', 'alertSentTimestamp' ]
     _irritating_django_id_map = { 'diaObjectId': 'diaObject_id',
                                   'diaSourceId': 'diaSource_id' }
 
@@ -505,12 +506,20 @@ class DiaObjectTruth(Createable):
     
 # ======================================================================
 
-class ClassificationMap(models.Model):
+class GentypeOfClassId(models.Model):
     id = models.AutoField( primary_key=True )
     classId = models.IntegerField( db_index=True )
     gentype = models.IntegerField( db_index=True, null=True )
     description = models.TextField()
 
+class ClassIdOfGentype(models.Model):
+    id = models.AutoField( primary_key=True )
+    gentype = models.IntegerField( db_index=True )
+    classId = models.IntegerField( db_index=True )
+    exactmatch = models.BooleanField()
+    categorymatch = models.BooleanField()
+    description = models.TextField()
+    
 
 # ======================================================================
 # The Broker* don't correspond as directly to the avro alerts
