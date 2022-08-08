@@ -7,30 +7,23 @@
     <h2 class="text-center">A TOM based alert portal prototype for DESC</h2>
     <p class="text-center"><img src="https://lsstdesc.org/assets/img/logo.png" width="400" height="80" class="img-fluid mx-auto"></p>
     <p class="text-center">Powered by <img src="{% static 'tom_common/img/logo-color.png' %}" width="200" height="40" class="img-fluid mx-auto"></p>	
-    <h3>Next steps</h3>
-    <ul>
-      <li>
-        Check out the <a href="https://tom-toolkit.readthedocs.io/en/stable/" title="TOM Toolkit home page">TOM
-        Toolkit homepage</a> for the latest news, downloads and documentation.
-      </li>
-      <li>
-        <a href="{% url 'targets:create' %}" title="Create Target">Add your first target</a>.
-      </li>
-      <li>
-        Customize this page by editing the
-        <code>templates/tom_common/index.html</code> file or by editing your
-        project's <code>urls.py</code>.
-      </li>
-      <li>
-        Take a look at some <a href="https://tom-toolkit.readthedocs.io/en/stable/customization/common_customizations.html">common first customizations</a>.
-      </li>
-    </ul>
+
+    <p>We have amibtions for this TOM.</p>
+
+    <p>Currently, it is hosting the database for
+      the <a href="/elasticc">ELAsTiCC Challenge</a>.</p>
+    
     <h3>Other Resources</h3>
     <ul>
-      <li>The official <a href="https://www.djangoproject.com/">Django documentation</a>.</li>
+      <li>The official <a href="https://www.djangoproject.com/">Django
+          documentation</a>.</li>
       <li>The official <a href="http://www.astropy.org/">Astropy documentation</a>.</li>
+      <li>The <a href="https://tom-toolkit.readthedocs.io/en/stable/" title="TOM Toolkit home page">TOM
+          Toolkit homepage</a>.</li>
+      </li>
     </ul>
   </div>
+
   <div class="col-md-4">
     <div class="card">
       <div class="card-header">
@@ -46,4 +39,5 @@
       {% recent_targets %}
   </div>
 </div>
+
 {% endblock %}

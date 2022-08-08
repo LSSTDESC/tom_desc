@@ -11,6 +11,8 @@ router.register(f'diatruth', views.DiaTruthViewSet)
 router.register(f'diaalert', views.DiaAlertViewSet)
 
 urlpatterns = [
+    path('', views.ElasticcMainView.as_view()),
+
     path('adddiaobject', views.MaybeAddDiaObject.as_view()),
     path('addelasticcalert', views.MaybeAddAlert.as_view()),
     path('addtruth', views.MaybeAddTruth.as_view()),

@@ -1,0 +1,25 @@
+{% extends 'tom_common/base.html' %}
+{% load static %}
+{% block title %}
+ELAsTiCC
+{% endblock %}
+{% block additional_css %}
+<link rel="stylesheet" href="{% static 'elasticc/elasticc.css' %}">
+{% endblock %}
+{% block content %}
+<h2>The ELAsTiCC Challenge</h2>
+
+<p>For general information,
+  see <a href="https://portal.nersc.gov/cfs/lsst/DESC_TD_PUBLIC/ELASTICC/">The
+    DESC ELAsTiCC Challenge</a>.</p>
+
+<p>Useful things here:</p>
+
+<ul>
+  <li><a href="/elasticc/summary">A summary of alerts and broker
+      classifications</a></li>
+  <li><a href="/elasticc/adminsummary">An admin summary</a></li>
+  <li>...more to come</li>
+</ul>
+
+{% endblock %}

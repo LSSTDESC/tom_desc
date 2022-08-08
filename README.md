@@ -7,17 +7,25 @@ Based on the [Tom Toolkit](https://lco.global/tomtoolkit/)
 The "production" server at nersc is `https://desc-tom.lbl.gov` ; ask Rob
 (raknop@lbl.gov or Rob Knop on the LSST Slack) if you need a user account.
 
-There are a few ways to use it.  The browser-based web interface hasn't
-been well developed yet, but there are some of the basic things that
-come with the TOM there.  The ELAsTiCC challenge information is all
-being stored underneath `https://desc-tom.lbl.gov/stream`.  You can try
-clicking about there to see what you get, but this isn't terrily useful
-let.
+At the moment, the TOM is only holding the alerts and broker messages
+for the ELAsTiCC challenge.  It will evolve from here (using at least
+ELAsTiCC as a test data set) into something that will prioritize and
+schedule follow-up observations; it may also evolve into the FAST
+database.
 
-There are some REST-like interfaces that you could use programmatically
-to pull down information.  To do this, you need to have an account on
-the TOM, and you need to log into it with the client you're using.
-Here's an example:
+There are a few ways to use it:
+
+* Interactively with a browser.  There's not much there yet.
+* There are a few REST-like interfaces for ELAsTiCC you can use to pull down information
+* You can access the database directly by passing SQL to a thin http
+interface; see `sql_query_tom_db.py` or (similar code as a Jupyter
+notebook) `sql_query_tom_db.ipynb`; see [Database Schema and
+* Notes](#database-schema-and-notes) for more information.
+
+## Example REST interface usage
+
+To use these, you need to have an account on the TOM, and you need to
+log into it with the client you're using.  Here's an example:
 
 ```
 import requests
@@ -79,18 +87,83 @@ information for that one object or source; that number is (respectively)
 diaObjectId or diaSourceId.  (For the Truth table, pass the relevant
 diaSourceId.)
 
-If you want low-level access to the database by sending SQL queries, you
-can read the database via a thin web API; see
-[`sql_query_tom_db.py`](sql_query_tom_db.py)
-for instructions and an example (and some of the table schema).  This
-requires you to have an account on the TOM, and is read-only access.
+
+## Database Schema and Notes
+
+The schema for the elasticc tables in the database can be found in the
+comments at the end of `sql_query_tom_db.py`.  Everybody can read the
+`elasticc_broker*` tables; only people in the `elasticc_admin` group can
+read the other `elasticc_*` tables.
+
+### cassId and gentype
+
+Broker Messages include a classification in the field `classId`; these
+ids use the [ELAsTiCC
+taxonomy](https://github.com/LSSTDESC/elasticc/blob/main/taxonomy/taxonomy.ipynb).
+This is a hierarchical classification.  Classifications in the range 0-9
+correspond to a broad class.  Classifications in the range 10-99
+correspond to a more specific category.  Classifications in the range
+100-999 correspond to an "exact" classification (or, as exact as the
+taxonomy gets).  The first digit of a classification tells you its broad
+class, the second digit tells you the specific category within the
+broad class, and the third digit tells you the exact classification
+within the specific category.  (Go look at the taxonomy; there's a
+map there that will make it clearer than this description.)
+
+The true model type used to create the original alerts are in the field
+`gentype` in the table `elasticc_diaobjecttruth`; this field is an
+internal SNANA index.  The mapping between `classId` and `gentype` is
+complicated for a few reasons.  First, SNANA (of course) uses individual
+models to generate lightcurves, so there will be no `gentype`s
+corresponding to the broad class or specific categories of the
+taxonomy.  Second, in some cases (e.g. core-collapse supernovae), there
+are multipel different SNANA models (and thus multiple different
+`gentype` values) that correspond to the same `classId`.
+
+There are two database tables to help matching broker classifications to
+truth, but additional logic beyond just looking up lines in this table
+will be needed for the reasons desribed above.
+
+`elasticc_gentypeofclassid` gives a mapping of `classId` to all
+associated `gentype` values.  This table has one entry for each gentype,
+but it also has a number of entries where `gentype` is null.  These
+latter entries are the cases where there is no `gentype` (i.e. SNANA
+model) that corresponds to a given `classId` (e.g. in the case of
+categories).  There are multiple entries for several `classId` values
+(e.g. `classId` 113, for a SNII, has six different SNANA models, and
+thus six different `gentype` values, associated with it).  This is the
+table you would want to join to the truth table in order to figure out
+which `classId` a broker _should_ have given to an event if it
+classified it exactly right.
+
+`elasticc_classidofgentype` is useful if you want to figure out if the
+broker got the general category right.  There are multiple entries for
+each `classId`, and multiple entries for each `gentype`.  None of the
+entries in this table have a null value for either `classId` or
+`gentype`.  If the `classId` is a three-digit identification (i.e. an
+exact time), then the fields `categorymatch` and `exactmatch` will both
+be `true`, and the information is redundant with whats in the
+`elasticc_gentypeofclassid` table.  If the `classId` is a two-digit
+identification, then the `exactmatch` will be `false` and the
+`categorymatch` will be true.  There will be an entry for _every_
+`gentype` that corresponds to something in this category.  (So, for
+`classId` 11, "SN-like", there will be entries in this table for the
+`gentype`s of all SNANA supernova models of all types.)  If the
+`classId` is a one-digit identification, i.e. a broad class, then
+both `categorymatch` and `exactmatch` will be false, and there be a
+large number of lines in this table, one for each SNANA model that
+corresponds to anything in the broad class.
+
+
+---
+
+# Internal Documentation
 
 The rest of this is only interesting if you want to develop it or deploy
 a private version for hacking.
 
----
 
-# Deployment at NERSC
+## Deployment at NERSC
 
 The server runs on NERSC Spin, in the `desc-tom` namespace of production
 m1727.  It reads its container image from
@@ -111,7 +184,7 @@ it's updated, things need to happen *on* the Spin server (migrations,
 telling the server to reload the software).  My (Rob's) notes on this
 are in `rob_notes.txt`.
 
-## Steps for deployment
+### Steps for deployment
 
 This is assuming a deployment from scratch.  You probably don't want to
 do this on the production server, as you stand a chance of wiping out
@@ -168,7 +241,7 @@ made the entrypoint the standard, and redeployed the workload.  This is
 only necessary when first getting started.
 
 
-# Branch Management
+## Branch Management
 
 The branch `main` has the current production code.
 

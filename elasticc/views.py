@@ -42,6 +42,13 @@ _logger.addHandler( _logout )
 _logger.setLevel( logging.DEBUG )
 
 # ======================================================================
+
+class ElasticcMainView( LoginRequiredMixin, django.views.View ):
+    def get( self, request ):
+        templ = loader.get_template( "elasticc/elasticc.html" )
+        return HttpResponse( templ.render( {}, request ) )
+
+# ======================================================================
 # DJango REST interfaces
 
 class DiaObjectViewSet(viewsets.ReadOnlyModelViewSet):
