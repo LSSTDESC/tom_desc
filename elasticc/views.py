@@ -24,7 +24,6 @@ from rest_framework import response
 
 from elasticc.models import DiaObject, DiaSource, DiaForcedSource
 from elasticc.models import DiaAlert, DiaTruth, DiaObjectTruth
-from elasticc.models import DiaAlertPrvSource, DiaAlertPrvForcedSource
 from elasticc.models import BrokerMessage, BrokerClassifier, BrokerClassification
 from elasticc.serializers import DiaObjectSerializer, DiaTruthSerializer
 from elasticc.serializers import DiaForcedSourceSerializer, DiaSourceSerializer, DiaAlertSerializer
@@ -115,42 +114,40 @@ class MaybeAddAlert(PermissionRequiredMixin, django.views.View):
         data['diaSource']['diaObject'] = curobj
         cursrc = DiaSource.load_or_create( data['diaSource'] )
         # self.sourceloadtime += time.perf_counter() - t0
-        if True:
-            # Load the previous sources
-            prevs = []
-            if data['prvDiaSources'] is not None:
-                for prvdata in data['prvDiaSources']:
-                    prvdata['diaObject'] = curobj
-                    prvobj = DiaSource.load_or_create( prvdata )
-                    prevs.append( prvobj )
-            # Load the previous forced sources
-            forced = []
-            if data['prvDiaForcedSources'] is not None:
-                for forceddata in data['prvDiaForcedSources']:
-                    forceddata['diaObject'] = curobj
-                    forcedobj = DiaForcedSource.load_or_create( forceddata )
-                    forced.append( forcedobj )
-        else:
-            prevs = []
-            forced = []
+
+        # Load the previous sources
+        prevs = []
+        if data['prvDiaSources'] is not None:
+            for prvdata in data['prvDiaSources']:
+                prvdata['diaObject'] = curobj
+                prvobj = DiaSource.load_or_create( prvdata )
+                prevs.append( prvobj )
+        # Load the previous forced sources
+        forced = []
+        if data['prvDiaForcedSources'] is not None:
+            for forceddata in data['prvDiaForcedSources']:
+                forceddata['diaObject'] = curobj
+                forcedobj = DiaForcedSource.load_or_create( forceddata )
+                forced.append( forcedobj )
+
         # Load the alert
         # TODO : check to see if the alertId already exists???
         # Right now, this will error out due to the unique constraint
         # t0 = time.perf_counter()
         curalert = DiaAlert( alertId = data['alertId'], diaSource = cursrc, diaObject = curobj )
         # curalert.save()
-        self.alertloadtime += time.perf_counter() - t0
+        # self.alertloadtime += time.perf_counter() - t0
 
         # Load linkages to the previouses.  I'm not sure I really want to
         #   do this.  These will become very big tables, and we could
         #   figure it all out algorithmically.
-        if True:
-            for prv in prevs:
-                tmp = DiaAlertPrvSource( diaAlert=curalert, diaSource=prv )
-                tmp.save()
-            for prv in forced:
-                tmp = DiaAlertPrvForcedSource( diaAlert=curalert, diaForcedSource=prv )
-                tmp.save()
+        # if True:
+        #     for prv in prevs:
+        #         tmp = DiaAlertPrvSource( diaAlert=curalert, diaSource=prv )
+        #         tmp.save()
+        #     for prv in forced:
+        #         tmp = DiaAlertPrvForcedSource( diaAlert=curalert, diaForcedSource=prv )
+        #         tmp.save()
                           
         return { 'alertId': curalert.alertId,
                  }
@@ -219,7 +216,7 @@ class MaybeAddAlert(PermissionRequiredMixin, django.views.View):
             srcdict = { src.diaSourceId: src for src in sources }
                                          
                                          
-            # Load the forceds ources
+            # Load the forced sources
             forced = []
             forcedids = set()
             for alert in data:
@@ -351,9 +348,9 @@ def get_alerts( offset, num, truth=False ):
         cursor.execute( 'SELECT DISTINCT ON (a."alertId") a."alertId",o."diaObjectId",'
                         's."diaSourceId",s."midPointTai",ps."diaSourceId" AS firstsource,'
                         'ps."midPointTai" AS firstmjd FROM elasticc_diaalert a '
-                        'INNER JOIN elasticc_diaobject o ON a."diaObject_id"=o."diaObjectId" '
-                        'INNER JOIN elasticc_diasource s ON a."diaSource_id"=s."diaSourceId" '
-                        'INNER JOIN elasticc_diasource ps ON ps."diaObject_id"=o."diaObjectId" '
+                        'INNER JOIN elasticc_diaobject o ON a."diaObjectId"=o."diaObjectId" '
+                        'INNER JOIN elasticc_diasource s ON a."diaSourceId"=s."diaSourceId" '
+                        'INNER JOIN elasticc_diasource ps ON ps."diaObjectId"=o."diaObjectId" '
                         'ORDER BY a."alertId",ps."midPointTai" LIMIT %(num)s OFFSET %(offset)s',
                         { "num": num, "offset": offset } )
         rows = cursor.fetchall()
@@ -522,14 +519,14 @@ class BrokerMessageView(PermissionRequiredMixin, django.views.View):
                 # business at the top.
                 params={ 'objids': tuple( str(objid).split(",") ) }
                 with django.db.connection.cursor() as cursor:
-                    cursor.execute( 'SELECT COUNT(b."dbMessageIndex") FROM elasticc_brokermessage b'
+                    cursor.execute( 'SELECT COUNT(b."brokerMessageId") FROM elasticc_brokermessage b'
                                     ' INNER JOIN elasticc_diasource s ON b."diaSourceId"=s."diaSourceId"'
-                                    ' WHERE s."diaObject_id" IN %(objids)s', params=params )
+                                    ' WHERE s."diaObjectId" IN %(objids)s', params=params )
                     row = cursor.fetchone()
                     n = row[0]
                 msgs = BrokerMessage.objects.raw(
                     'SELECT * FROM elasticc_brokermessage b INNER JOIN elasticc_diasource s'
-                    ' ON b."diaSourceId"=s."diaSourceId" WHERE s."diaObject_id" IN %(objids)s', params=params )
+                    ' ON b."diaSourceId"=s."diaSourceId" WHERE s."diaObjectId" IN %(objids)s', params=params )
 
             elif ( len(args) == 1 ) and ( ( "sourceid" in args.keys() ) or ( "diasourceid" in args.keys() ) ):
                 sourceid = list(args.values())[0]
@@ -605,8 +602,8 @@ class BrokerMessageView(PermissionRequiredMixin, django.views.View):
 
         addedmsgs = BrokerMessage.load_batch( messageinfo, logger=_logger )
 
-        dex = addedmsgs[0].dbMessageIndex if len(addedmsgs) > 0 else -1
-        resp = JsonResponse( { 'dbMessageIndex': dex,
+        dex = addedmsgs[0].brokerMessageId if len(addedmsgs) > 0 else -1
+        resp = JsonResponse( { 'brokerMessageId': dex,
                                'num_loaded': len(addedmsgs) }, status=201 )
         # I really wish there were a django function for this, as I'm not sure that
         # my string replace will always do the right thing.  What I'm after is the
@@ -719,10 +716,10 @@ class ElasticcSummary( LoginRequiredMixin, django.views.View ):
         with connection.cursor() as cursor:
             cursor.execute( 'SELECT cfer."brokerName",cfer."brokerVersion",'
                             'cfer."classifierName",cfer."classifierParams",'
-                            'COUNT( cification."dbClassificationIndex" ) AS n '
+                            'COUNT( cification."classificationId" ) AS n '
                             'FROM elasticc_brokerclassifier cfer '
                             'INNER JOIN elasticc_brokerclassification cification '
-                            '  ON cification."dbClassifier_id"=cfer."dbClassifierIndex" '
+                            '  ON cification."classifierId"=cfer."classifierId" '
                             'GROUP BY cfer."brokerName",cfer."brokerVersion",'
                             'cfer."classifierName",cfer."classifierParams" '
                             'ORDER BY cfer."brokerName",cfer."brokerVersion",'

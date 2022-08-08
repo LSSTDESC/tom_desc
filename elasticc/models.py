@@ -18,8 +18,6 @@ _logger.addHandler( _logout )
 _logger.setLevel( logging.INFO )
 # _logger.setLevel( logging.DEBUG )
 
-# Create your models here.
-
 # Support the Q3c Indexing scheme
 
 class q3c_ang2ipix(models.Func):
@@ -42,7 +40,11 @@ class Createable(models.Model):
     def to_dict( self ):
         selfdict = {}
         for key in self._dict_kws:
-            selfdict[key] = getattr( self, key )
+            if hasattr( self, '_irritating_django_id_map') and ( key in self._irritating_django_id_map ):
+                self_key = self._irritating_django_id_map[key]
+            else:
+                self_key = key
+            selfdict[key] = getattr( self, self_key )
         return selfdict
                 
     @classmethod
@@ -115,9 +117,9 @@ class ElasticcPermissions(models.Model):
 # I want these tables to correspond to the avro schema.  I considered
 # writing code to generate the code below (or even to have code below
 # that programmatically generated the database fields, though that very
-# idea (WRT django in general) seems to make a lot of people grouchy,
-# and I can see how something like database table definitions should be
-# stable so they don't easily support generating the fields on the fly).
+# idea (WRT django in general) seems rather scary; something like
+# database table definitions should be stable so they don't easily
+# support generating the fields on the fly).
 
 
 class DiaObject(Createable):
@@ -226,7 +228,7 @@ class DiaObject(Createable):
 class DiaSource(Createable):
     diaSourceId = models.BigIntegerField( primary_key=True, unique=True, db_index=True )
     ccdVisitId = models.BigIntegerField( )
-    diaObject = models.ForeignKey( DiaObject, on_delete=models.CASCADE, null=True )
+    diaObject = models.ForeignKey( DiaObject, db_column='diaObjectId', on_delete=models.CASCADE, null=True )
     # I'm not using a foreign key for parentDiaSource to allow things to be loaded out of order
     parentDiaSourceId = models.BigIntegerField( null=True )
     midPointTai = models.FloatField( db_index=True )
@@ -247,12 +249,13 @@ class DiaSource(Createable):
     _pk = 'diaSourceId'
     _create_kws = [ 'diaSourceId', 'ccdVisitId', 'diaObject', 'parentDiaSourceId',
                     'midPointTai', 'filterName', 'ra', 'decl', 'psFlux', 'psFluxErr', 'snr', 'nobs' ]
-    _dict_kws = [ 'diaObject_id' if i == 'diaObject' else i for i in _create_kws ]
+    _dict_kws = [ 'diaObjectId' if i == 'diaObject' else i for i in _create_kws ]
+    _irritating_django_id_map = { 'diaObjectId': 'diaObject_id' }
     
 class DiaForcedSource(Createable):
     diaForcedSourceId = models.BigIntegerField( primary_key=True, unique=True, db_index=True )
     ccdVisitId = models.BigIntegerField( )
-    diaObject = models.ForeignKey( DiaObject, on_delete=models.CASCADE )
+    diaObject = models.ForeignKey( DiaObject, db_column='diaObjectId', on_delete=models.CASCADE )
     midPointTai = models.FloatField( db_index=True )
     filterName = models.TextField()
     psFlux = models.FloatField()
@@ -263,73 +266,91 @@ class DiaForcedSource(Createable):
     _pk = 'diaForcedSourceId'
     _create_kws = [ 'diaForcedSourceId', 'ccdVisitId', 'diaObject',
                     'midPointTai', 'filterName', 'psFlux', 'psFluxErr', 'totFlux', 'totFluxErr' ]
-    _dict_kws = [ 'diaObject_id' if i == 'diaObject' else i for i in _create_kws ]
+    _dict_kws = [ 'diaObjectId' if i == 'diaObject' else i for i in _create_kws ]
+    _irritating_django_id_map = { 'diaObjectId': 'diaObject_id' }
     
 class DiaAlert(Createable):
     alertId = models.BigIntegerField( primary_key=True, unique=True, db_index=True )
-    diaSource = models.ForeignKey( DiaSource, on_delete=models.CASCADE, null=True )
-    diaObject = models.ForeignKey( DiaObject, on_delete=models.CASCADE, null=True )
+    diaSource = models.ForeignKey( DiaSource, db_column='diaSourceId', on_delete=models.CASCADE, null=True )
+    diaObject = models.ForeignKey( DiaObject, db_column='diaObjectId', on_delete=models.CASCADE, null=True )
     # cutoutDifference
     # cutoutTemplate
 
     _pk = 'alertId'
     _create_kws = [ 'alertId', 'diaSource', 'diaObject' ]
-    _dict_kws = [ 'alertId', 'diaSource_id', 'diaObject_id' ]
-    
+    _dict_kws = [ 'alertId', 'diaSourceId', 'diaObjectId' ]
+    _irritating_django_id_map = { 'diaObjectId': 'diaObject_id',
+                                  'diaSourceId': 'diaSource_id' }
+
 # Perhaps I should be using django ManyToMany here?
 # I do this manually because it mapps directly to
 # SQL, so if somebody hits the table with SQL
 # directly rather than via django, they'll know
 # what to do, and I'll know what the structure
 # is.
-class DiaAlertPrvSource(models.Model):
-    id = models.BigAutoField( primary_key=True )
-    diaAlert = models.ForeignKey( DiaAlert, on_delete=models.CASCADE, null=True )
-    diaSource = models.ForeignKey( DiaSource, on_delete=models.CASCADE, null=True )
+#
+# BUT ALSO : I ended up not loading these next two
+# tables becasue the amount of information is HUGE.
+# We can, at least in principle, regenerate which
+# sources and forced sources were in the alert
+# because we know the algorithm:
+#   * Each alert is assocaited with a source
+#   * If that source is the first detection, there
+#     are no previous sources
+#   * Otherwise, all previous sources (i.e. detections) are included
+#   * If that source is on the same night as the
+#     first detection, there is no forced photometry
+#   * Otherwise, all forced photometry with a date
+#     of (first detection) - 30 days or later is included
+# class DiaAlertPrvSource(models.Model):
+#     id = models.BigAutoField( primary_key=True )
+#     diaAlert = models.ForeignKey( DiaAlert, db_column='diaAlertId', on_delete=models.CASCADE, null=True )
+#     diaSource = models.ForeignKey( DiaSource, db_column='diaSourceId', on_delete=models.CASCADE, null=True )
 
-    # I don't know why, but I was getting a django migraiton error with this in
-    # class Meta:
-    #     unique_together = ( 'diaAlert', 'diaSource' )
+#     # I don't know why, but I was getting a django migraiton error with this in
+#     # class Meta:
+#     #     unique_together = ( 'diaAlert', 'diaSource' )
     
-    @classmethod
-    def bulk_load_or_create( cls, data ):
-        objs = []
-        for newdata in data:
-            objs.append( cls(**newdata) )
-        cls.objects.bulk_create( objs, ignore_conflicts=True )
+#     @classmethod
+#     def bulk_load_or_create( cls, data ):
+#         objs = []
+#         for newdata in data:
+#             objs.append( cls(**newdata) )
+#         cls.objects.bulk_create( objs, ignore_conflicts=True )
         
-class DiaAlertPrvForcedSource(models.Model):
-    id = models.BigAutoField( primary_key=True )
-    diaAlert = models.ForeignKey( DiaAlert, on_delete=models.CASCADE, null=True )
-    diaForcedSource = models.ForeignKey( DiaForcedSource, on_delete=models.CASCADE, null=True )
+# class DiaAlertPrvForcedSource(models.Model):
+#     id = models.BigAutoField( primary_key=True )
+#     diaAlert = models.ForeignKey( DiaAlert, db_column='diaAlertId', on_delete=models.CASCADE, null=True )
+#     diaForcedSource = models.ForeignKey( DiaForcedSource, db_column='diaSourceId',
+#                                          on_delete=models.CASCADE, null=True )
 
-    # I don't know why, but I was getting a django migraiton error with this in
-    # class Meta:
-    #     unique_together = ( 'diaAlert', 'diaForcedSource' )
+#     # I don't know why, but I was getting a django migraiton error with this in
+#     # class Meta:
+#     #     unique_together = ( 'diaAlert', 'diaForcedSource' )
 
-    # This is distressingly similar to DiaAlertPrvSoruce.bulk_load_or_create
-    @classmethod
-    def bulk_load_or_create( cls, data ):
-        # searchkeys = [ f"{i['diaAlert_id']} {i['diaForcedSource_id']}" for i in data ]
-        # queryset = cls.objects.annotate( srch=models.functions.Concat( 'diaAlert_id',
-        #                                                                models.Value(' '),
-        #                                                                'diaForcedSource_id',
-        #                                                                output_field=models.TextField()) )
-        # curobjs = list( queryset.filter( srch__in=searchkeys ) )
-        # exists = set( [ f"{c.diaAlert_id} {c.diaForcedSource_id}" for c in curobjs ] )
-        # newobjs = []
-        # for newdata in data:
-        #     if f"{newdata['diaAlert_id']} {newdata['diaForcedSource_id']}" in exists:
-        #         continue
-        #     newobjs.append( cls(**newdata) )
-        # if len(newobjs) > 0:
-        #     addedobjs = cls.objects.bulk_create( newobjs )
-        #     curobjs.extend( addedobjs )
-        # return curobjs
-        objs = []
-        for newdata in data:
-            objs.append( cls(**newdata) )
-        cls.objects.bulk_create( objs, ignore_conflicts=True )
+#     # This is distressingly similar to DiaAlertPrvSoruce.bulk_load_or_create
+#     @classmethod
+#     def bulk_load_or_create( cls, data ):
+#         # searchkeys = [ f"{i['diaAlert_id']} {i['diaForcedSource_id']}" for i in data ]
+#         # queryset = cls.objects.annotate( srch=models.functions.Concat( 'diaAlert_id',
+#         #                                                                models.Value(' '),
+#         #                                                                'diaForcedSource_id',
+#         #                                                                output_field=models.TextField()) )
+#         # curobjs = list( queryset.filter( srch__in=searchkeys ) )
+#         # exists = set( [ f"{c.diaAlert_id} {c.diaForcedSource_id}" for c in curobjs ] )
+#         # newobjs = []
+#         # for newdata in data:
+#         #     if f"{newdata['diaAlert_id']} {newdata['diaForcedSource_id']}" in exists:
+#         #         continue
+#         #     newobjs.append( cls(**newdata) )
+#         # if len(newobjs) > 0:
+#         #     addedobjs = cls.objects.bulk_create( newobjs )
+#         #     curobjs.extend( addedobjs )
+#         # return curobjs
+#         objs = []
+#         for newdata in data:
+#             objs.append( cls(**newdata) )
+#         cls.objects.bulk_create( objs, ignore_conflicts=True )
     
 class DiaTruth(models.Model):
     # I can't use a foreign key constraint here because there will be truth entries for
@@ -339,8 +360,8 @@ class DiaTruth(models.Model):
     diaObjectId = models.BigIntegerField( null=True, db_index=True )
     mjd = models.FloatField( null=True )
     detect = models.BooleanField( null=True )
-    true_gentype = models.IntegerField( null=True )
-    true_genmag = models.FloatField( null=True )
+    gentype = models.IntegerField( null=True )
+    genmag = models.FloatField( null=True )
 
     # I'm not making DiaTruth a subclass of Creatable here because the data coming
     #   in doesn't have the right keywords, and because I need to do some custom
@@ -351,8 +372,8 @@ class DiaTruth(models.Model):
                  'diaObjectId': self.diaObjectId,
                  'mjd': self.mjd,
                  'detect': self.detect,
-                 'true_gentype': self.true_gentype,
-                 'true_genmag': self.true_genmag }
+                 'gentype': self.gentype,
+                 'genmag': self.genmag }
     
     @staticmethod
     def create( data ):
@@ -374,8 +395,8 @@ class DiaTruth(models.Model):
             diaObjectId = int( data['SNID'] ),
             detect = bool( data['DETECT'] ),
             mjd = float( data['MJD'] ),
-            true_gentype = int( data['TRUE_GENTYPE'] ),
-            true_genmag = float( data['TRUE_GENMAG'] )
+            gentype = int( data['TRUE_GENTYPE'] ),
+            genmag = float( data['TRUE_GENMAG'] )
         )
         curtruth.save()
         return curtruth
@@ -409,8 +430,8 @@ class DiaTruth(models.Model):
                                    diaObjectId = int( newdata['SNID'] ),
                                    detect = bool( newdata['DETECT'] ),
                                    mjd = float( newdata['MJD'] ),
-                                   true_gentype = int( newdata['TRUE_GENTYPE'] ),
-                                   true_genmag = float( newdata['TRUE_GENMAG'] ) ) )
+                                   gentype = int( newdata['TRUE_GENTYPE'] ),
+                                   genmag = float( newdata['TRUE_GENMAG'] ) ) )
         if len(newobjs) > 0:
             addedobjs = DiaTruth.objects.bulk_create( newobjs )
             curobjs.extend( addedobjs )
@@ -418,13 +439,14 @@ class DiaTruth(models.Model):
             
         
 class DiaObjectTruth(Createable):
-    diaObject = models.ForeignKey( DiaObject, on_delete=models.CASCADE, null=False, primary_key=True )
+    diaObject = models.ForeignKey( DiaObject, db_column='diaObjectId',
+                                   on_delete=models.CASCADE, null=False, primary_key=True )
     libid = models.IntegerField( )
     sim_searcheff_mask = models.IntegerField( )
     gentype = models.IntegerField( db_index=True )
     sim_template_index = models.IntegerField( db_index=True )
-    zcmb = models.FloatField( )
-    zhelio = models.FloatField( )
+    zcmb = models.FloatField( db_index=True )
+    zhelio = models.FloatField( db_index=True )
     zcmb_smear = models.FloatField( )
     ra = models.FloatField( )
     dec = models.FloatField( )
@@ -438,9 +460,9 @@ class DiaObjectTruth(Createable):
     av = models.FloatField( )
     mu = models.FloatField( )
     lensdmu = models.FloatField( )
-    peakmjd = models.FloatField( ) 
-    mjd_detect_first = models.FloatField( )
-    mjd_detect_last = models.FloatField( )
+    peakmjd = models.FloatField( db_index=True ) 
+    mjd_detect_first = models.FloatField( db_index=True )
+    mjd_detect_last = models.FloatField( db_index=True )
     dtseason_peak = models.FloatField( )
     peakmag_u = models.FloatField( )
     peakmag_g = models.FloatField( )
@@ -454,17 +476,18 @@ class DiaObjectTruth(Createable):
     nobs = models.IntegerField( )
     nobs_saturate = models.IntegerField( )
 
-    _pk = 'diaObject_id'
-    _create_kws = [ 'diaObject_id', 'libid', 'sim_searcheff_mask', 'gentype', 'sim_template_index',
+    _pk = 'diaObjectId'
+    _create_kws = [ 'diaObjectId', 'libid', 'sim_searcheff_mask', 'gentype', 'sim_template_index',
                     'zcmb', 'zhelio', 'zcmb_smear', 'ra', 'dec', 'mwebv', 'galid', 'galzphot',
                     'galzphoterr', 'galsnsep', 'galsnddlr', 'rv', 'av', 'mu', 'lensdmu', 'peakmjd',
                     'mjd_detect_first', 'mjd_detect_last', 'dtseason_peak', 'peakmag_u', 'peakmag_g',
                     'peakmag_r', 'peakmag_i', 'peakmag_z', 'peakmag_Y', 'snrmax', 'snrmax2', 'snrmax3',
                     'nobs', 'nobs_saturate' ]
     _dict_kws = _create_kws
+    _irritating_django_id_map = { 'diaObjectId': 'diaObject_id' }
     
     # This is a little bit ugly.  For my own dubious reasons, I wanted
-    # to be able to pass in things with diaObject_id that weren't
+    # to be able to pass in things with diaObjectId that weren't
     # actually in the database (to save myself some pain on the other
     # end).  So, filter those out here before calling the Createable's
     # bulk_load_or_create
@@ -474,7 +497,7 @@ class DiaObjectTruth(Createable):
         pks = [ i[cls._pk] for i in data ]
         diaobjs = list( DiaObject.objects.filter( pk__in=pks ) )
         objids = set( [ i.diaObjectId for i in diaobjs ] )
-        datatoload = [ i for i in data if i['diaObject_id'] in objids ]
+        datatoload = [ i for i in data if i['diaObjectId'] in objids ]
         if len(datatoload) > 0:
             return super().bulk_load_or_create( datatoload )
         else:
@@ -485,7 +508,7 @@ class DiaObjectTruth(Createable):
 class ClassificationMap(models.Model):
     id = models.AutoField( primary_key=True )
     classId = models.IntegerField( db_index=True )
-    snana_gentype = models.IntegerField( db_index=True, null=True )
+    gentype = models.IntegerField( db_index=True, null=True )
     description = models.TextField()
 
 
@@ -509,7 +532,7 @@ class ClassificationMap(models.Model):
 #    we should have all the alertID and sourceId loaded first.
 #
 # We set ourselves:
-#   dbMessageIndex (just the primary key, auto updated)
+#   brokerMessageId (just the primary key, auto updated)
 #   descIngestTimestamp
 #   modified
 #   streamMessageId (pulled from the .offset() method of the message we get from kafka consumer)...
@@ -525,14 +548,14 @@ class ClassificationMap(models.Model):
 #    If it does, then, yay.
 #    If not, then create that object.
 # * Create an BrokerClassification entry which:
-#       * links back to the BrokerClassifier with dbClassifier
+#       * links back to the BrokerClassifier with classifier
 #       * links back to the broker alert with dbMessage
 #       
 
 class BrokerMessage(models.Model):
     """Model for the message attributes of an ELAsTiCC broker alert."""
 
-    dbMessageIndex = models.BigAutoField(primary_key=True)
+    brokerMessageId = models.BigAutoField(primary_key=True)
     streamMessageId = models.BigIntegerField(null=True)
     topicName = models.CharField(max_length=200, null=True)
 
@@ -550,8 +573,6 @@ class BrokerMessage(models.Model):
 
     class Meta:
         indexes = [
-            # models.Index(fields=['dbMessageIndex', 'topicName']),
-            models.Index( fields=[ 'dbMessageIndex' ] ),
             models.Index( fields=[ 'topicName', 'streamMessageId' ] ),
             models.Index( fields=[ 'alertId' ] ),
             models.Index( fields=[ 'diaSourceId' ] ),
@@ -560,7 +581,7 @@ class BrokerMessage(models.Model):
 
     def to_dict( self ):
         resp = {
-            'dbMessageIndex': self.dbMessageIndex,
+            'brokerMessageId': self.brokerMessageId,
             'streamMessageId': self.streamMessageId,
             'alertId': self.alertId,
             'diaSourceId': self.diaSourceId,
@@ -575,7 +596,7 @@ class BrokerMessage(models.Model):
         clsfctions = BrokerClassification.objects.all().filter( dbMessage=self )
         first = True
         for classification in clsfctions:
-            clsifer = classification.dbClassifier
+            clsifer = classification.classifier
             if first:
                 resp['brokerName'] = clsifer.brokerName
                 resp['brokerVersion'] = clsifer.brokerVersion
@@ -729,7 +750,7 @@ class BrokerMessage(models.Model):
                 keycfer = ( f"{msg['msg']['brokerName']}_{msg['msg']['brokerVersion']}_"
                             f"{cfication['classifierName']}_{cfication['classifierParams']}" )
                 kwargs = { 'dbMessage': messageobjects[keymess],
-                           'dbClassifier': classifiers[keycfer],
+                           'classifier': classifiers[keycfer],
                            'classId': cfication['classId'],
                            'probability': cfication['probability'] }
                 kwargses.append( kwargs )
@@ -745,7 +766,7 @@ class BrokerMessage(models.Model):
 class BrokerClassifier(models.Model):
     """Model for a classifier producing an ELAsTiCC broker classification."""
 
-    dbClassifierIndex = models.BigAutoField(primary_key=True, db_index=True)
+    classifierId = models.BigAutoField(primary_key=True, db_index=True)
 
     brokerName = models.CharField(max_length=100)
     brokerVersion = models.TextField(null=True)     # state changes logically not part of the classifier
@@ -765,9 +786,10 @@ class BrokerClassifier(models.Model):
 class BrokerClassification(models.Model):
     """Model for a classification from an ELAsTiCC broker."""
 
-    dbClassificationIndex = models.BigAutoField(primary_key=True)
-    dbMessage = models.ForeignKey( BrokerMessage, on_delete=models.CASCADE, null=True )
-    dbClassifier = models.ForeignKey( BrokerClassifier, on_delete=models.CASCADE, null=True )
+    classificationId = models.BigAutoField(primary_key=True)
+    dbMessage = models.ForeignKey( BrokerMessage, db_column='brokerMessageId', on_delete=models.CASCADE, null=True )
+    classifier = models.ForeignKey( BrokerClassifier, db_column='classifierId',
+                                      on_delete=models.CASCADE, null=True )
 
     # These next three can be determined by looking back at the linked dbMessage
     # alertId = models.BigIntegerField()
@@ -782,12 +804,3 @@ class BrokerClassification(models.Model):
     # (As is, the schema doesn't define such a thing.)
     
     modified = models.DateTimeField(auto_now=True)
-
-    # class Meta:
-    #     indexes = [
-    #         models.Index(
-    #             fields=['dbClassificationIndex']
-    #         ),
-    #     ]
-
-

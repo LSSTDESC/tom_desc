@@ -1,5 +1,4 @@
 from elasticc.models import DiaObject, DiaForcedSource, DiaSource, DiaTruth, DiaAlert
-from elasticc.models import DiaAlertPrvSource, DiaAlertPrvForcedSource
 from rest_framework import serializers
 
 class DiaObjectSerializer(serializers.ModelSerializer):
@@ -35,14 +34,16 @@ class DiaAlertSerializer(serializers.BaseSerializer):
                   'prvDiaSources': [],
                   'prvDiaForcedSources': [],
                   'prvDiaNonDetectionLimits': [] }
-        prvsources = DiaAlertPrvSource.objects.all().filter( diaAlert_id=alert['alertId'] )
-        for prvsource in prvsources:
-            srcserzer = DiaSourceSerializer( prvsource.diaSource )
-            alert['prvDiaSources'].append( srcserzer.data )
-        prvsources = DiaAlertPrvForcedSource.objects.all().filter( diaAlert_id=alert['alertId'] )
-        for prvsource in prvsources:
-            srcserzer = DiaSourceSerializer( prvsource.diaSource )
-            alert['prvDiaForcedSources'].append( srcserzer.data )
+        # ROB TODO : get the previous sources and previous forced sources
+        # (the *Prv* models are not used, have to do it algorithmically)
+        # prvsources = DiaAlertPrvSource.objects.all().filter( diaAlert_id=alert['alertId'] )
+        # for prvsource in prvsources:
+        #     srcserzer = DiaSourceSerializer( prvsource.diaSource )
+        #     alert['prvDiaSources'].append( srcserzer.data )
+        # prvsources = DiaAlertPrvForcedSource.objects.all().filter( diaAlert_id=alert['alertId'] )
+        # for prvsource in prvsources:
+        #     srcserzer = DiaSourceSerializer( prvsource.diaSource )
+        #     alert['prvDiaForcedSources'].append( srcserzer.data )
         return alert
         
         
