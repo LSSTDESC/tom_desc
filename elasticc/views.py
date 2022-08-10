@@ -357,10 +357,10 @@ class MarkAlertSent(PermissionRequiredMixin, django.views.View):
             if isinstance( data, dict ):
                 data = [ data ]
             for datum in data:
-                alert = DiaAlert.objects.get( pk=data['alertId'] )
+                alert = DiaAlert.objects.get( pk=datum )
                 alert.alertSentTimestamp = now
                 alert.save()
-                ids.append( data['alertId'] )
+                ids.append( datum )
             return JsonResponse( { 'status': 'ok',
                                    'alertIds': ids,
                                    'timestamp': now.isoformat() } )
