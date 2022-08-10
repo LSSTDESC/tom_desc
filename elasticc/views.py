@@ -328,10 +328,10 @@ class MaybeAddObjectTruth(PermissionRequiredMixin, django.views.View):
             data = json.loads( request.body )
             loaded = []
             if isinstance( data, dict ):
-                loaded.append( DiaObjectTruth.load_or_create( data ) ).diaObjectId
+                loaded.append( DiaObjectTruth.load_or_create( data ) ).diaObject_id
             else:
                 objs = DiaObjectTruth.bulk_load_or_create( data )
-                loaded.extend( [ obj.diaObjectId for obj in objs ] )
+                loaded.extend( [ obj.diaObject_id for obj in objs ] )
             resp = { 'status':'ok', 'message': loaded }
             return JsonResponse( resp )
         except Exception as e:

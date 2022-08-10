@@ -440,8 +440,8 @@ class DiaTruth(models.Model):
             
         
 class DiaObjectTruth(Createable):
-    diaObject = models.ForeignKey( DiaObject, db_column='diaObjectId',
-                                   on_delete=models.CASCADE, null=False, primary_key=True )
+    diaObject = models.OneToOneField( DiaObject, db_column='diaObjectId',
+                                      on_delete=models.CASCADE, null=False, primary_key=True )
     libid = models.IntegerField( )
     sim_searcheff_mask = models.IntegerField( )
     gentype = models.IntegerField( db_index=True )
@@ -477,15 +477,28 @@ class DiaObjectTruth(Createable):
     nobs = models.IntegerField( )
     nobs_saturate = models.IntegerField( )
 
-    _pk = 'diaObjectId'
-    _create_kws = [ 'diaObjectId', 'libid', 'sim_searcheff_mask', 'gentype', 'sim_template_index',
+    # django insists on making the object field diaObject_id even though
+    # I told it to make the column diaObjectId.  This is because it is
+    # under the standard ORM presumption that it is enough... that it
+    # can completely obscure the SQL and nobody will ever want to go
+    # directly to the SQL.  It is, of course, wrong-- of *course* we're
+    # going to want to use SQL directly to access the datbase.  As a
+    # result we have to do a bunch of confusing stuff to convert between
+    # what django wants to call the key and what we want to call it in
+    # the database.
+    #
+    # So.  I HOPE I've done this right.  I *think* where I use the _pk
+    # field, it's what *django* thinks is the primary key in terms of
+    # object fields, *not* the name of the primary key column in
+    # the database.  But this is a land mine.
+    _pk = 'diaObject_id'
+    _create_kws = [ 'diaObject_id', 'libid', 'sim_searcheff_mask', 'gentype', 'sim_template_index',
                     'zcmb', 'zhelio', 'zcmb_smear', 'ra', 'dec', 'mwebv', 'galid', 'galzphot',
                     'galzphoterr', 'galsnsep', 'galsnddlr', 'rv', 'av', 'mu', 'lensdmu', 'peakmjd',
                     'mjd_detect_first', 'mjd_detect_last', 'dtseason_peak', 'peakmag_u', 'peakmag_g',
                     'peakmag_r', 'peakmag_i', 'peakmag_z', 'peakmag_Y', 'snrmax', 'snrmax2', 'snrmax3',
                     'nobs', 'nobs_saturate' ]
     _dict_kws = _create_kws
-    _irritating_django_id_map = { 'diaObjectId': 'diaObject_id' }
     
     # This is a little bit ugly.  For my own dubious reasons, I wanted
     # to be able to pass in things with diaObjectId that weren't
@@ -495,10 +508,13 @@ class DiaObjectTruth(Createable):
     @classmethod
     def bulk_load_or_create( cls, data ):
         """Pass an array of dicts."""
-        pks = [ i[cls._pk] for i in data ]
+        pks = [ i['diaObjectId'] for i in data ]
         diaobjs = list( DiaObject.objects.filter( pk__in=pks ) )
         objids = set( [ i.diaObjectId for i in diaobjs ] )
         datatoload = [ i for i in data if i['diaObjectId'] in objids ]
+        for datum in datatoload:
+            datum['diaObject_id'] = datum['diaObjectId']
+            del datum['diaObjectId']
         if len(datatoload) > 0:
             return super().bulk_load_or_create( datatoload )
         else:
