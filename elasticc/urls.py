@@ -17,7 +17,8 @@ urlpatterns = [
     path('addelasticcalert', views.MaybeAddAlert.as_view()),
     path('addtruth', views.MaybeAddTruth.as_view()),
     path('addobjecttruth', views.MaybeAddObjectTruth.as_view()),
-
+    path('markalertsent', views.MarkAlertSent.as_view()),
+    
     path('adminsummary', views.ElasticcAdminSummary.as_view()),
     path('summary', views.ElasticcSummary.as_view()),
 

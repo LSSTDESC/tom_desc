@@ -344,6 +344,35 @@ class MaybeAddObjectTruth(PermissionRequiredMixin, django.views.View):
             strstream.close()
             return JsonResponse( resp )
 
+# @method_decorator(login_required, name='dispatch')
+class MarkAlertSent(PermissionRequiredMixin, django.views.View):
+    permission_required = 'elasticc.elasticc_admin'
+    raise_exception = True
+
+    def post( self, request, *args, **kwargs ):
+        try:
+            now = datetime.datetime.now( tz=datetime.timezone.utc )
+            ids = []
+            data = json.loads( request.body )
+            if isinstance( data, dict ):
+                data = [ data ]
+            for datum in data:
+                alert = DiaAlert.objects.get( pk=data['alertId'] )
+                alert.alertSentTimestamp = now
+                alert.save()
+                ids.append( data['alertId'] )
+            return JsonResponse( { 'status': 'ok',
+                                   'alertIds': ids,
+                                   'timestamp': now.isoformat() } )
+        except Exception as e:
+            strstream = io.StringIO()
+            traceback.print_exc( file=strstream )
+            resp = { 'status': 'error',
+                     'message': f'Exception in {self.__class__.__name__}',
+                     'exception': str(e),
+                     'traceback': strstream.getvalue() }
+            strstream.close()
+            return JsonResponse( resp )
 
 # ======================================================================
 # ======================================================================
