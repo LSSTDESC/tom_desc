@@ -55,43 +55,43 @@ def main():
     # At some point in the near future, elasticc truth tables will be restricted
     # to elasticc admins.
     #
-    # (Some relevant schema are at the bottom.)
+    # (Some relevant schema are at the bottom.brokerMessageId)
     
     # Note that I have to double-quote the column name beacuse otherwise
     #  Postgres converts things to lc for some reason or another.
     query = '''
         SELECT
         best_classification."classId" AS pred_class,
-        elasticc_classificationmap."classId" AS true_class,
-        elasticc_brokerclassifier."dbClassifierIndex" AS classifier_index,
+        elasticc_gentypeofclassid."classId" AS true_class,
+        elasticc_brokerclassifier."classifierId" AS classifier_index,
         elasticc_brokerclassifier."brokerName" AS broker_name,
         elasticc_brokerclassifier."classifierName" AS classifier_name,
         count(*) AS n
             FROM elasticc_diaobject
             INNER JOIN elasticc_diaobjecttruth
-                ON (elasticc_diaobject."diaObjectId" = elasticc_diaobjecttruth."diaObject_id")
+                ON (elasticc_diaobject."diaObjectId" = elasticc_diaobjecttruth."diaObjectId")
+            INNER JOIN elasticc_gentypeofclassid
+                ON (elasticc_diaobjecttruth."gentype" = elasticc_gentypeofclassid."gentype")
             INNER JOIN (
-                SELECT DISTINCT ON (elasticc_brokerclassification."dbClassifier_id", elasticc_diaalert."diaObject_id")
-                "diaObject_id", "dbMessageIndex", "dbClassifier_id"
+                SELECT DISTINCT ON (elasticc_brokerclassification."classifierId", elasticc_diaalert."diaObjectId")
+                "diaObjectId", elasticc_brokerclassification."brokerMessageId", "classifierId"
                     FROM elasticc_brokermessage
                     INNER JOIN elasticc_diaalert
                         ON (elasticc_brokermessage."alertId" = elasticc_diaalert."alertId")
                     INNER JOIN elasticc_brokerclassification
-                        ON (elasticc_brokerclassification."dbMessage_id" = elasticc_brokermessage."dbMessageIndex")
-                    ORDER BY elasticc_brokerclassification."dbClassifier_id", elasticc_diaalert."diaObject_id", "elasticcPublishTimestamp" DESC
+                        ON (elasticc_brokerclassification."brokerMessageId" = elasticc_brokermessage."brokerMessageId")
+                    ORDER BY elasticc_brokerclassification."classifierId", elasticc_diaalert."diaObjectId", "elasticcPublishTimestamp" DESC
             ) last_broker_message
-                ON (elasticc_diaobject."diaObjectId" = last_broker_message."diaObject_id")
+                ON (elasticc_diaobject."diaObjectId" = last_broker_message."diaObjectId")
             INNER JOIN (
-                SELECT DISTINCT ON ("dbMessage_id", "classId")
-                "classId", "probability", "dbMessage_id", "dbClassifier_id"
+                SELECT DISTINCT ON ("brokerMessageId", "classId")
+                "classId", "probability", "brokerMessageId", "classifierId"
                     FROM elasticc_brokerclassification
-                    ORDER BY "dbMessage_id", "classId", "probability" DESC
+                    ORDER BY "brokerMessageId", "classId", "probability" DESC
             ) best_classification
-                ON (last_broker_message."dbMessageIndex" = best_classification."dbMessage_id")
+                ON (last_broker_message."brokerMessageId" = best_classification."brokerMessageId")
             INNER JOIN elasticc_brokerclassifier
-                ON (last_broker_message."dbClassifier_id" = elasticc_brokerclassifier."dbClassifierIndex")
-            INNER JOIN elasticc_classificationmap
-                ON (elasticc_diaobjecttruth."gentype" = elasticc_classificationmap."snana_gentype")
+                ON (last_broker_message."classifierId" = elasticc_brokerclassifier."classifierId")
             GROUP BY pred_class, true_class, classifier_index 
     '''
     result = rqs.post( f'{url}/db/runsqlquery/',
@@ -137,15 +137,15 @@ if __name__ == "__main__":
 #     Column    |  Type  | Collation | Nullable | Default 
 # --------------+--------+-----------+----------+---------
 #  alertId      | bigint |           | not null | 
-#  diaObject_id | bigint |           |          | 
-#  diaSource_id | bigint |           |          | 
+#  diaObjectId | bigint |           |          | 
+#  diaSourceId | bigint |           |          | 
 # Indexes:
 #     "elasticc_diaalert_pkey" PRIMARY KEY, btree ("alertId")
-#     "elasticc_diaalert_diaObject_id_809a8089" btree ("diaObject_id")
-#     "elasticc_diaalert_diaSource_id_1f178060" btree ("diaSource_id")
+#     "elasticc_diaalert_diaObjectId_809a8089" btree ("diaObjectId")
+#     "elasticc_diaalert_diaSourceId_1f178060" btree ("diaSourceId")
 # Foreign-key constraints:
-#     "elasticc_diaalert_diaObject_id_809a8089_fk_elasticc_" FOREIGN KEY ("diaObject_id") REFERENCES elasticc_diaobject("diaObjectId") DEFERRABLE INITIALLY DEFERRED
-#     "elasticc_diaalert_diaSource_id_1f178060_fk_elasticc_" FOREIGN KEY ("diaSource_id") REFERENCES elasticc_diasource("diaSourceId") DEFERRABLE INITIALLY DEFERRED
+#     "elasticc_diaalert_diaObjectId_809a8089_fk_elasticc_" FOREIGN KEY ("diaObjectId") REFERENCES elasticc_diaobject("diaObjectId") DEFERRABLE INITIALLY DEFERRED
+#     "elasticc_diaalert_diaSourceId_1f178060_fk_elasticc_" FOREIGN KEY ("diaSourceId") REFERENCES elasticc_diasource("diaSourceId") DEFERRABLE INITIALLY DEFERRED
 # Referenced by:
 #     TABLE "elasticc_diaalertprvsource" CONSTRAINT "elasticc_diaalertprv_diaAlert_id_68c18d04_fk_elasticc_" FOREIGN KEY ("diaAlert_id") REFERENCES elasticc_diaalert("alertId") DEFERRABLE INITIALLY DEFERRED
 #     TABLE "elasticc_diaalertprvforcedsource" CONSTRAINT "elasticc_diaalertprv_diaAlert_id_ddb308dc_fk_elasticc_" FOREIGN KEY ("diaAlert_id") REFERENCES elasticc_diaalert("alertId") DEFERRABLE INITIALLY DEFERRED
@@ -243,10 +243,10 @@ if __name__ == "__main__":
 #     "elasticc_diaobject_pkey" PRIMARY KEY, btree ("diaObjectId")
 #     "idx_elasticc_diaobject_q3c" btree (q3c_ang2ipix(ra, decl))
 # Referenced by:
-#     TABLE "elasticc_diaalert" CONSTRAINT "elasticc_diaalert_diaObject_id_809a8089_fk_elasticc_" FOREIGN KEY ("diaObject_id") REFERENCES elasticc_diaobject("diaObjectId") DEFERRABLE INITIALLY DEFERRED
-#     TABLE "elasticc_diaforcedsource" CONSTRAINT "elasticc_diaforcedso_diaObject_id_8b1bc498_fk_elasticc_" FOREIGN KEY ("diaObject_id") REFERENCES elasticc_diaobject("diaObjectId") DEFERRABLE INITIALLY DEFERRED
-#     TABLE "elasticc_diaobjecttruth" CONSTRAINT "elasticc_diaobjecttr_diaObject_id_b5103ef2_fk_elasticc_" FOREIGN KEY ("diaObject_id") REFERENCES elasticc_diaobject("diaObjectId") DEFERRABLE INITIALLY DEFERRED
-#     TABLE "elasticc_diasource" CONSTRAINT "elasticc_diasource_diaObject_id_3b88bc59_fk_elasticc_" FOREIGN KEY ("diaObject_id") REFERENCES elasticc_diaobject("diaObjectId") DEFERRABLE INITIALLY DEFERRED
+#     TABLE "elasticc_diaalert" CONSTRAINT "elasticc_diaalert_diaObjectId_809a8089_fk_elasticc_" FOREIGN KEY ("diaObjectId") REFERENCES elasticc_diaobject("diaObjectId") DEFERRABLE INITIALLY DEFERRED
+#     TABLE "elasticc_diaforcedsource" CONSTRAINT "elasticc_diaforcedso_diaObjectId_8b1bc498_fk_elasticc_" FOREIGN KEY ("diaObjectId") REFERENCES elasticc_diaobject("diaObjectId") DEFERRABLE INITIALLY DEFERRED
+#     TABLE "elasticc_diaobjecttruth" CONSTRAINT "elasticc_diaobjecttr_diaObjectId_b5103ef2_fk_elasticc_" FOREIGN KEY ("diaObjectId") REFERENCES elasticc_diaobject("diaObjectId") DEFERRABLE INITIALLY DEFERRED
+#     TABLE "elasticc_diasource" CONSTRAINT "elasticc_diasource_diaObjectId_3b88bc59_fk_elasticc_" FOREIGN KEY ("diaObjectId") REFERENCES elasticc_diaobject("diaObjectId") DEFERRABLE INITIALLY DEFERRED
 # 
 #                    Table "public.elasticc_diasource"
 #       Column       |       Type       | Collation | Nullable | Default 
@@ -262,17 +262,17 @@ if __name__ == "__main__":
 #  psFluxErr         | double precision |           | not null | 
 #  snr               | double precision |           | not null | 
 #  nobs              | double precision |           |          | 
-#  diaObject_id      | bigint           |           |          | 
+#  diaObjectId      | bigint           |           |          | 
 # Indexes:
 #     "elasticc_diasource_pkey" PRIMARY KEY, btree ("diaSourceId")
-#     "elasticc_diasource_diaObject_id_3b88bc59" btree ("diaObject_id")
+#     "elasticc_diasource_diaObjectId_3b88bc59" btree ("diaObjectId")
 #     "elasticc_diasource_midPointTai_5766b47f" btree ("midPointTai")
 #     "idx_elasticc_diasource_q3c" btree (q3c_ang2ipix(ra, decl))
 # Foreign-key constraints:
-#     "elasticc_diasource_diaObject_id_3b88bc59_fk_elasticc_" FOREIGN KEY ("diaObject_id") REFERENCES elasticc_diaobject("diaObjectId") DEFERRABLE INITIALLY DEFERRED
+#     "elasticc_diasource_diaObjectId_3b88bc59_fk_elasticc_" FOREIGN KEY ("diaObjectId") REFERENCES elasticc_diaobject("diaObjectId") DEFERRABLE INITIALLY DEFERRED
 # Referenced by:
-#     TABLE "elasticc_diaalert" CONSTRAINT "elasticc_diaalert_diaSource_id_1f178060_fk_elasticc_" FOREIGN KEY ("diaSource_id") REFERENCES elasticc_diasource("diaSourceId") DEFERRABLE INITIALLY DEFERRED
-#     TABLE "elasticc_diaalertprvsource" CONSTRAINT "elasticc_diaalertprv_diaSource_id_91fa84a3_fk_elasticc_" FOREIGN KEY ("diaSource_id") REFERENCES elasticc_diasource("diaSourceId") DEFERRABLE INITIALLY DEFERRED
+#     TABLE "elasticc_diaalert" CONSTRAINT "elasticc_diaalert_diaSourceId_1f178060_fk_elasticc_" FOREIGN KEY ("diaSourceId") REFERENCES elasticc_diasource("diaSourceId") DEFERRABLE INITIALLY DEFERRED
+#     TABLE "elasticc_diaalertprvsource" CONSTRAINT "elasticc_diaalertprv_diaSourceId_91fa84a3_fk_elasticc_" FOREIGN KEY ("diaSourceId") REFERENCES elasticc_diasource("diaSourceId") DEFERRABLE INITIALLY DEFERRED
 # 
 #                 Table "public.elasticc_diaforcedsource"
 #       Column       |       Type       | Collation | Nullable | Default 
@@ -285,13 +285,13 @@ if __name__ == "__main__":
 #  psFluxErr         | double precision |           | not null | 
 #  totFlux           | double precision |           | not null | 
 #  totFluxErr        | double precision |           | not null | 
-#  diaObject_id      | bigint           |           | not null | 
+#  diaObjectId      | bigint           |           | not null | 
 # Indexes:
 #     "elasticc_diaforcedsource_pkey" PRIMARY KEY, btree ("diaForcedSourceId")
-#     "elasticc_diaforcedsource_diaObject_id_8b1bc498" btree ("diaObject_id")
+#     "elasticc_diaforcedsource_diaObjectId_8b1bc498" btree ("diaObjectId")
 #     "elasticc_diaforcedsource_midPointTai_a80b03af" btree ("midPointTai")
 # Foreign-key constraints:
-#     "elasticc_diaforcedso_diaObject_id_8b1bc498_fk_elasticc_" FOREIGN KEY ("diaObject_id") REFERENCES elasticc_diaobject("diaObjectId") DEFERRABLE INITIALLY DEFERRED
+#     "elasticc_diaforcedso_diaObjectId_8b1bc498_fk_elasticc_" FOREIGN KEY ("diaObjectId") REFERENCES elasticc_diaobject("diaObjectId") DEFERRABLE INITIALLY DEFERRED
 # Referenced by:
 #     TABLE "elasticc_diaalertprvforcedsource" CONSTRAINT "elasticc_diaalertprv_diaForcedSource_id_783ade34_fk_elasticc_" FOREIGN KEY ("diaForcedSource_id") REFERENCES elasticc_diaforcedsource("diaForcedSourceId") DEFERRABLE INITIALLY DEFERRED
 # 
@@ -301,7 +301,7 @@ if __name__ == "__main__":
 #  diaSourceId  | bigint           |           | not null | 
 #  diaObjectId  | bigint           |           |          | 
 #  detect       | boolean          |           |          | 
-#  true_gentype | integer          |           |          | 
+#  gentype | integer          |           |          | 
 #  true_genmag  | double precision |           |          | 
 #  mjd          | double precision |           |          | 
 # Indexes:
@@ -346,31 +346,31 @@ if __name__ == "__main__":
 #  snrmax3            | double precision |           | not null | 
 #  nobs               | integer          |           | not null | 
 #  nobs_saturate      | integer          |           | not null | 
-#  diaObject_id       | bigint           |           | not null | 
+#  diaObjectId       | bigint           |           | not null | 
 # Indexes:
-#     "elasticc_diaobjecttruth_pkey" PRIMARY KEY, btree ("diaObject_id")
+#     "elasticc_diaobjecttruth_pkey" PRIMARY KEY, btree ("diaObjectId")
 #     "elasticc_diaobjecttruth_gentype_480cd308" btree (gentype)
 #     "elasticc_diaobjecttruth_sim_template_index_b33f9ab4" btree (sim_template_index)
 # Foreign-key constraints:
-#     "elasticc_diaobjecttr_diaObject_id_b5103ef2_fk_elasticc_" FOREIGN KEY ("diaObject_id") REFERENCES elasticc_diaobject("diaObjectId") DEFERRABLE INITIALLY DEFERRED
+#     "elasticc_diaobjecttr_diaObjectId_b5103ef2_fk_elasticc_" FOREIGN KEY ("diaObjectId") REFERENCES elasticc_diaobject("diaObjectId") DEFERRABLE INITIALLY DEFERRED
 # 
-#                                 Table "public.elasticc_classificationmap"
+#                                 Table "public.elasticc_gentypeofclassid"
 #     Column     |  Type   | Collation | Nullable |                        Default                         
 # ---------------+---------+-----------+----------+--------------------------------------------------------
-#  id            | integer |           | not null | nextval('elasticc_classificationmap_id_seq'::regclass)
+#  id            | integer |           | not null | nextval('elasticc_gentypeofclassid_id_seq'::regclass)
 #  classId       | integer |           | not null | 
-#  snana_gentype | integer |           |          | 
+#  gentype | integer |           |          | 
 #  description   | text    |           | not null | 
 # Indexes:
-#     "elasticc_classificationmap_pkey" PRIMARY KEY, btree (id)
-#     "elasticc_classificationmap_classId_27acf0d1" btree ("classId")
-#     "elasticc_classificationmap_snana_gentype_63c19152" btree (snana_gentype)
+#     "elasticc_gentypeofclassid_pkey" PRIMARY KEY, btree (id)
+#     "elasticc_gentypeofclassid_classId_27acf0d1" btree ("classId")
+#     "elasticc_gentypeofclassid_gentype_63c19152" btree (gentype)
 # 
 # tom_desc=# \d elasticc_brokermessage
 #                                                      Table "public.elasticc_brokermessage"
 #           Column          |           Type           | Collation | Nullable |                             Default                              
 # --------------------------+--------------------------+-----------+----------+------------------------------------------------------------------
-#  dbMessageIndex           | bigint                   |           | not null | nextval('"elasticc_brokermessage_dbMessageIndex_seq"'::regclass)
+#  brokerMessageId           | bigint                   |           | not null | nextval('"elasticc_brokermessage_brokerMessageId_seq"'::regclass)
 #  streamMessageId          | bigint                   |           |          | 
 #  topicName                | character varying(200)   |           |          | 
 #  alertId                  | bigint                   |           | not null | 
@@ -381,45 +381,45 @@ if __name__ == "__main__":
 #  modified                 | timestamp with time zone |           | not null | 
 #  msgHdrTimestamp          | timestamp with time zone |           |          | 
 # Indexes:
-#     "elasticc_brokermessage_pkey" PRIMARY KEY, btree ("dbMessageIndex")
+#     "elasticc_brokermessage_pkey" PRIMARY KEY, btree ("brokerMessageId")
 #     "elasticc_br_alertId_b419c9_idx" btree ("alertId")
-#     "elasticc_br_dbMessa_59550d_idx" btree ("dbMessageIndex")
+#     "elasticc_br_dbMessa_59550d_idx" btree ("brokerMessageId")
 #     "elasticc_br_diaSour_ca3044_idx" btree ("diaSourceId")
 #     "elasticc_br_topicNa_73f5a4_idx" btree ("topicName", "streamMessageId")
 # Referenced by:
-#     TABLE "elasticc_brokerclassification" CONSTRAINT "elasticc_brokerclass_dbMessage_id_b8bd04da_fk_elasticc_" FOREIGN KEY ("dbMessage_id") REFERENCES elasticc_brokermessage("dbMessageIndex") DEFERRABLE INITIALLY DEFERRED
+#     TABLE "elasticc_brokerclassification" CONSTRAINT "elasticc_brokerclass_brokerMessageId_b8bd04da_fk_elasticc_" FOREIGN KEY ("brokerMessageId") REFERENCES elasticc_brokermessage("brokerMessageId") DEFERRABLE INITIALLY DEFERRED
 # 
 #                                                    Table "public.elasticc_brokerclassifier"
 #       Column       |           Type           | Collation | Nullable |                                Default                                 
 # -------------------+--------------------------+-----------+----------+------------------------------------------------------------------------
-#  dbClassifierIndex | bigint                   |           | not null | nextval('"elasticc_brokerclassifier_dbClassifierIndex_seq"'::regclass)
+#  classifierId | bigint                   |           | not null | nextval('"elasticc_brokerclassifier_classifierId_seq"'::regclass)
 #  brokerName        | character varying(100)   |           | not null | 
 #  brokerVersion     | text                     |           |          | 
 #  classifierName    | character varying(200)   |           | not null | 
 #  classifierParams  | text                     |           |          | 
 #  modified          | timestamp with time zone |           | not null | 
 # Indexes:
-#     "elasticc_brokerclassifier_pkey" PRIMARY KEY, btree ("dbClassifierIndex")
+#     "elasticc_brokerclassifier_pkey" PRIMARY KEY, btree ("classifierId")
 #     "elasticc_br_brokerN_38d99f_idx" btree ("brokerName", "classifierName")
 #     "elasticc_br_brokerN_86cc1a_idx" btree ("brokerName")
 #     "elasticc_br_brokerN_eb7553_idx" btree ("brokerName", "brokerVersion")
 # Referenced by:
-#     TABLE "elasticc_brokerclassification" CONSTRAINT "elasticc_brokerclass_dbClassifier_id_91d33318_fk_elasticc_" FOREIGN KEY ("dbClassifier_id") REFERENCES elasticc_brokerclassifier("dbClassifierIndex") DEFERRABLE INITIALLY DEFERRED
+#     TABLE "elasticc_brokerclassification" CONSTRAINT "elasticc_brokerclass_classifierId_91d33318_fk_elasticc_" FOREIGN KEY ("classifierId") REFERENCES elasticc_brokerclassifier("classifierId") DEFERRABLE INITIALLY DEFERRED
 # 
 # 
 #                                                        Table "public.elasticc_brokerclassification"
 #         Column         |           Type           | Collation | Nullable |                                    Default                                     
 # -----------------------+--------------------------+-----------+----------+--------------------------------------------------------------------------------
-#  dbClassificationIndex | bigint                   |           | not null | nextval('"elasticc_brokerclassification_dbClassificationIndex_seq"'::regclass)
+#  classificationId | bigint                   |           | not null | nextval('"elasticc_brokerclassification_classificationId_seq"'::regclass)
 #  classId               | integer                  |           | not null | 
 #  probability           | double precision         |           | not null | 
 #  modified              | timestamp with time zone |           | not null | 
-#  dbClassifier_id       | bigint                   |           |          | 
-#  dbMessage_id          | bigint                   |           |          | 
+#  classifierId       | bigint                   |           |          | 
+#  brokerMessageId          | bigint                   |           |          | 
 # Indexes:
-#     "elasticc_brokerclassification_pkey" PRIMARY KEY, btree ("dbClassificationIndex")
-#     "elasticc_brokerclassification_dbClassifier_id_91d33318" btree ("dbClassifier_id")
-#     "elasticc_brokerclassification_dbMessage_id_b8bd04da" btree ("dbMessage_id")
+#     "elasticc_brokerclassification_pkey" PRIMARY KEY, btree ("classificationId")
+#     "elasticc_brokerclassification_classifierId_91d33318" btree ("classifierId")
+#     "elasticc_brokerclassification_brokerMessageId_b8bd04da" btree ("brokerMessageId")
 # Foreign-key constraints:
-#     "elasticc_brokerclass_dbClassifier_id_91d33318_fk_elasticc_" FOREIGN KEY ("dbClassifier_id") REFERENCES elasticc_brokerclassifier("dbClassifierIndex") DEFERRABLE INITIALLY DEFERRED
-#     "elasticc_brokerclass_dbMessage_id_b8bd04da_fk_elasticc_" FOREIGN KEY ("dbMessage_id") REFERENCES elasticc_brokermessage("dbMessageIndex") DEFERRABLE INITIALLY DEFERRED
+#     "elasticc_brokerclass_classifierId_91d33318_fk_elasticc_" FOREIGN KEY ("classifierId") REFERENCES elasticc_brokerclassifier("classifierId") DEFERRABLE INITIALLY DEFERRED
+#     "elasticc_brokerclass_brokerMessageId_b8bd04da_fk_elasticc_" FOREIGN KEY ("brokerMessageId") REFERENCES elasticc_brokermessage("brokerMessageId") DEFERRABLE INITIALLY DEFERRED
