@@ -12,18 +12,26 @@ ELAsTiCC Summary Summary
 <h3>Objects, Sources, and Alerts</h3>
 
 <table class="elasticc_table1">
-  <tr><th>Table</th><th># Rows</th></tr>
+  <tr><th>Table</th><th># Rows</th><th>N. Streamed</th><th>N. Not Streamed</th></tr>
   {% for row in tabcounts %}
-  <tr><td>{{ row.name }}</td><td> {{row.count}} </td></tr>
+  <tr><td>{{ row.name }}</td><td> {{row.count}} </td>
+    {% if row.name == "DiaAlert" %}
+    <td>{{ row.sent }}</td><td>{{ row.unsent }}</td>
+    {% endif %}
+  </tr>
   {% endfor %}
 </table>
 
 
 <h3>Brokers and Classifiers</h3>
 <table class="elasticc_table1">
-  <tr><th>Broker</th><th>Version</th><th>Classifier</th><th>Params</th><th>N. Classifications</th></tr>
+  <tr><th>Broker</th><th>Version</th><th>Classifier</th><th>Params</th>
+    <th>N. Classifications</th><th>N. Bad alertId</th></tr>
   {% for row in brokers %}
-  <tr><td>{{ row.0 }}</td><td>{{ row.1 }}</td><td>{{ row.2 }}</td><td>{{ row.3 }}</td><td>{{ row.4 }}</td></tr>
+  <tr><td>{{ row.brokerName }}</td><td>{{ row.brokerVersion }}</td>
+    <td>{{ row.classifierName }}</td><td>{{ row.classifierParams }}</td>
+    <td>{{ row.nclassifications }}</td><td>{{ row.nbadalertid }}</td>
+  </tr>
   {% endfor %}
 {% comment %}
   {% for broker,versions in brokers.items %}

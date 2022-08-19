@@ -7,6 +7,7 @@ import time
 import datetime
 import logging
 import django.db
+from django.db.models import Q
 from django.db import transaction, connection
 import django.urls
 from django.http import HttpResponse, JsonResponse
@@ -748,7 +749,17 @@ class ElasticcSummary( LoginRequiredMixin, django.views.View ):
         for tab in [ DiaAlert, DiaObject, DiaSource, DiaForcedSource ]:
             context['tabcounts'].append( { 'name': tab.__name__,
                                            'count': tab.objects.count() } )
+            if tab == DiaAlert:
+                notdated = tab.objects.filter( alertSentTimestamp=None ).count()
+                dated = tab.objects.filter( ~Q(alertSentTimestamp=None) ).count()
+                context['tabcounts'][-1]['sent'] = dated
+                context['tabcounts'][-1]['unsent'] = notdated
 
+        # I originally tried doing some of these queries the "Django Way",
+        # but they came out as HUGE lists of code.  Sometimes, SQL
+        # is the right way to do things.
+        context['brokers'] = []
+        brokermap = {}
         with connection.cursor() as cursor:
             cursor.execute( 'SELECT cfer."brokerName",cfer."brokerVersion",'
                             'cfer."classifierName",cfer."classifierParams",'
@@ -761,56 +772,32 @@ class ElasticcSummary( LoginRequiredMixin, django.views.View ):
                             'ORDER BY cfer."brokerName",cfer."brokerVersion",'
                             'cfer."classifierName",cfer."classifierParams" ' )
             rows = cursor.fetchall()
-            _logger.debug( f"Got {len(rows)} rows" )
+            for i, row in enumerate(rows):
+                context['brokers'].append( { 'brokerName': row[0],
+                                             'brokerVersion': row[1],
+                                             'classifierName': row[2],
+                                             'classifierParams': row[3],
+                                             'nclassifications': row[4],
+                                             'nbadalertid': 0,
+                                             'nstreamedclassified': 0 } )
+                brokermap[ f'{row[0]}_{row[1]}_{row[2]}_{row[3]}' ] = i
+            cursor.execute( 'SELECT cfer."brokerName",cfer."brokerVersion",'
+                            'cfer."classifierName",cfer."classifierParams",'
+                            'COUNT( cification."classificationId" ) AS n '
+                            'FROM elasticc_brokerclassifier cfer '
+                            'INNER JOIN elasticc_brokerclassification cification '
+                            '  ON cification."classifierId"=cfer."classifierId" '
+                            'INNER JOIN elasticc_brokermessage m '
+                            '  ON cification."brokerMessageId"=m."brokerMessageId" '
+                            'LEFT JOIN elasticc_diaalert a ON a."alertId"=m."alertId" '
+                            'WHERE a."alertId" IS NULL '
+                            'GROUP BY cfer."brokerName",cfer."brokerVersion",'
+                            '  cfer."classifierName",cfer."classifierParams" ' )
+            rows = cursor.fetchall()
+            for row in rows:
+                dex = brokermap[ f'{row[0]}_{row[1]}_{row[2]}_{row[3]}' ]
+                context['brokers'][dex]['nbadalertid'] = row[4]
 
-        # ... I don't know if it's my lack of agility with ORMs, but the single
-        # query above turned into this gigantic mess of code below when I tried
-        # to do it the django way.
-        #
-        # There is probably a way less cumbersome way of doing this
-        # allcfers = BrokerClassifier.objects.all()
-        # brokernames = set()
-        # cfercounts = {}
-        # for cfer in allcfers:
-        #     brokernames.add( cfer.brokerName )
-        #     cfercounts[cfer.dbClassifierIndex] = ( BrokerClassification.objects
-        #                                            .filter( dbClassifier_id=cfer.dbClassifierIndex ).count() )
-        # brokernames = list( brokernames )
-        # brokernames.sort()
-        # brokers = {}
-        # for brokername in brokernames:
-        #     brokers[brokername] = {}
-        #     versions = set()
-        #     for cfer in allcfers:
-        #         if ( cfer.brokerName == brokername ):
-        #             versions.add( cfer.brokerVersion )
-        #     versions = list( versions )
-        #     versions.sort()
-        #     for version in versions:
-        #         brokers[brokername][version] = {}
-        #         cfernames = set()
-        #         for cfer in allcfers:
-        #             if ( cfer.brokerName == brokername ) and ( cfer.brokerVersion == version ):
-        #                 cfernames.add( cfer.classifierName )
-        #         cfernames = list( cfernames )
-        #         cfernames.sort()
-        #         for cfername in cfernames:
-        #             brokers[brokername][version][cfername] = {}
-        #             cferparams = set()
-        #             for cfer in allcfers:
-        #                 if ( ( cfer.brokerName == brokername ) and ( cfer.brokerVersion == version )
-        #                      and ( cfer.classifierName == cfername ) ):
-        #                     cferparams.add( cfer.classifierParams )
-        #             cferparams = list(cferparams)
-        #             cferparams.sort()
-        #             for cferparam in cferparams:
-        #                 for cfer in allcfers:
-        #                     if ( ( cfer.brokerName == brokername ) and ( cfer.brokerVersion == version )
-        #                      and ( cfer.classifierName == cfername )  and ( cfer.classifierParams == cferparam ) ):
-        #                         brokers[brokername][version][cfername][cferparam] = cfercounts[cfer.dbClassifierIndex]
-        # context['brokers'] = brokers
-
-        context['brokers'] = rows
         return HttpResponse( templ.render( context, request ) )
                                 
 # ======================================================================
@@ -832,7 +819,23 @@ class ElasticcAdminSummary( PermissionRequiredMixin, django.views.View ):
                      DiaAlert, DiaTruth, DiaObjectTruth ]:
             context['tabcounts'].append( { 'name': tab.__name__,
                                            'count': tab.objects.count() } )
+            if tab == DiaAlert:
+                notdated = tab.objects.filter( alertSentTimestamp=None ).count()
+                dated = tab.objects.filter( ~Q(alertSentTimestamp=None) ).count()
+                context['tabcounts'][-1]['sent'] = dated
+                context['tabcounts'][-1]['unsent'] = notdated
         # _logger.info( f'context = {context}' )
+
+        with connection.cursor() as cursor:
+            cursor.execute( 'SELECT COUNT(o."diaObjectId"),t.gentype,m."classId",m.description '
+                            'FROM elasticc_diaobject o '
+                            'LEFT JOIN elasticc_diaobjecttruth t ON t."diaObjectId"=o."diaObjectId" '
+                            'LEFT JOIN elasticc_gentypeofclassid m ON m.gentype=t.gentype '
+                            'GROUP BY t.gentype,m."classId",m.description '
+                            'ORDER BY m."classId"' )
+            rows=cursor.fetchall()
+            context['objtypecounts'] = rows
+
         return HttpResponse( templ.render( context, request ) )
         
 # ======================================================================

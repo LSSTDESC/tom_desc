@@ -4,7 +4,7 @@ table.elasticc_table1 tr { padding-top: 2px;
                            border-top: 2px solid black;
                            border-bottom: 2px solid black;
                          }
-table.elasticc_table1 td { padding-left: 1ex;
-                           padding-right: 1ex;
-                         }
+table.elasticc_table1 td, table.elasticc_table1 th { padding-left: 1ex;
+                                                     padding-right: 1ex;
+                                                   }
                           

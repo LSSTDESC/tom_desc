@@ -124,7 +124,7 @@ class FinkConsumer(BrokerConsumer):
     def __init__( self, grouptag=None, loggername="FINK", **kwargs ):
         server = "134.158.74.95:24499"
         groupid = "elasticc-lbnl-test" + ( "" if grouptag is None else "-" + grouptag )
-        topics = [ 'fink_elasticc-test-late-july' ]
+        topics = [ 'fink_elasticc-test-mid-august' ]
         super().__init__( server, groupid, topics=topics, loggername=loggername, **kwargs )
         self.logger.info( f"Fink group id is {groupid}" )
         
@@ -163,8 +163,8 @@ class Command(BaseCommand):
 
     def handle( self, *args, **options ):
         do_antares = True
-        do_fink = False
-        do_alerce = True
+        do_fink = True
+        do_alerce = False
         join = None
         
         if do_antares:

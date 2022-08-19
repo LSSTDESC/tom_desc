@@ -12,12 +12,22 @@ ELAsTiCC Admin Summary
 <h3>Objects, Sources, and Alerts</h3>
 
 <table class="elasticc_table1">
-  <tr><th>Table</th><th># Rows</th></tr>
+  <tr><th>Table</th><th># Rows</th><th>N. Streamed</th><th>N. Not Streamed</th></tr>
   {% for row in tabcounts %}
-  <tr><td>{{ row.name }}</td><td> {{row.count}} </td></tr>
+  <tr><td>{{ row.name }}</td><td> {{row.count}} </td>
+    {% if row.name == "DiaAlert" %}
+    <td>{{ row.sent }}</td><td>{{ row.unsent }}</td>
+    {% endif %}
+  </tr>
   {% endfor %}
 </table>
 
 <h3>Object truth: numbers of objects</h3>
 
+<table class="elasticc_table1">
+  <tr><th>classId</th><th>gentype</th><th>description</th><th>count</th></tr>
+  {% for row in objtypecounts %}
+  <tr><td>{{ row.2 }}</td><td>{{ row.1 }}</td><td>{{ row.3 }}</td><td>{{ row.0 }}</td></tr>
+  {% endfor %}
+</table>
 {% endblock %}
