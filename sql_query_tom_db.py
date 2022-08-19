@@ -122,7 +122,7 @@ if __name__ == "__main__":
 
 
 # ======================================================================
-# elasticc tables as of 2022-08-08
+# elasticc tables as of 2022-08-19
 #
 # The order of the columns is what happens to be in the database, as a
 # result of the specific history of django databse migrations.  It's not
@@ -198,6 +198,7 @@ if __name__ == "__main__":
 # View "public.elasticc_view_sourceclassifications"
 #           Column          |           Type           | Collation | Nullable | Default 
 # --------------------------+--------------------------+-----------+----------+---------
+#  classifierId             | bigint                   |           |          | 
 #  brokerName               | character varying(100)   |           |          | 
 #  brokerVersion            | text                     |           |          | 
 #  classifierName           | character varying(200)   |           |          | 
@@ -208,6 +209,8 @@ if __name__ == "__main__":
 #  diaObjectId              | bigint                   |           |          | 
 #  gentype                  | integer                  |           |          | 
 #  trueClassId              | integer                  |           |          | 
+#  alertId                  | bigint                   |           |          | 
+#  brokerMessageId          | bigint                   |           |          | 
 #  alertSentTimestamp       | timestamp with time zone |           |          | 
 #  elasticcPublishTimestamp | timestamp with time zone |           |          | 
 #  brokerIngestTimestamp    | timestamp with time zone |           |          | 
