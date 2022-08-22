@@ -22,6 +22,9 @@ _logger.setLevel( logging.INFO )
 def _donothing( *args, **kwargs ):
     pass
 
+def close_msg_consumer( obj ):
+    obj.close()
+
 class MsgConsumer(object):
     def __init__( self, server, groupid, schema, topics=None,
                   extraconsumerconfig=None, consume_nmsgs=10, consume_timeout=5, nomsg_sleeptime=1,
@@ -56,7 +59,7 @@ class MsgConsumer(object):
             consumerconfig.update( extraconsumerconfig )
         self.logger.debug( f'Initializing Kafka consumer with\n{json.dumps(consumerconfig, indent=4)}' )
         self.consumer = confluent_kafka.Consumer( consumerconfig )
-        atexit.register( self.__del__ )
+        atexit.register( close_msg_consumer, self )
 
         self.subscribed = False
         self.subscribe( topics )
@@ -64,6 +67,7 @@ class MsgConsumer(object):
     def close( self ):
         if self.consumer is not None:
             self.logger.info( "Closing MsgConsumer" )
+            sys.stderr.write( "Closing MsgConsumer\n" )
             self.consumer.close()
             self.consumer = None
         
@@ -80,7 +84,7 @@ class MsgConsumer(object):
         else:
             raise ValueError( f'topics must be either a string or a list' )
 
-        if self.topics is not None and len(topics) > 0:
+        if self.topics is not None and len(self.topics) > 0:
             self.logger.info( f'Subscribing to topics: {", ".join( topics )}' )
             self.consumer.subscribe( topics, on_assign=self._sub_callback )
         else:
@@ -160,14 +164,14 @@ class MsgConsumer(object):
         starttime = datetime.datetime.now()
         keepgoing = True
         while keepgoing:
-            self.logger.info( f"Trying to consume {self.consume_nmsgs} messages "
-                              f"with timeout {self.consume_timeout}..." )
+            self.logger.debug( f"Trying to consume {self.consume_nmsgs} messages "
+                               f"with timeout {self.consume_timeout}..." )
             msgs = self.consumer.consume( self.consume_nmsgs, timeout=self.consume_timeout )
             if len(msgs) == 0:
-                self.logger.info( f"No messages, sleeping {self.nomsg_sleeptime} sec" )
+                self.logger.debug( f"No messages, sleeping {self.nomsg_sleeptime} sec" )
                 time.sleep( self.nomsg_sleeptime )
             else:
-                self.logger.info( f"...got {len(msgs)} messages" )
+                self.logger.debug( f"...got {len(msgs)} messages" )
                 self.tot_handled += len(msgs)
                 if handler is not None:
                     handler( msgs )
@@ -179,7 +183,7 @@ class MsgConsumer(object):
                  or
                  ( ( max_runtime is not None ) and ( runtime > max_runtime ) ) ):
                 keepgoing = False
-        self.logger.info( f"Stopping poll loop after consuming {nconsumed} messages during {runtime}" )
+        self.logger.debug( f"Stopping poll loop after consuming {nconsumed} messages during {runtime}" )
 
     def consume_one_message( self, timeout=None, handler=None ):
         """Both calls handler and returns a batch of 1 message."""

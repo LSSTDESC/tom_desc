@@ -1,8 +1,11 @@
 import sys
 import io
 import pathlib
+import time
 import datetime
 import logging
+import traceback
+import signal
 import json
 import multiprocessing
 import fastavro
@@ -24,7 +27,8 @@ from _consumekafkamsgs import MsgConsumer
 # ======================================================================
         
 class BrokerConsumer:
-    def __init__( self, server, groupid, topics=None, schemaless=True, reset=False, extraconfig={},
+    def __init__( self, server, groupid, topics=None, updatetopics=False,
+                  schemaless=True, reset=False, extraconfig={},
                   schemafile=None, loggername="BROKER" ):
 
         self.logger = logging.getLogger( loggername )
@@ -39,27 +43,61 @@ class BrokerConsumer:
 
         if schemafile is None:
             schemafile = _rundir / "elasticc.v0_9.brokerClassification.avsc"
+
+        self.server = server
+        self.groupid = groupid
+        self.topics = topics
+        self._updatetopics = updatetopics
+        self._reset = reset
+        self.extraconfig = extraconfig
         
         self.schemaless = schemaless
         if not self.schemaless:
             raise RuntimeError( "I only know how to handle schemaless streams" )
         self.schemafile = schemafile
         self.schema = fastavro.schema.load_schema( self.schemafile )
-        self.consumer = MsgConsumer( server, groupid, self.schemafile, topics,
-                                     extraconsumerconfig=extraconfig,
-                                     consume_nmsgs=1000, consume_timeout=1, nomsg_sleeptime=5,
-                                     logger=self.logger )
-        self.topics = topics
-        if reset and ( self.topics is not None ):
+
+        self.create_connection()
+        
+    @property
+    def reset( self ):
+        return self._reset
+
+    @reset.setter
+    def reset( self, val ):
+        self._reset = val
+        
+    def create_connection( self ):
+        countdown = 5
+        while countdown >= 0:
+            try:
+                self.consumer = MsgConsumer( self.server, self.groupid, self.schemafile, self.topics,
+                                             extraconsumerconfig=self.extraconfig,
+                                             consume_nmsgs=1000, consume_timeout=1, nomsg_sleeptime=5,
+                                             logger=self.logger )
+                countdown = -1
+            except Exception as e:
+                countdown -= 1
+                strio = io.StringIO("")
+                strio.write( f"Exception connecting to broker: {str(e)}" )
+                traceback.print_exc( file=strio )
+                self.logger.warning( strio.getvalue() )
+                if countdown >= 0:
+                    self.logger.warning( "Sleeping 5s and trying again." )
+                    time.sleep(5)
+                else:
+                    self.logger.error( "Repeated exceptions connecting to broker, punting." )
+                    raise RuntimeError( "Failed to connect to broker" )
+            
+        if self._reset and ( self.topics is not None ):
             self.reset_to_start()
 
-    @property
-    def topics( self ):
-        return self.consumer.topics
-
-    @topics.setter
-    def topics( self, topics ):
-        self.consumer.subscribe( topics )
+    def close_connection( self ):
+        self.consumer.close()
+        self.consumer = None
+            
+    def update_topics( self, *args, **kwargs ):
+        raise NotImplementedError( "Subclass must implement this if you use it." )
         
     def reset_to_start( self ):
         self.logger.info( "Resetting all topics to start" )
@@ -85,8 +123,27 @@ class BrokerConsumer:
                                    'msg': alert } )
         BrokerMessage.load_batch( messagebatch, logger=self.logger )
         
-    def poll( self ):
-        self.consumer.poll_loop( handler=self.handle_message_batch, max_consumed=None, max_runtime=None )
+    def poll( self, restart_time=datetime.timedelta(minutes=30) ):
+        while True:
+            if self._updatetopics:
+                self.update_topics()
+            self.logger.info( f"Subscribed to topics: {self.consumer.topics}; starting poll loop." )
+            strio = io.StringIO("")
+            try:
+                self.consumer.poll_loop( handler=self.handle_message_batch,
+                                         max_consumed=None, max_runtime=restart_time )
+                strio.write( f"Reached poll timeout; handled {self.consumer.tot_handled} messages. " )
+            except Exception as e:
+                otherstrio = io.StringIO("")
+                traceback.print_exc( file=otherstrio )
+                self.logger.warning( otherstrio.getvalue() )
+                strio.write( f"Exception polling: {str(e)}. " )
+            strio.write( "Reconnecting.\n" )
+            self.logger.info( strio.getvalue() )
+            self.close_connection()
+            if self._updatetopics:
+                self.topics = None
+            self.create_connection()
 
 # ======================================================================
         
@@ -97,6 +154,7 @@ class AntaresConsumer(BrokerConsumer):
         server = "kafka.antares.noirlab.edu:9092"
         groupid = "elasticc-lbnl-test" + ( "" if grouptag is None else "-" + grouptag )
         topics = [ 'elasticc-test-mid-august-classifications' ]
+        updatetopics = False
         with open( usernamefile ) as ifp:
             username = ifp.readline().strip()
         with open( passwdfile ) as ifp:
@@ -113,8 +171,8 @@ class AntaresConsumer(BrokerConsumer):
             "ssl.ca.location": str( _rundir / "antares-ca.pem" ),
             "auto.offset.reset": "earliest",
         }
-        super().__init__( server, groupid, topics=topics, extraconfig=extraconfig,
-                          loggername=loggername, **kwargs )
+        super().__init__( server, groupid, topics=topics, updatetopics=updatetopics,
+                          extraconfig=extraconfig, loggername=loggername, **kwargs )
         self.logger.info( f"Antares group id is {groupid}" )
         
 
@@ -125,7 +183,9 @@ class FinkConsumer(BrokerConsumer):
         server = "134.158.74.95:24499"
         groupid = "elasticc-lbnl-test" + ( "" if grouptag is None else "-" + grouptag )
         topics = [ 'fink_elasticc-test-mid-august' ]
-        super().__init__( server, groupid, topics=topics, loggername=loggername, **kwargs )
+        updatetopics = False
+        super().__init__( server, groupid, topics=topics, updatetopics=updatetopics,
+                          loggername=loggername, **kwargs )
         self.logger.info( f"Fink group id is {groupid}" )
         
 
@@ -137,7 +197,8 @@ class AlerceConsumer(BrokerConsumer):
                   loggername="ALERCE", **kwargs ):
         server = "kafka.alerce.science:9093"
         groupid = "elasticc-lbnl-test" + ( "" if grouptag is None else "-" + grouptag )
-        topics = [ 'alerce_balto_lc_classifier_20220727' ]
+        topics = None
+        updatetopics = True
         with open( usernamefile ) as ifp:
             username = ifp.readline().strip()
         with open( passwdfile ) as ifp:
@@ -146,10 +207,25 @@ class AlerceConsumer(BrokerConsumer):
                          "sasl.mechanism": "SCRAM-SHA-256",
                          "sasl.username": username,
                          "sasl.password": passwd }
-        super().__init__( server, groupid, topics=topics, extraconfig=extraconfig,
+        super().__init__( server, groupid, topics=topics, updatetopics=updatetopics, extraconfig=extraconfig,
                           loggername=loggername, **kwargs )
         self.logger.info( f"Alerce group id is {groupid}" )
 
+    def update_topics( self, *args, **kwargs ):
+        now = datetime.datetime.now()
+        datestrs = []
+        for ddays in range(-4, 3):
+            then = now + datetime.timedelta( days=ddays )
+            datestrs.append( f"{then.year:04d}{then.month:02d}{then.day:02d}" )
+        tosub = []
+        topics = self.consumer.get_topics()
+        for topic in topics:
+            for datestr in datestrs:
+                if topic == f"alerce_balto_lc_classifier_{datestr}":
+                    tosub.append( topic )
+        self.topics = tosub
+        self.consumer.subscribe( self.topics )
+            
 # =====================================================================
 
 class Command(BaseCommand):
@@ -164,7 +240,7 @@ class Command(BaseCommand):
     def handle( self, *args, **options ):
         do_antares = True
         do_fink = True
-        do_alerce = False
+        do_alerce = True
         join = None
         
         if do_antares:
@@ -190,6 +266,10 @@ class Command(BaseCommand):
             alerce_process = multiprocessing.Process( target=launch_alerce )
             alerce_process.start()
             if join is None: join = alerce_process
-            
+
+        # Make sure that atexit stuff gets run when we get a TERM singal
+        # signal.signal( signal.SIGTERM, lambda *args : sys.exit(1) )
+        #...doesn't seem to work.  I bet django/tom subvert this.  Sigh.
+        
         # Rob, put in a heartbeat thing or something
         join = join.join()

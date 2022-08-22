@@ -663,7 +663,7 @@ class BrokerMessage(models.Model):
         kwargses = []
         utc = pytz.timezone( "UTC" )
         for msg in messages:
-            logger.debug( f"Gonna try to load {msg}" ) 
+            # logger.debug( f"Gonna try to load {msg}" ) 
             timestamp = msg['timestamp']
             if len( msg['msg']['classifications'] ) == 0:
                 logger.debug( "Message with no classifications" )
