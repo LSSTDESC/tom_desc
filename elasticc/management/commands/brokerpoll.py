@@ -153,7 +153,7 @@ class AntaresConsumer(BrokerConsumer):
                   loggername="ANTARES", **kwargs ):
         server = "kafka.antares.noirlab.edu:9092"
         groupid = "elasticc-lbnl-test" + ( "" if grouptag is None else "-" + grouptag )
-        topics = [ 'elasticc-test-mid-august-classifications' ]
+        topics = [ 'elasticc-test-early-september-classifications' ]
         updatetopics = False
         with open( usernamefile ) as ifp:
             username = ifp.readline().strip()
@@ -182,7 +182,7 @@ class FinkConsumer(BrokerConsumer):
     def __init__( self, grouptag=None, loggername="FINK", **kwargs ):
         server = "134.158.74.95:24499"
         groupid = "elasticc-lbnl-test" + ( "" if grouptag is None else "-" + grouptag )
-        topics = [ 'fink_elasticc-test-mid-august' ]
+        topics = [ 'fink_elasticc-test-early-september' ]
         updatetopics = False
         super().__init__( server, groupid, topics=topics, updatetopics=updatetopics,
                           loggername=loggername, **kwargs )

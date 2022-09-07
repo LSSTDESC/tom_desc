@@ -271,7 +271,7 @@ class DiaForcedSource(Createable):
     
 class DiaAlert(Createable):
     alertId = models.BigIntegerField( primary_key=True, unique=True, db_index=True )
-    alertSentTimestamp = models.DateTimeField( null=True )
+    alertSentTimestamp = models.DateTimeField( null=True, db_index=True )
     diaSource = models.ForeignKey( DiaSource, db_column='diaSourceId', on_delete=models.CASCADE, null=True )
     diaObject = models.ForeignKey( DiaObject, db_column='diaObjectId', on_delete=models.CASCADE, null=True )
     # cutoutDifference
