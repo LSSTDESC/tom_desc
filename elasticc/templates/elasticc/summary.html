@@ -26,11 +26,11 @@ ELAsTiCC Summary Summary
 <h3>Brokers and Classifiers</h3>
 <table class="elasticc_table1">
   <tr><th>Broker</th><th>Version</th><th>Classifier</th><th>Params</th>
-    <th>N. Classifications</th><th>N. Bad alertId</th></tr>
+    <th>N. Classifications</th></tr>
   {% for row in brokers %}
   <tr><td>{{ row.brokerName }}</td><td>{{ row.brokerVersion }}</td>
     <td>{{ row.classifierName }}</td><td>{{ row.classifierParams }}</td>
-    <td>{{ row.nclassifications }}</td><td>{{ row.nbadalertid }}</td>
+    <td>{{ row.nclassifications }}</td>
   </tr>
   {% endfor %}
 {% comment %}

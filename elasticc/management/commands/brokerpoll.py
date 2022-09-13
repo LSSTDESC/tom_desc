@@ -1,5 +1,6 @@
 import sys
 import io
+import re
 import pathlib
 import time
 import datetime
@@ -220,9 +221,9 @@ class AlerceConsumer(BrokerConsumer):
         tosub = []
         topics = self.consumer.get_topics()
         for topic in topics:
-            for datestr in datestrs:
-                if topic == f"alerce_balto_lc_classifier_{datestr}":
-                    tosub.append( topic )
+            match = re.search( '^alerce_elasticc_.*_(\d{4}\d{2}\d{2})$', topic )
+            if match and ( match.group(1) in datestrs ):
+                tosub.append( topic )
         self.topics = tosub
         self.consumer.subscribe( self.topics )
             

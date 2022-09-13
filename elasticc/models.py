@@ -805,6 +805,7 @@ class BrokerClassifier(models.Model):
             models.Index(fields=["brokerName"]),
             models.Index(fields=["brokerName", "brokerVersion"]),
             models.Index(fields=["brokerName", "classifierName"]),
+            models.Index(fields=["brokerName", "brokerVersion", "classifierName", "classifierParams"]),
         ]
 
 
