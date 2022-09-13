@@ -755,48 +755,47 @@ class ElasticcSummary( LoginRequiredMixin, django.views.View ):
                 context['tabcounts'][-1]['sent'] = dated
                 context['tabcounts'][-1]['unsent'] = notdated
 
-        # I originally tried doing some of these queries the "Django Way",
-        # but they came out as HUGE lists of code.  Sometimes, SQL
-        # is the right way to do things.
+        # Get all of the classifiers.  I found that later just grouping on
+        # classifierId was faster than a join and grouping on the four
+        # elements of classifiers.  (Perhaps no surprise, but I had thought
+        # better of PostgreSQL.)
+
+        classifiers = list( BrokerClassifier.objects.all() )
+        # classifiers.sort( key=lambda e: ( e.brokerName, e.brokerVersion, e.classifierName, e.classifierParams ) )
+        classifiers = { c.classifierId: c for c in classifiers }
+        
         context['brokers'] = []
         brokermap = {}
         with connection.cursor() as cursor:
-            cursor.execute( 'SELECT cfer."brokerName",cfer."brokerVersion",'
-                            'cfer."classifierName",cfer."classifierParams",'
-                            'COUNT( cification."classificationId" ) AS n '
-                            'FROM elasticc_brokerclassifier cfer '
-                            'INNER JOIN elasticc_brokerclassification cification '
-                            '  ON cification."classifierId"=cfer."classifierId" '
-                            'GROUP BY cfer."brokerName",cfer."brokerVersion",'
-                            'cfer."classifierName",cfer."classifierParams" '
-                            'ORDER BY cfer."brokerName",cfer."brokerVersion",'
-                            'cfer."classifierName",cfer."classifierParams" ' )
+            _logger.debug( "Getting brokers & numbers of classifications." )
+            cursor.execute( 'SELECT "classifierId", COUNT("classificationId") as n '
+                            'FROM elasticc_brokerclassification '
+                            'GROUP BY "classifierId"' )
             rows = cursor.fetchall()
             for i, row in enumerate(rows):
-                context['brokers'].append( { 'brokerName': row[0],
-                                             'brokerVersion': row[1],
-                                             'classifierName': row[2],
-                                             'classifierParams': row[3],
-                                             'nclassifications': row[4],
+                context['brokers'].append( { 'brokerName': classifiers[row[0]].brokerName,
+                                             'brokerVersion': classifiers[row[0]].brokerVersion,
+                                             'classifierName': classifiers[row[0]].classifierName,
+                                             'classifierParams': classifiers[row[0]].classifierParams,
+                                             'nclassifications': row[1],
                                              'nbadalertid': 0,
                                              'nstreamedclassified': 0 } )
-                brokermap[ f'{row[0]}_{row[1]}_{row[2]}_{row[3]}' ] = i
-            cursor.execute( 'SELECT cfer."brokerName",cfer."brokerVersion",'
-                            'cfer."classifierName",cfer."classifierParams",'
-                            'COUNT( cification."classificationId" ) AS n '
-                            'FROM elasticc_brokerclassifier cfer '
-                            'INNER JOIN elasticc_brokerclassification cification '
-                            '  ON cification."classifierId"=cfer."classifierId" '
-                            'INNER JOIN elasticc_brokermessage m '
-                            '  ON cification."brokerMessageId"=m."brokerMessageId" '
-                            'LEFT JOIN elasticc_diaalert a ON a."alertId"=m."alertId" '
-                            'WHERE a."alertId" IS NULL '
-                            'GROUP BY cfer."brokerName",cfer."brokerVersion",'
-                            '  cfer."classifierName",cfer."classifierParams" ' )
-            rows = cursor.fetchall()
-            for row in rows:
-                dex = brokermap[ f'{row[0]}_{row[1]}_{row[2]}_{row[3]}' ]
-                context['brokers'][dex]['nbadalertid'] = row[4]
+                brokermap[ row[0] ] = i
+            # _logger.debug( "Looking for bad alert IDs." )
+            # cursor.execute( 'SELECT c."classifierId",COUNT(c."classificationId") as n '
+            #                 'FROM elasticc_brokerclassification c '
+            #                 'INNER JOIN elasticc_brokermessage m ON c."brokerMessageId"=m."brokerMessageId" '
+            #                 'LEFT JOIN elasticc_diaalert a ON a."alertId"=m."alertId" '
+            #                 'WHERE a."alertId" IS NULL '
+            #                 'GROUP BY c."classifierId"' )
+            # rows = cursor.fetchall()
+            # for row in rows:
+            #     dex = brokermap[ row[0] ]
+            #     context['brokers'][dex]['nbadalertid'] = row[1]
+            # _logger.debug( "Done looking for bad alert IDs." )
+
+        context['brokers'].sort( key=lambda e: ( e['brokerName'], e['brokerVersion'],
+                                                 e['classifierName'], e['classifierParams'] ) )
 
         return HttpResponse( templ.render( context, request ) )
                                 

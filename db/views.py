@@ -42,7 +42,10 @@ class RunSQLQuery(LoginRequiredMixin, django.views.View):
         cursor = dbconn.cursor()
         try:
             cursor.execute( data['query'], subdict )
+            rows = cursor.fetchall()
         except Exception as ex:
             return JsonResponse( { 'status': 'error', 'error': str(ex) } )
-        return JsonResponse( { 'status': 'ok', 'rows': cursor.fetchall() } )
+        finally:
+            dbconn.close()
+        return JsonResponse( { 'status': 'ok', 'rows': rows } )
         
