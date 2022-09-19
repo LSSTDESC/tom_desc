@@ -133,7 +133,8 @@ class BrokerConsumer:
             try:
                 self.consumer.poll_loop( handler=self.handle_message_batch,
                                          max_consumed=None, max_runtime=restart_time )
-                strio.write( f"Reached poll timeout; handled {self.consumer.tot_handled} messages. " )
+                strio.write( f"Reached poll timeout for {self.server}; "
+                             f"handled {self.consumer.tot_handled} messages. " )
             except Exception as e:
                 otherstrio = io.StringIO("")
                 traceback.print_exc( file=otherstrio )
@@ -154,7 +155,7 @@ class AntaresConsumer(BrokerConsumer):
                   loggername="ANTARES", **kwargs ):
         server = "kafka.antares.noirlab.edu:9092"
         groupid = "elasticc-lbnl-test" + ( "" if grouptag is None else "-" + grouptag )
-        topics = [ 'elasticc-test-early-september-classifications' ]
+        topics = [ 'elasticc-test-early-september-classifications2' ]
         updatetopics = False
         with open( usernamefile ) as ifp:
             username = ifp.readline().strip()
