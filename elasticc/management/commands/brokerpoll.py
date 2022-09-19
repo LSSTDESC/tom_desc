@@ -165,7 +165,7 @@ class AntaresConsumer(BrokerConsumer):
             "api.version.request": True,
             "broker.version.fallback": "0.10.0.0",
             "api.version.fallback.ms": "0",
-            "enable.auto.commit": False,
+            "enable.auto.commit": True,
             "security.protocol": "SASL_SSL",
             "sasl.mechanism": "PLAIN",
             "sasl.username": username,

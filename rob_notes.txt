@@ -45,8 +45,44 @@ migrations would have required PostGIS to work.  What I did:
  * python manage.py makemigrations <app>
  * python manage.py migrate <app>
 
-To preserve users when doing this:
+======================================================================
 
+Moving users from one TOM to another:
+
+# THIS DOESN'T WORK
+# WARNING.  This is hacky.  It's not officially documented.  It may be
+# horribly broken.  This is a functionality that really OUGHT to be
+# officially documented, but, what can you do.
+#
+# In fact, it CAN'T work, unless you're lucky, and counting on that is
+# very scary.  The auth permissions table points to the django_content_type
+# table, but that table isn't owned by auth, and will already be
+# populated in the new TOM.  The permissions table in the auth
+# module points to rows of that table, but it's entirely possible that
+# the same primary keys don't have the same meaning in the new TOM.
+# So, there's no safe way to do this.  Very annoying.
+# 
+# Log into the old TOM, and do:
+# 
+#   python manage.py dumpdata auth --output /tmp/auth.dump
+# 
+# Get that file off of the old tom:
+# 
+#   rancher kubectl cp --namespace desc-tom <pod>:/tmp/auth.dump auth.dump
+# 
+# Push that file to the new tom:
+# 
+#   rancher kubectl cp --namespace desc-tom auth.dump <pod>:/tmp/auth.dump
+# 
+# Log into th enew TOM and run:
+# 
+#   python manage.py loaddata /tmp/auth.dump
+# 
+# ...and it doesn't work
+
+
+To preserve users when doing this:
+ 
   pg_dump -a -t auth_user > users.sql
 
 Manually edit this to remove the line with the anonymous user.

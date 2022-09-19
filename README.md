@@ -94,7 +94,7 @@ comments at the end of `sql_query_tom_db.py`.  Everybody can read the
 `elasticc_broker*` tables; only people in the `elasticc_admin` group can
 read the other `elasticc_*` tables.
 
-### cassId and gentype
+### classId and gentype
 
 Broker Messages include a classification in the field `classId`; these
 ids use the [ELAsTiCC
@@ -200,8 +200,13 @@ the existing database!
       - POSTGRES_PASSWORD_FILE=/secrets/postgres-password
       - POSTGRES_USER=postgres
   - volume: persistent storage claim mounted at /var/lib/postgresql/data
-  - secrets described above mounted at /secrets
+      - Size to request: hard to say.  I put in 1024GB.
+  - Bind-mount a volume to mount the secrets described above mounted at /secrets
   - Otherwise standard spin stuff (I think)
+      - This includes under "Security & Host Config" (available via
+        "Show Advanced Options" in the lower-right) selecting "ALL"
+        under "Drop Capabilities" and "CHWON", "DAC_OVERRIDE", "FOWNER",
+        "NET_BIND_SERVICE", "SETGID", and "SETUID" under "Add Capabilities".
   - Fix an annoying spin permissions issue so that postgres can read the volume
       - Don't start the postgres workload (make it a scalable deployment of 0 pods)
       - Make a temporary workload that gives you a linux shell and mounts the same volume
@@ -212,9 +217,9 @@ the existing database!
   - Create the postgres_ro user used by the db app:
       - CREATE USER postgres_ro PASSWORD '{password}';   (password is what you put in secrets)
       - GRANT CONNECT ON DATABASE tom_desc TO postgres_ro;
-      - In the tom_desc database:
+      - In the tom_desc database (do "\c tom_desc" within psql):
           - GRANT USAGE ON SCHEMA public TO postgres_ro;
-          - GRANT SELECT ON ALL TALBES IN SCHEMA public TO postgres_ro;
+          - GRANT SELECT ON ALL TABLES IN SCHEMA public TO postg;res_ro;
           - ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO postgres_ro;
 - Create the tom workload with:
    - image registry.services.nersc.gov/raknop/tom-desc-production (or -dev)
@@ -229,16 +234,15 @@ the existing database!
    - Under "Command", User ID must have the uid that owns the CFS directory, and Filesystem Group the gid
    - Under "Security and Host Config"
        - Run as non-root must be "Yes"
-       - Instead of the usual spin recommendations *only* add the NET_BIND_SERVICE capability
+       - Under "Security & Host Config", instead of the usual spin
+         recommendations *only* add the NET_BIND_SERVICE capability
    - Ingress, etc.           
 
-Note that in order to get some of the right files in tom_desc
-(settings.py and some others), I originally mounted the workload with an
-entrypoint of /bin/bash (so that it wouldn't run gunicorn).  I then ran
-"./manage.py migrate" to get the database tables all created.  I then
-made the entrypoint the standard, and redeployed the workload.  This is
-only necessary when first getting started.
-
+When you first create the database and the TOM, the tom won't work,
+because the database tables aren't set up. Run a shell on the TOM's
+workload, and then do `python manage.py migrate` to set up those
+database tables.  When done, do `kill -HUP 1` to restart the web
+server.  This is only necessary when you start the first time.
 
 ## Branch Management
 
