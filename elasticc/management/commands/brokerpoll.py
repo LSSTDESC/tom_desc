@@ -154,8 +154,8 @@ class AntaresConsumer(BrokerConsumer):
                   usernamefile='/secrets/antares_username', passwdfile='/secrets/antares_passwd',
                   loggername="ANTARES", **kwargs ):
         server = "kafka.antares.noirlab.edu:9092"
-        groupid = "elasticc-lbnl-test" + ( "" if grouptag is None else "-" + grouptag )
-        topics = [ 'elasticc-test-early-september-classifications2' ]
+        groupid = "elasticc-lbnl" + ( "" if grouptag is None else "-" + grouptag )
+        topics = [ 'elasticc-2022fall-classifications' ]
         updatetopics = False
         with open( usernamefile ) as ifp:
             username = ifp.readline().strip()
@@ -183,8 +183,8 @@ class AntaresConsumer(BrokerConsumer):
 class FinkConsumer(BrokerConsumer):
     def __init__( self, grouptag=None, loggername="FINK", **kwargs ):
         server = "134.158.74.95:24499"
-        groupid = "elasticc-lbnl-test" + ( "" if grouptag is None else "-" + grouptag )
-        topics = [ 'fink_elasticc-test-early-september' ]
+        groupid = "elasticc-lbnl" + ( "" if grouptag is None else "-" + grouptag )
+        topics = [ 'fink_elasticc-2022fall' ]
         updatetopics = False
         super().__init__( server, groupid, topics=topics, updatetopics=updatetopics,
                           loggername=loggername, **kwargs )
@@ -198,7 +198,7 @@ class AlerceConsumer(BrokerConsumer):
                   usernamefile='/secrets/alerce_username', passwdfile='/secrets/alerce_passwd',
                   loggername="ALERCE", **kwargs ):
         server = "kafka.alerce.science:9093"
-        groupid = "elasticc-lbnl-test" + ( "" if grouptag is None else "-" + grouptag )
+        groupid = "elasticc-lbnl" + ( "" if grouptag is None else "-" + grouptag )
         topics = None
         updatetopics = True
         with open( usernamefile ) as ifp:

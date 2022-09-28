@@ -84,7 +84,8 @@ MIDDLEWARE = [
     'tom_common.middleware.AuthStrategyMiddleware',
 ]
 
-CSRF_TRUSTED_ORIGINS = [ 'https://desc-tom.lbl.gov', 'https://desc-tom-rknop-dev.lbl.gov' ]
+CSRF_TRUSTED_ORIGINS = [ 'https://desc-tom.lbl.gov', 'https://desc-tom-rknop-dev.lbl.gov',
+                         'https://desc-tom-2.lbl.gov' ]
 
 ROOT_URLCONF = 'tom_desc.urls'
 
