@@ -128,18 +128,22 @@ class BrokerConsumer:
         while True:
             if self._updatetopics:
                 self.update_topics()
-            self.logger.info( f"Subscribed to topics: {self.consumer.topics}; starting poll loop." )
             strio = io.StringIO("")
-            try:
-                self.consumer.poll_loop( handler=self.handle_message_batch,
-                                         max_consumed=None, max_runtime=restart_time )
-                strio.write( f"Reached poll timeout for {self.server}; "
-                             f"handled {self.consumer.tot_handled} messages. " )
-            except Exception as e:
-                otherstrio = io.StringIO("")
-                traceback.print_exc( file=otherstrio )
-                self.logger.warning( otherstrio.getvalue() )
-                strio.write( f"Exception polling: {str(e)}. " )
+            if len(self.consumer.topics) == 0:
+                self.logger.info( "No topics, will wait 1m and reconnect." )
+                time.sleep(60)
+            else:
+                self.logger.info( f"Subscribed to topics: {self.consumer.topics}; starting poll loop." )
+                try:
+                    self.consumer.poll_loop( handler=self.handle_message_batch,
+                                             max_consumed=None, max_runtime=restart_time )
+                    strio.write( f"Reached poll timeout for {self.server}; "
+                                 f"handled {self.consumer.tot_handled} messages. " )
+                except Exception as e:
+                    otherstrio = io.StringIO("")
+                    traceback.print_exc( file=otherstrio )
+                    self.logger.warning( otherstrio.getvalue() )
+                    strio.write( f"Exception polling: {str(e)}. " )
             strio.write( "Reconnecting.\n" )
             self.logger.info( strio.getvalue() )
             self.close_connection()
