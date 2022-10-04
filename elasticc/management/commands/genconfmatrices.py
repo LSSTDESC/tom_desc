@@ -23,7 +23,8 @@ _logger.setLevel( logging.INFO )
 class Command(BaseCommand):
     help = 'Generate Configuration Matrices in the static directory'
     outdir = ( _rundir / "../../static/elasticc/confmatrices/" ).resolve()
-
+    templdir = ( _rundir / "../../templates/elasticc/" ).resolve()
+    
     def add_arguments( self, parser ):
         parser.add_argument('--norm', default='true', choices=['true', 'pred', 'all'],
                             help='how to normalize confusion matrices')
@@ -43,7 +44,7 @@ class Command(BaseCommand):
             _logger.info( f"Logger {cid}: {c}" )
         _logger.info( "=======================" )
 
-        with open( self.outdir / "update.txt" , "w" ) as ofp:
+        with open( self.templdir / "confmatrix_update.txt" , "w" ) as ofp:
             ofp.write( datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M UTC' ) )
         
         for cid in client.classifiers.keys():
