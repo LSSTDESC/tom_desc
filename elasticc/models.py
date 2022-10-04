@@ -523,11 +523,12 @@ class DiaObjectTruth(Createable):
     ra = models.FloatField( )
     dec = models.FloatField( )
     mwebv = models.FloatField( )
-    galid = models.BigIntegerField( )
-    galzphot = models.FloatField( )
-    galzphoterr = models.FloatField( )
-    galsnsep = models.FloatField( )
-    galsnddlr = models.FloatField( )
+    galnmatch = models.IntegerField( )
+    galid = models.BigIntegerField( null=True )
+    galzphot = models.FloatField( null=True )
+    galzphoterr = models.FloatField( null=True )
+    galsnsep = models.FloatField( null=True )
+    galsnddlr = models.FloatField( null=True )
     rv = models.FloatField( )
     av = models.FloatField( )
     mu = models.FloatField( )
@@ -564,7 +565,7 @@ class DiaObjectTruth(Createable):
     # the database.  But this is a land mine.
     _pk = 'diaObject_id'
     _create_kws = [ 'diaObject_id', 'libid', 'sim_searcheff_mask', 'gentype', 'sim_template_index',
-                    'zcmb', 'zhelio', 'zcmb_smear', 'ra', 'dec', 'mwebv', 'galid', 'galzphot',
+                    'zcmb', 'zhelio', 'zcmb_smear', 'ra', 'dec', 'mwebv', 'galnmatch', 'galid', 'galzphot',
                     'galzphoterr', 'galsnsep', 'galsnddlr', 'rv', 'av', 'mu', 'lensdmu', 'peakmjd',
                     'mjd_detect_first', 'mjd_detect_last', 'dtseason_peak', 'peakmag_u', 'peakmag_g',
                     'peakmag_r', 'peakmag_i', 'peakmag_z', 'peakmag_Y', 'snrmax', 'snrmax2', 'snrmax3',
