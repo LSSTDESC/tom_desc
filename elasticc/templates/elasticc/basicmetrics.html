@@ -1,0 +1,41 @@
+{% extends 'tom_common/base.html' %}
+{% load static %}
+{% block title %}
+ELAsTiCC Basic Broker Metrics
+{% endblock %}
+{% block additional_css %}
+<link rel="stylesheet" href="{% static 'elasticc/elasticc.css' %}">
+{% endblock %}
+{% block additional_js %}
+<script type="text/javascript" src="{% static 'elasticc/elasticc.js' %}"></script>
+{% endblock %}
+{% block content %}
+<h2>ELAsTiCC Metrics</h2>
+
+<h3>Last updated: {% static 'elasticc/confmatrices/update.txt' %}</h3>
+
+<p>These confidence matrices treat the broker's classification of an
+  object as the one that had the highest probability for the most recent
+  alert on that object.  They are normalized to the true class.</p>
+
+{% for broker,versions in brokers.items %}
+  {% for version,classifiers in versions.items %}
+    <hr>
+    <h3>{{ broker }} {{ version }}</h3>
+
+    {% for classifier,params in classifiers.items %}
+      {% for p in params %}
+        <p><button id="{{ p.1 }}button"
+                    onclick="hideOrShow('{{ p.1 }}button', '{{ p.1}}div')">Show
+          </button> <b>{{ classifier }} ({{ p.0 }})</b> </p>
+        <div id="{{ p.1 }}div" style="display: none">
+          <img src="{% static 'elasticc/confmatrices' %}/{{ p.1 }}.svg"
+               width=1024 alt="[ Matrix for classifier {{ p.1 }}]" >
+          <p>ID {{ p.1 }}</p>
+        </div>
+      {% endfor %}
+    {% endfor %}
+  {% endfor %}
+{% endfor %}    
+
+{% endblock %}
