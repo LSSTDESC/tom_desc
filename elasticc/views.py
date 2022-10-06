@@ -823,7 +823,7 @@ class ElasticcMetrics( LoginRequiredMixin, django.views.View ):
                 }
             elif cfer.brokerVersion != curversion:
                 curversion = cfer.brokerVersion
-                curcfer = cfer.classfierName
+                curcfer = cfer.classifierName
                 context['brokers'][curbroker][curversion] = {
                     curcfer: [ [ cfer.classifierParams, cfer.classifierId ] ] }
             elif cfer.classifierName != curcfer:
