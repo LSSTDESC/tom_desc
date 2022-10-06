@@ -72,11 +72,13 @@ class ConfMatrixClient:
             where = ''
 
         if definition == 'last_best':
-            distinct_order = 'elasticc_diaalert."alertSentTimestamp", elasticc_brokerclassification."probability"'
+            distinct_order = ( 'elasticc_diaalert."alertSentTimestamp" DESC,'
+                               'elasticc_brokerclassification."probability" DESC' )
         elif definition == 'best':
             # I think we need additional sorting over alertSentTimestamp to get the deterministic result for the
             # case for equal probabilities (I've seen prob of 1.0)
-            distinct_order = 'elasticc_brokerclassification."probability", elasticc_diaalert."alertSentTimestamp"'
+            distinct_order = ( 'elasticc_brokerclassification."probability" DESC,'
+                               'elasticc_diaalert."alertSentTimestamp" DESC' )
         else:
             raise ValueError(f'Unknown classification definition: {definition}')
 
@@ -105,7 +107,7 @@ class ConfMatrixClient:
                    INNER JOIN elasticc_diaalert
                       ON elasticc_brokermessage."alertId"=elasticc_diaalert."alertId"
                    WHERE elasticc_brokerclassification."classifierId"={classifier_id_}
-                   ORDER BY elasticc_diaalert."diaObjectId", {distinct_order} DESC
+                   ORDER BY elasticc_diaalert."diaObjectId", {distinct_order}
                 ) best_last
                 ON (best_last."diaObjectId" = elasticc_diaobjecttruth."diaObjectId")
                 {where}
