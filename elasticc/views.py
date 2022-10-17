@@ -1,4 +1,5 @@
 import sys
+import pathlib
 import re
 import io
 import traceback
@@ -802,6 +803,10 @@ class ElasticcMetrics( LoginRequiredMixin, django.views.View ):
     def post( self, request, info=None ):
         templ = loader.get_template( "elasticc/basicmetrics.html" )
         context = { 'brokers': {} }
+
+        rundir = pathlib.Path(__file__).parent
+        with open( rundir / "static/elasticc/confmatrix_update.txt" ) as ifp:
+            context['updatetime'] = ifp.readline().strip()
 
         cfers = BrokerClassifier.objects.all().order_by( 'brokerName', 'brokerVersion',
                                                          'classifierName', 'classifierParams' )
