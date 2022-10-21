@@ -1,13 +1,18 @@
 import sys
 import math
+import time
+import io
 import datetime
 import pytz
 import logging
 import itertools
 import collections
+import django.db
 from django.db import models
 from django.utils.functional import cached_property
 import django.contrib.postgres.indexes as indexes
+import psycopg2.extras
+import pandas
 
 _logger = logging.getLogger(__name__)
 _logout = logging.StreamHandler( sys.stderr )
@@ -71,6 +76,72 @@ class Createable(models.Model):
         q = cls.objects.filter( pk__in=pks )
         return [ getattr(i, i._pk) for i in q ]
 
+    # This version uses postgres COPY and tries to be faster than mucking
+    # about with ORM constructs.
+    @classmethod
+    def bulk_insert_onlynew( cls, data ):
+        """Insert a bunch of data into the database.  Ignores records that conflict with things present.
+
+        data — An array of dicts.  Key in the dicst MUST match columns in the target table.
+
+        Returns the number of rows actually inserted (which may be less than len(data)).
+        """
+        conn = None
+        origautocommit = None
+        gratuitous = None
+        cursor = None
+        try:
+            # Jump through hoops to get access to the psycopg2
+            #   connection from django.  We need this to
+            #   turn off autocommit so we can use a temp table.
+            gratuitous = django.db.connection.cursor()
+            conn = gratuitous.connection
+            origautocommit = conn.autocommit
+            conn.autocommit = False
+            cursor = conn.cursor( cursor_factory=psycopg2.extras.RealDictCursor )
+            # Yeah.... if anybody ever creates a django application named "bulk" and then
+            #   has a model "upsert", we're about to totally screw that up.
+            cursor.execute( "DROP TABLE IF EXISTS bulk_upsert" )
+            cursor.execute( f"CREATE TEMP TABLE bulk_upsert (LIKE {cls._meta.db_table})" )
+            # NOTE: I have a little bit of worry here that pandas is going to destroy
+            # datatypes-- in particular, that it will convert my int64s to either int32 or
+            # float our double, thereby losing precision.  I've checked it, and it seems
+            # to be doing the right thing.  But I have had issues in the past with
+            # pandas silently converting data to doubles.
+            df = pandas.DataFrame( data )
+            strio = io.StringIO()
+            df.to_csv( strio, index=False, header=False, sep='\t', na_rep='\\N' )
+            strio.seek(0)
+            # Have to quote the column names because many have mixed case.
+            columns = [ f'"{c}"' for c in df.columns.values ]
+            cursor.copy_from( strio, "bulk_upsert", columns=columns, size=1048576 )
+            q = f"INSERT INTO {cls._meta.db_table} SELECT * FROM bulk_upsert ON CONFLICT DO NOTHING"
+            cursor.execute( q )
+            ninserted = cursor.rowcount
+            # I don't think I should have to do this; shouldn't it happen automatically
+            #   with conn.commit()?  But it didn't seem to.  Maybe it only happens
+            #   with conn.close(), but I don't want to do that because it screws
+            #   with django.  (I'm probably doing naughty things by even digging to
+            #   get conn, but hey, I need it for efficiency.)
+            cursor.execute( "DROP TABLE bulk_upsert" )
+            conn.commit()
+            return ninserted
+        except Exception as e:
+            if conn is not None:
+                conn.rollback()
+            raise e
+        finally:
+            if cursor is not None:
+                cursor.close()
+                cursor = None
+            if gratuitous is not None:
+                gratuitous.close()
+                gratuitous = None
+            if origautocommit is not None and conn is not None:
+                conn.autocommit = origautocommit
+                origautocommit = None
+                conn = None
+        
     # NOTE -- this version returns all the objects that were
     #   either loaded or created.  I've got other classes that
     #   have their own "bulk_load_or_create" that don't return
@@ -452,11 +523,12 @@ class DiaObjectTruth(Createable):
     ra = models.FloatField( )
     dec = models.FloatField( )
     mwebv = models.FloatField( )
-    galid = models.BigIntegerField( )
-    galzphot = models.FloatField( )
-    galzphoterr = models.FloatField( )
-    galsnsep = models.FloatField( )
-    galsnddlr = models.FloatField( )
+    galnmatch = models.IntegerField( )
+    galid = models.BigIntegerField( null=True )
+    galzphot = models.FloatField( null=True )
+    galzphoterr = models.FloatField( null=True )
+    galsnsep = models.FloatField( null=True )
+    galsnddlr = models.FloatField( null=True )
     rv = models.FloatField( )
     av = models.FloatField( )
     mu = models.FloatField( )
@@ -493,7 +565,7 @@ class DiaObjectTruth(Createable):
     # the database.  But this is a land mine.
     _pk = 'diaObject_id'
     _create_kws = [ 'diaObject_id', 'libid', 'sim_searcheff_mask', 'gentype', 'sim_template_index',
-                    'zcmb', 'zhelio', 'zcmb_smear', 'ra', 'dec', 'mwebv', 'galid', 'galzphot',
+                    'zcmb', 'zhelio', 'zcmb_smear', 'ra', 'dec', 'mwebv', 'galnmatch', 'galid', 'galzphot',
                     'galzphoterr', 'galsnsep', 'galsnddlr', 'rv', 'av', 'mu', 'lensdmu', 'peakmjd',
                     'mjd_detect_first', 'mjd_detect_last', 'dtseason_peak', 'peakmag_u', 'peakmag_g',
                     'peakmag_r', 'peakmag_i', 'peakmag_z', 'peakmag_Y', 'snrmax', 'snrmax2', 'snrmax3',

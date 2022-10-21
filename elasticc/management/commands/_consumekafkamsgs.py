@@ -84,11 +84,20 @@ class MsgConsumer(object):
         else:
             raise ValueError( f'topics must be either a string or a list' )
 
+        servertopics = self.get_topics()
+        subtopics = []
+        for topic in self.topics:
+            if topic not in servertopics:
+                self.logger.warning( f'Topic {topic} not on server, not subscribing' )
+            else:
+                subtopics.append( topic )
+        self.topics = subtopics
+                
         if self.topics is not None and len(self.topics) > 0:
             self.logger.info( f'Subscribing to topics: {", ".join( topics )}' )
             self.consumer.subscribe( topics, on_assign=self._sub_callback )
         else:
-            self.logger.warning( f'No topics given, not subscribing.' )
+            self.logger.warning( f'No existing topics given, not subscribing.' )
 
     def reset_to_start( self, topic ):
         partitions = self.consumer.list_topics( topic ).topics[topic].partitions

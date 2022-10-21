@@ -128,18 +128,22 @@ class BrokerConsumer:
         while True:
             if self._updatetopics:
                 self.update_topics()
-            self.logger.info( f"Subscribed to topics: {self.consumer.topics}; starting poll loop." )
             strio = io.StringIO("")
-            try:
-                self.consumer.poll_loop( handler=self.handle_message_batch,
-                                         max_consumed=None, max_runtime=restart_time )
-                strio.write( f"Reached poll timeout for {self.server}; "
-                             f"handled {self.consumer.tot_handled} messages. " )
-            except Exception as e:
-                otherstrio = io.StringIO("")
-                traceback.print_exc( file=otherstrio )
-                self.logger.warning( otherstrio.getvalue() )
-                strio.write( f"Exception polling: {str(e)}. " )
+            if len(self.consumer.topics) == 0:
+                self.logger.info( "No topics, will wait 1m and reconnect." )
+                time.sleep(60)
+            else:
+                self.logger.info( f"Subscribed to topics: {self.consumer.topics}; starting poll loop." )
+                try:
+                    self.consumer.poll_loop( handler=self.handle_message_batch,
+                                             max_consumed=None, max_runtime=restart_time )
+                    strio.write( f"Reached poll timeout for {self.server}; "
+                                 f"handled {self.consumer.tot_handled} messages. " )
+                except Exception as e:
+                    otherstrio = io.StringIO("")
+                    traceback.print_exc( file=otherstrio )
+                    self.logger.warning( otherstrio.getvalue() )
+                    strio.write( f"Exception polling: {str(e)}. " )
             strio.write( "Reconnecting.\n" )
             self.logger.info( strio.getvalue() )
             self.close_connection()
@@ -154,8 +158,8 @@ class AntaresConsumer(BrokerConsumer):
                   usernamefile='/secrets/antares_username', passwdfile='/secrets/antares_passwd',
                   loggername="ANTARES", **kwargs ):
         server = "kafka.antares.noirlab.edu:9092"
-        groupid = "elasticc-lbnl-test" + ( "" if grouptag is None else "-" + grouptag )
-        topics = [ 'elasticc-test-early-september-classifications2' ]
+        groupid = "elasticc-lbnl" + ( "" if grouptag is None else "-" + grouptag )
+        topics = [ 'elasticc-2022fall-classifications' ]
         updatetopics = False
         with open( usernamefile ) as ifp:
             username = ifp.readline().strip()
@@ -183,8 +187,8 @@ class AntaresConsumer(BrokerConsumer):
 class FinkConsumer(BrokerConsumer):
     def __init__( self, grouptag=None, loggername="FINK", **kwargs ):
         server = "134.158.74.95:24499"
-        groupid = "elasticc-lbnl-test" + ( "" if grouptag is None else "-" + grouptag )
-        topics = [ 'fink_elasticc-test-early-september' ]
+        groupid = "elasticc-lbnl" + ( "" if grouptag is None else "-" + grouptag )
+        topics = [ 'fink_elasticc-2022fall' ]
         updatetopics = False
         super().__init__( server, groupid, topics=topics, updatetopics=updatetopics,
                           loggername=loggername, **kwargs )
@@ -198,7 +202,7 @@ class AlerceConsumer(BrokerConsumer):
                   usernamefile='/secrets/alerce_username', passwdfile='/secrets/alerce_passwd',
                   loggername="ALERCE", **kwargs ):
         server = "kafka.alerce.science:9093"
-        groupid = "elasticc-lbnl-test" + ( "" if grouptag is None else "-" + grouptag )
+        groupid = "elasticc-lbnl" + ( "" if grouptag is None else "-" + grouptag )
         topics = None
         updatetopics = True
         with open( usernamefile ) as ifp:

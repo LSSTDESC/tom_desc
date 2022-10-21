@@ -21,7 +21,8 @@ urlpatterns = [
     
     path('adminsummary', views.ElasticcAdminSummary.as_view()),
     path('summary', views.ElasticcSummary.as_view()),
-
+    path('metrics', views.ElasticcMetrics.as_view()),
+    
     path('getalerts', views.GetAlerts.as_view()),
     path('getalertsandtruth', views.GetAlertsAndTruth.as_view()),
     

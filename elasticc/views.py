@@ -1,4 +1,5 @@
 import sys
+import pathlib
 import re
 import io
 import traceback
@@ -166,122 +167,77 @@ class MaybeAddAlert(PermissionRequiredMixin, django.views.View):
         
     def post(self, request, *args, **kwargs):
         try:
-            # _logger.info( "Starting MaybeAddAlert.post" )
-            # self.objloadtime = 0
-            # self.sourceloadtime = 0
-            # self.alertloadtime = 0
             data = json.loads( request.body )
             if isinstance( data, dict ):
                 data = [ data ]
             loaded = {}
 
-            # Note: I pass all of the things, not just the things that are
-            #  are not already there, to bulk_load_or_create so that I'll
-            #  have those objects available if necessary for a later step.
-            # (cf: the objdata=, srcdata= comprehensions)
-            
             # Load the objects
-            objids = { entry['diaObject']['diaObjectId'] for entry in data }
-            curobjids = set( DiaObject.which_exist( objids ) )
-            newobjids = objids - curobjids
-            # objdata = [ entry['diaObject'] for entry in data if entry['diaObject']['diaObjectId'] in newobjids ]
-            objdata = [ entry['diaObject'] for entry in data ]
-            objects = DiaObject.bulk_load_or_create( objdata )
-            loaded['objects'] = [ i.diaObjectId for i in objects if i.diaObjectId in newobjids ]
-            objdict = { obj.diaObjectId: obj for obj in objects }
-
+            _logger.info( "Loading objects." )
+            objstoload = [ entry['diaObject'] for entry in data ]
+            if len(objstoload) > 0:
+                nobjectsadded = DiaObject.bulk_insert_onlynew( objstoload  )
+            else:
+                nobjectsadded = 0
+            loaded[ 'objects' ] = nobjectsadded
+                    
             # Load the sources
-            srcids = { entry['diaSource']['diaSourceId'] for entry in data }
-            cursrcids = set( DiaSource.which_exist( srcids ) )
-            newsrcids = srcids - cursrcids
-            for entry in data:
-                entry['diaSource']['diaObject'] = objdict[ entry['diaObject']['diaObjectId'] ]
-            # sourcedata = [ entry['diaSource'] for entry in data if entry['diaSource']['diaSourceId'] in newsrcids ]
-            sourcedata = [ entry['diaSource'] for entry in data if entry['diaSource']['diaSourceId'] ]
-            sources = DiaSource.bulk_load_or_create( sourcedata )
-            loaded['sources'] = [ i.diaSourceId for i in sources if i.diaSourceId in newsrcids ]
-
-            # Load the previous sources
-            prvdiasources = []
-            prvdiasourceids = set()
+            # "seen" is because the same prvdiasource probably shows up in multiple alerts we're loading
+            seen = set()
+            sources = [ ]
             for alert in data:
+                seen.add( alert['diaSource']['diaSourceId'] )
+                sources.append( alert['diaSource'] )
                 if alert['prvDiaSources'] is not None:
                     for prvdiasource in alert['prvDiaSources']:
-                        if prvdiasource['diaSourceId'] in prvdiasourceids:
-                            # The same previous source will probably show up
-                            #  in multiple alerts among the batch we're loading
-                            continue
-                        prvdiasource['diaObject'] = objdict[ alert['diaObject']['diaObjectId'] ]
-                        prvdiasources.append( prvdiasource )
-                        prvdiasourceids.add( prvdiasource['diaSourceId' ] )
-            curprvdiasourceids = set( DiaSource.which_exist( prvdiasourceids ) )
-            newprvdiasourceids = prvdiasourceids - curprvdiasourceids
-            prvsourceobjs = DiaSource.bulk_load_or_create( prvdiasources )
-            loaded['sources'].extend( [ i.diaSourceId for i in prvsourceobjs if i.diaSourceId in newprvdiasourceids ] )
-
-            # Make the dictionary of sources including previous
-            sources.extend( prvsourceobjs )
-            srcdict = { src.diaSourceId: src for src in sources }
-                                         
-                                         
+                      if prvdiasource['diaSourceId'] not in seen:
+                          seen.add( prvdiasource['diaSourceId'] )
+                          sources.append( prvdiasource )
+            _logger.info( f"Loading {len(sources)} sources..." )
+            if len(sources) > 0:
+                nsourcesadded = DiaSource.bulk_insert_onlynew( sources )
+            else:
+                nsourcesadded = 0
+            loaded[ 'sources' ] = nsourcesadded
+            _logger.info( f"...done loading sources" )
+            
             # Load the forced sources
-            forced = []
-            forcedids = set()
+            seen = set()
+            sources = []
             for alert in data:
                 if alert['prvDiaForcedSources'] is not None:
-                    for forcedsource in alert['prvDiaForcedSources']:
-                        if forcedsource['diaForcedSourceId'] in forcedids:
-                            # The same forced source will probably show up
-                            # in multiple alerts among the batch we're loading
-                            continue
-                        forcedsource['diaObject'] = objdict[ alert['diaObject']['diaObjectId' ] ]
-                        forced.append( forcedsource )
-                        forcedids.add( forcedsource['diaForcedSourceId'] )
-            curforcedids = set( DiaForcedSource.which_exist( forcedids ) )
-            newforcedids = forcedids - curforcedids
-            forcedobjs = DiaForcedSource.bulk_load_or_create( forced )
-            loaded['forcedsources'] = [ i.diaForcedSourceId for i in forcedobjs
-                                        if i.diaForcedSourceId in newforcedids ]
-            forceddict = { fs.diaForcedSourceId: fs for fs in forcedobjs }
-            
+                    for prvdiaforcedsource in alert['prvDiaForcedSources']:
+                        if prvdiaforcedsource['diaForcedSourceId'] not in seen:
+                            seen.add( prvdiaforcedsource['diaForcedSourceId'] )
+                            sources.append( prvdiaforcedsource )
+            _logger.info( f"Loading {len(sources)} previous sources..." )
+            if len(sources) > 0:
+                nforcedsourcesadded = DiaForcedSource.bulk_insert_onlynew( sources )
+            else:
+                nforcedsourcesadded = 0
+            loaded[ 'forcedsources' ] = nforcedsourcesadded
+            _logger.info( f"...done loading previous sources" )
+                                
             # Load the alerts
-            alertids = { entry['alertId'] for entry in data }
-            curalertids = set( DiaAlert.which_exist( alertids ) )
-            newalertids = alertids - curalertids
-            alertdata = []
-            for entry in data:
-                alertdata.append( { 'alertId': entry['alertId'],
-                                    'diaSource': srcdict[ entry['diaSource']['diaSourceId'] ],
-                                    'diaObject': objdict[ entry['diaObject']['diaObjectId'] ] } )
-            alerts = DiaAlert.bulk_load_or_create( alertdata )
-            loaded['alerts'] = [ i.alertId for i in alerts if i.alertId in newalertids ]
-
-            # Not loading the previous source images
-            # These tables will have hundreds of millions or billions
-            # of lines, and we can figure it all out algorithmically
-            
-            # # Load the previous source linkages
-            # sourcelinks = []
-            # for entry in data:
-            #     if entry['prvDiaSources'] is not None:
-            #         sourcelinks.extend( [ { 'diaAlert_id': entry['alertId'],
-            #                                 'diaSource_id': i['diaSourceId'] }
-            #                               for i in entry['prvDiaSources'] ] )
-            # DiaAlertPrvSource.bulk_load_or_create( sourcelinks )
-            
-            # # Load the forced source linkages
-            # forcedlinks = []
-            # for entry in data:
-            #     if entry['prvDiaForcedSources'] is not None:
-            #         forcedlinks.extend( [ { 'diaAlert_id': entry['alertId'],
-            #                                 'diaForcedSource_id': i['diaForcedSourceId'] }
-            #                               for i in entry['prvDiaForcedSources'] ] )
-            # DiaAlertPrvForcedSource.bulk_load_or_create( forcedlinks )
+            alerts = []
+            for alert in data:
+                alerts.append( { 'alertId': alert['alertId'],
+                                 'diaObjectId': alert['diaObject']['diaObjectId'],
+                                 'diaSourceId': alert['diaSource']['diaSourceId'],
+                                 'alertSentTimestamp': None } )
+            if len(alerts) > 0:
+                nalertsadded = DiaAlert.bulk_insert_onlynew( alerts )
+            else:
+                nalertsadded = 0
+            loaded[ 'alerts' ] = nalertsadded
+                
+            # Not going to load the previous source and previous forced
+            # source linkages.  Those tables are huge, and it's
+            # additional data stored and time loading that probably
+            # isn't worth it, as we can reconstruct all of that
+            # algorithmically.
             
             resp = { 'status': 'ok', 'message': loaded }
-            # _logger.info( f'objloadtime={self.objloadtime}, sourceloadtime={self.sourceloadtime}, '
-            #               f'alertloadtime={self.alertloadtime}' )
-            # _logger.info( f'Returning {sys.getsizeof(resp)} byte response.' )
             return JsonResponse( resp )
         except Exception as e:
             strstream = io.StringIO()
@@ -837,6 +793,53 @@ class ElasticcAdminSummary( PermissionRequiredMixin, django.views.View ):
 
         return HttpResponse( templ.render( context, request ) )
         
+# ======================================================================
+
+class ElasticcMetrics( LoginRequiredMixin, django.views.View ):
+
+    def get( self, request, info=None ):
+        return self.post( request, info )
+
+    def post( self, request, info=None ):
+        templ = loader.get_template( "elasticc/basicmetrics.html" )
+        context = { 'brokers': {} }
+
+        rundir = pathlib.Path(__file__).parent
+        with open( rundir / "static/elasticc/confmatrix_update.txt" ) as ifp:
+            context['updatetime'] = ifp.readline().strip()
+
+        cfers = BrokerClassifier.objects.all().order_by( 'brokerName', 'brokerVersion',
+                                                         'classifierName', 'classifierParams' )
+
+        # There's probably a faster pythonic way to make
+        # a hierarchy like this, but oh well.  This works.
+        curbroker = None
+        curversion = None
+        curcfer = None
+        for cfer in cfers:
+            if cfer.brokerName != curbroker:
+                curbroker = cfer.brokerName
+                curversion = cfer.brokerVersion
+                curcfer = cfer.classifierName
+                context['brokers'][curbroker] = {
+                    curversion: {
+                        curcfer: [ [ cfer.classifierParams, cfer.classifierId ] ]
+                    }
+                }
+            elif cfer.brokerVersion != curversion:
+                curversion = cfer.brokerVersion
+                curcfer = cfer.classifierName
+                context['brokers'][curbroker][curversion] = {
+                    curcfer: [ [ cfer.classifierParams, cfer.classifierId ] ] }
+            elif cfer.classifierName != curcfer:
+                curcfer = cfer.classifierName
+                context['brokers'][curbroker][curversion][curcfer] = [ [ cfer.classifierParams, cfer.classifierId ] ]
+            else:
+                context['brokers'][curbroker][curversion][curcfer].append( [ cfer.classifierParams,
+                                                                             cfer.classifierId ] )
+                
+        return HttpResponse( templ.render( context, request ) )
+
 # ======================================================================
 # ======================================================================
 # ======================================================================
