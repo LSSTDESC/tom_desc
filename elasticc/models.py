@@ -894,7 +894,7 @@ class BrokerClassification(models.Model):
     # diaObjectId = models.BigIntegerField()
     # diaSource = models.ForeignKey( DiaSource, on_delete=models.PROTECT, null=True )
 
-    classId = models.IntegerField()
+    classId = models.IntegerField( db_index=True )
     probability = models.FloatField()
 
     # JSON blob of additional information from the broker?
