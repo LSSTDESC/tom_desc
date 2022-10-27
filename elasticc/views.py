@@ -795,6 +795,34 @@ class ElasticcAdminSummary( PermissionRequiredMixin, django.views.View ):
         
 # ======================================================================
 
+class ElasticcAlertStreamHistograms( LoginRequiredMixin, django.views.View ):
+
+    def get( self, request, info=None ):
+        return self.post( request, info )
+
+    def post( self, request, info=None ):
+        templ = loader.get_template( "elasticc/alertstreamhists.html" )
+        context = { 'weeks': {} }
+
+        tmpldir = pathlib.Path(__file__).parent / "static/elasticc/alertstreamhists"
+        files = list( tmpldir.glob( "*.svg" ) )
+        files.sort()
+        fnamematch = re.compile( "^([0-9]{4})-([0-9]{2})-([0-9]{2})\.svg$" )
+        for fname in files:
+            match = fnamematch.search( fname.name )
+            if match is not None:
+                date = datetime.date( int(match.group(1)), int(match.group(2)), int(match.group(3)) )
+                year, week, weekday = date.isocalendar()
+                wk = f"{year} week {week}"
+                if wk not in context['weeks']:
+                    context['weeks'][wk] = {}
+                context['weeks'][wk][date.strftime( "%a %Y %b %d" )] = fname.name
+
+        _logger.info( f"Context is: {context}" )
+        return HttpResponse( templ.render( context, request ) )
+
+# ======================================================================
+
 class ElasticcMetrics( LoginRequiredMixin, django.views.View ):
 
     def get( self, request, info=None ):
