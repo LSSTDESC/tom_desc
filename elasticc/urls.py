@@ -23,6 +23,7 @@ urlpatterns = [
     path('summary', views.ElasticcSummary.as_view()),
     path('metrics', views.ElasticcMetrics.as_view()),
     path('alertstreamhists', views.ElasticcAlertStreamHistograms.as_view()),
+    path('tmpbrokeralerthists', views.ElasticcTmpBrokerHistograms.as_view()),
     
     path('getalerts', views.GetAlerts.as_view()),
     path('getalertsandtruth', views.GetAlertsAndTruth.as_view()),

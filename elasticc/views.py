@@ -823,6 +823,52 @@ class ElasticcAlertStreamHistograms( LoginRequiredMixin, django.views.View ):
 
 # ======================================================================
 
+class ElasticcTmpBrokerHistograms( LoginRequiredMixin, django.views.View ):
+
+    def get( self, request, info=None ):
+        return self.post( request, info )
+
+    def post ( self, request, info=None ):
+        templ = loader.get_template( "elasticc/tmp_brokeralerthist.html" )
+        context = { 'brokers': {} }
+
+        rundir = pathlib.Path(__file__).parent
+
+        cfers = BrokerClassifier.objects.all().order_by( 'brokerName', 'brokerVersion',
+                                                         'classifierName', 'classifierParams' )
+
+        # There's probably a faster pythonic way to make
+        # a hierarchy like this, but oh well.  This works.
+        curbroker = None
+        curversion = None
+        curcfer = None
+        for cfer in cfers:
+            if cfer.brokerName != curbroker:
+                curbroker = cfer.brokerName
+                curversion = cfer.brokerVersion
+                curcfer = cfer.classifierName
+                context['brokers'][curbroker] = {
+                    curversion: {
+                        curcfer: [ [ cfer.classifierParams, cfer.classifierId ] ]
+                    }
+                }
+            elif cfer.brokerVersion != curversion:
+                curversion = cfer.brokerVersion
+                curcfer = cfer.classifierName
+                context['brokers'][curbroker][curversion] = {
+                    curcfer: [ [ cfer.classifierParams, cfer.classifierId ] ] }
+            elif cfer.classifierName != curcfer:
+                curcfer = cfer.classifierName
+                context['brokers'][curbroker][curversion][curcfer] = [ [ cfer.classifierParams, cfer.classifierId ] ]
+            else:
+                context['brokers'][curbroker][curversion][curcfer].append( [ cfer.classifierParams,
+                                                                             cfer.classifierId ] )
+                
+        return HttpResponse( templ.render( context, request ) )
+        
+
+# ======================================================================
+
 class ElasticcMetrics( LoginRequiredMixin, django.views.View ):
 
     def get( self, request, info=None ):
