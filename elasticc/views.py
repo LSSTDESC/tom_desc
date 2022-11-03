@@ -794,6 +794,7 @@ class ElasticcAdminSummary( PermissionRequiredMixin, django.views.View ):
         return HttpResponse( templ.render( context, request ) )
         
 # ======================================================================
+# This class is poorly named.  It does not show histograms.
 
 class ElasticcAlertStreamHistograms( LoginRequiredMixin, django.views.View ):
 
@@ -820,6 +821,46 @@ class ElasticcAlertStreamHistograms( LoginRequiredMixin, django.views.View ):
 
         _logger.info( f"Context is: {context}" )
         return HttpResponse( templ.render( context, request ) )
+
+# ======================================================================
+
+class ElasticcBrokerStreamGraphs( LoginRequiredMixin, django.views.View ):
+
+    def get( self, request, info=None ):
+        return self.post( request, info )
+
+    def post( self, request, info=None ):
+        templ = loader.get_template( "elasticc/brokerstreamrate.html" )
+        context = { "brokers": {} }
+        fnmatch = re.compile( "^(.*)_(\d{4})-(\d{2})-(\d{2})\.svg$" )
+
+        outdir = pathlib.Path(__file__).parent / "static/elasticc/brokerstreamgraphs"
+        files = outdir.glob( "*.svg" )
+        brokers = {}
+        for fname in files:
+            _logger.info( f"Parsing file {fname.name}" )
+            match = fnmatch.search( str(fname.name) )
+            if match is None:
+                continue
+            broker = match.group(1)
+            if broker not in brokers.keys():
+                brokers[broker] = {}
+            filedate = datetime.date( int(match.group(2)), int(match.group(3)), int(match.group(4)) )
+            week = filedate.isocalendar()[1]
+            weekstr = f'{filedate.year} Week {week}'
+            if weekstr not in brokers[broker].keys():
+                brokers[broker][weekstr] = {}
+            brokers[broker][weekstr][filedate.isoformat()] = fname.name
+
+        # Sort these dictionaries
+        brokers = dict( sorted( brokers.items() ) )
+        for broker in brokers.keys():
+            brokers[broker] = dict( sorted( brokers[broker].items() ) )
+            for week in brokers[broker]:
+                brokers[broker][week] = dict( sorted( brokers[broker][week].items() ) )
+
+        _logger.info( f"Brokers is: {brokers}" )
+        return HttpResponse( templ.render( { "brokers": brokers }, request ) )
 
 # ======================================================================
 
@@ -869,7 +910,7 @@ class ElasticcTmpBrokerHistograms( LoginRequiredMixin, django.views.View ):
 
 # ======================================================================
 
-class ElasticcMetrics( LoginRequiredMixin, django.views.View ):
+class ElasticcLatestConfMatrix( LoginRequiredMixin, django.views.View ):
 
     def get( self, request, info=None ):
         return self.post( request, info )
