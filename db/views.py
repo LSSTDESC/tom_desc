@@ -34,6 +34,10 @@ class RunSQLQuery(LoginRequiredMixin, django.views.View):
             raise ValueError( "Must pass a query" )
         subdict = {}
         if 'subdict' in data:
+            # Have to convert lists to tuples
+            for key in data['subdict'].keys():
+                if isinstance( data['subdict'][key], list ):
+                    data['subdict'][key] = tuple( data['subdict'][key] )
             subdict = data['subdict']
         dbconn = psycopg2.connect( dbname=os.getenv('DB_NAME'), host=os.getenv('DB_HOST'),
                                    user=dbuser, password=password,
