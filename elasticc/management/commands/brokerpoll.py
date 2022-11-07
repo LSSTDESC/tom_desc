@@ -42,9 +42,20 @@ class BrokerConsumer:
         self.logger.setLevel( logging.INFO )
         # self.logger.setLevel( logging.DEBUG )
 
+        self.countlogger = logging.getLogger( f"countlogger_{loggername}" )
+        self.countlogger.propagate = False
+        _countlogout = logging.FileHandler( _rundir.parent.parent.parent / f"logs/brokerpoll_counts_{loggername}.log" )
+        _countformatter = logging.Formatter( f'[%(asctime)s - %(levelname)s] - %(message)s',
+                                             datefmt='%Y-%m-%d %H:%M:%S' )
+        _countlogout.setFormatter( _countformatter )
+        self.countlogger.addHandler( _countlogout )
+        self.countlogger.setLevel( logging.INFO )
+
         if schemafile is None:
             schemafile = _rundir / "elasticc.v0_9.brokerClassification.avsc"
 
+        self.countlogger.info( f"************ Starting Brokerconsumer for {loggername} ****************" )
+            
         self.server = server
         self.groupid = groupid
         self.topics = topics
@@ -54,9 +65,12 @@ class BrokerConsumer:
         
         self.schemaless = schemaless
         if not self.schemaless:
+            self.countlogger.error( "CRASHING.  I only know how to handle schemaless streams." )
             raise RuntimeError( "I only know how to handle schemaless streams" )
         self.schemafile = schemafile
         self.schema = fastavro.schema.load_schema( self.schemafile )
+
+        self.nmessagesconsumed = 0
 
         self.create_connection()
         
@@ -88,16 +102,22 @@ class BrokerConsumer:
                     time.sleep(5)
                 else:
                     self.logger.error( "Repeated exceptions connecting to broker, punting." )
+                    self.countlogger.error( "Repeated exceptions connecting to broker, punting." )
                     raise RuntimeError( "Failed to connect to broker" )
             
         if self._reset and ( self.topics is not None ):
+            self.countlogger.info( f"*************** Resetting to start of broker kafka stream ***************" )
             self.reset_to_start()
 
+        self.countlogger.info( f"**************** Consumer connection opened *****************" )
+
     def close_connection( self ):
+        self.countlogger.info( f"**************** Closing consumer connection ******************" )
         self.consumer.close()
         self.consumer = None
             
     def update_topics( self, *args, **kwargs ):
+        self.countlogger.info( "Subclass must implement this if you use it." )
         raise NotImplementedError( "Subclass must implement this if you use it." )
         
     def reset_to_start( self ):
@@ -107,6 +127,8 @@ class BrokerConsumer:
 
     def handle_message_batch( self, msgs ):
         messagebatch = []
+        self.countlogger.info( f"Handling {len(msgs)} messages; consumer has received "
+                               f"{self.consumer.tot_handled} messages." )
         for msg in msgs:
             timestamptype, timestamp = msg.timestamp()
             if timestamptype == confluent_kafka.TIMESTAMP_NOT_AVAILABLE:
@@ -116,13 +138,17 @@ class BrokerConsumer:
                                                              tz=datetime.timezone.utc )
             payload = msg.value()
             if not self.schemaless:
+                self.countlogger.error( "I only know how to handle schemaless streams" )
                 raise RuntimeError( "I only know how to handle schemaless streams" )
             alert = fastavro.schemaless_reader( io.BytesIO( payload ), self.schema )
             messagebatch.append( { 'topic': msg.topic(),
                                    'msgoffset': msg.offset(),
                                    'timestamp': timestamp,
                                    'msg': alert } )
-        BrokerMessage.load_batch( messagebatch, logger=self.logger )
+        added = BrokerMessage.load_batch( messagebatch, logger=self.logger )
+        self.countlogger.info( f"...added {added['addedmsgs']} messages, "
+                               f"{added['addedclassifiers']} classifiers, "
+                               f"{added['addedclassifications']} classifications. " )
         
     def poll( self, restart_time=datetime.timedelta(minutes=30) ):
         while True:
@@ -146,6 +172,7 @@ class BrokerConsumer:
                     strio.write( f"Exception polling: {str(e)}. " )
             strio.write( "Reconnecting.\n" )
             self.logger.info( strio.getvalue() )
+            self.countlogger.info( strio.getvalue() )
             self.close_connection()
             if self._updatetopics:
                 self.topics = None

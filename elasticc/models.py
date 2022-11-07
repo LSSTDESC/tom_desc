@@ -718,7 +718,7 @@ class BrokerMessage(models.Model):
         topic is string, msgoffset is an integer, and msg is a dict that should
         match the elasticc.v0_9.brokerClassification.avsc schema
 
-        Returns the number of things that were actually added.
+        Returns information about numbers of things actually added.
         """
 
         # It's a hard problem to decide if a message already
@@ -820,8 +820,9 @@ class BrokerMessage(models.Model):
                                        'classifierName': cfication['classifierName'],
                                        'classifierParams': cfication['classifierParams'] } )
                     addedkeys.add( keycfer )
-        logger.debug( f'Adding {len(kwargses)} new classifiers.' )
-        if len(kwargses) > 0:
+        ncferstoadd = len(kwargses)
+        logger.debug( f'Adding {ncferstoadd} new classifiers.' )
+        if ncferstoadd > 0:
             objs = ( BrokerClassifier( **k ) for k in kwargses )
             batch = list( itertools.islice( objs, len(kwargses) ) )
             newcfers = BrokerClassifier.objects.bulk_create( batch, len(kwargses) )
@@ -858,7 +859,8 @@ class BrokerMessage(models.Model):
         newcfications = BrokerClassification.objects.bulk_create( batch, len(kwargses) )
 
         # return newcfications
-        return list( addedmsgs )
+        return { "addedmsgs": len(addedmsgs), "addedclassifiers": ncferstoadd,
+                 "addedclassifications": len(newcfications) }
         
 class BrokerClassifier(models.Model):
     """Model for a classifier producing an ELAsTiCC broker classification."""
