@@ -17,21 +17,25 @@ ELAsTiCC
 
 <ul>
   <li class="exbelow"><a href="/elasticc/alertstreamhists">Graphs of hourly streaming rate of
-      original ELAsTiCC alerts sent to the ZADS broker (updated
-      daily)</a></li>
+      original ELAsTiCC alerts sent to the ZADS broker</a> (updated
+      daily)</li>
   <li class="exbelow"><a href="/elasticc/brokerstreamgraphs">Graphs of rate of messages received
-      from each broker (updated <span class="strike">daily</span>
-      manually (currently))</a></li>
+      from each broker</a> (updated <span class="strike">daily</span>
+      manually (currently))</li>
+  <li class="exbelow"><a href="/elasticc/brokercompletenessgraphs">Classifier
+      completeness</a> (fraction of alerts sent each week for which each
+    broker/classifier has sent at least one classification).</li>
   <li class="exbelow"><a href="/elasticc/summary">A summary of alerts and broker
-      classifications (Slow!)</a></li>
-  <li class="exbelow"><a href="/elasticc/adminsummary">An admin summary (Slow)</a></li>
+      classifications</a> (Slow!)</li>
+  <li class="exbelow"><a href="/elasticc/adminsummary">An admin
+      summary</a> (Slow)</li>
 </ul>
 
 <p>Metrics:</p>
 <ul>
   <li class="exbelow"><a href="/elasticc/latestconfmatrix">Confusion matrices for each
-      broker, using latest classification for each object (Updated
-      Daily)</a></li>
+      broker/classifier, using latest classification for each object</a> (updated
+      daily)</li>
 </uL>
 
 {% endblock %}
