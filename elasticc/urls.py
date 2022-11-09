@@ -11,7 +11,7 @@ router.register(f'diatruth', views.DiaTruthViewSet)
 router.register(f'diaalert', views.DiaAlertViewSet)
 
 urlpatterns = [
-    path('', views.ElasticcMainView.as_view()),
+    path('', views.ElasticcMainView.as_view(), name="elasticc"),
 
     path('adddiaobject', views.MaybeAddDiaObject.as_view()),
     path('addelasticcalert', views.MaybeAddAlert.as_view()),
@@ -25,6 +25,7 @@ urlpatterns = [
     path('alertstreamhists', views.ElasticcAlertStreamHistograms.as_view()),
     path('brokerstreamgraphs', views.ElasticcBrokerStreamGraphs.as_view()),
     path('brokercompletenessgraphs', views.ElasticcBrokerCompletenessGraphs.as_view()),
+    path('brokertimedelays', views.ElasticcBrokerTimeDelayGraphs.as_view()),
     path('tmpbrokeralerthists', views.ElasticcTmpBrokerHistograms.as_view()),
     
     path('getalerts', views.GetAlerts.as_view()),

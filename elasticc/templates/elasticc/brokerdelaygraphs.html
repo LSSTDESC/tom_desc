@@ -1,0 +1,44 @@
+{% extends 'tom_common/base.html' %}
+{% load static %}
+{% block title %}
+ELAsTiCC Broker Time Delays
+{% endblock %}
+{% block additional_css %}
+<link rel="stylesheet" href="{% static 'elasticc/elasticc.css' %}">
+{% endblock %}
+{% block additional_js %}
+<script type="text/javascript" src="{% static 'elasticc/elasticc.js' %}"></script>
+{% endblock %}
+{% block content %}
+<h2>ELAsTiCC Broker Time Delays</h2>
+
+<p>Updated {{ updatetime }}</p>
+
+<p>The graphs below show histograms of time intervals between alerts
+  being issued and broker messages being received.  Three time intervals are
+  shown:</p>
+
+<ul>
+  <li>the total time between the original detection alert being issued
+    and the DESC Tom ingesting a broker's classification;
+  <li>the time between between the original detection alert being issued
+    and the broker publishing a classification (as measured by the
+    header of the Kafka message)</li>
+  <li>the time between the broker publishing a classification and the
+    DESC Tom ingesting that classification.</li>
+</ul>
+
+<p>The time of the broker publishing a classification is based on the
+  message header from the Kafka stream for brokers who provide
+  classifications that way.  For brokers who send to the Tom's REST
+  interface, it's the time that the message was received by the
+  server.</p>
+
+{% for broker in brokers %}
+  <hr>
+  <h3>{{ broker }}</h3>
+  <img src="{% static 'elasticc/brokertiminggraphs' %}/{{ broker }}.svg"
+       width=1200 alt=["{{ broker }}"]>
+{% endfor %}
+
+{% endblock %}

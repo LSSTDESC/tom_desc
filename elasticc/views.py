@@ -910,6 +910,28 @@ class ElasticcBrokerCompletenessGraphs( LoginRequiredMixin, django.views.View, B
 
 # ======================================================================
 
+class ElasticcBrokerTimeDelayGraphs( LoginRequiredMixin, django.views.View, BrokerSorter ):
+    def get( self, request, info=None ):
+        return self.post( request, info )
+
+    def post( self, request, info=None ):
+        templ = loader.get_template( "elasticc/brokerdelaygraphs.html" )
+        context = { 'brokers': [] }
+        graphdir = pathlib.Path(__file__).parent / "static/elasticc/brokertiminggraphs"
+        with open( graphdir / "updatetime.txt" ) as ifp:
+            context['updatetime'] = ifp.readline().strip()
+        files = list( graphdir.glob( "*.svg" ) )
+        files.sort()
+        fnamematch = re.compile( '^(.*)\.svg' )
+        for fname in files:
+            match = fnamematch.search( fname.name )
+            if match is not None:
+                context['brokers'].append( match.group(1) )
+        return HttpResponse( templ.render( context, request ) )
+    
+
+# ======================================================================
+
 class ElasticcTmpBrokerHistograms( LoginRequiredMixin, django.views.View, BrokerSorter ):
 
     def get( self, request, info=None ):

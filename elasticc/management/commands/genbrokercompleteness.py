@@ -36,6 +36,8 @@ class Command(BaseCommand):
                              help='YYYY-MM-DD of last day to look at (default: current day - 1)' )
 
     def handle( self, *args, **options ):
+        _logger.info( "Starting genbrokercompleteness" )
+        
         self.outdir.mkdir( parents=True, exist_ok=True )
         conn = None
 

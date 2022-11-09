@@ -1,0 +1,39 @@
+{% extends 'tom_common/base.html' %}
+{% load static %}
+{% block title %}
+ELAsTiCC Basic Broker Metrics
+{% endblock %}
+{% block additional_css %}
+<link rel="stylesheet" href="{% static 'elasticc/elasticc.css' %}">
+{% endblock %}
+{% block additional_js %}
+<script type="text/javascript" src="{% static 'elasticc/elasticc.js' %}"></script>
+{% endblock %}
+{% block content %}
+<h2>ELAsTiCC Broker Message Rates</h2>
+
+<p>The graphs below show the number of <i>messages</i> (each of which
+  may have multiple classifications) received from each broker in 4-hour
+  intervals.  The times used are the times the messages were ingested
+  here, which will be later than when the messages were published by the
+  broker; ideally, not very much later.</p>
+
+{% for broker,weeks in brokers.items %}
+  <hr>
+  <h3>{{ broker }}</h3>
+  {% for week,days in weeks.items %}
+    <p><button id="{{ broker }}{{ week }}button"
+               onclick="hideOrShow('{{ broker }}{{ week }}button', '{{ broker }}{{ week }}div')">Show
+      </button> {{ week }} </p>
+    <div id="{{ broker }}{{ week }}div" style="display: none">
+      {% for day, filename in days.items %}
+        <p><b>{{ day }}</b><br>
+          <img src="{% static 'elasticc/brokerstreamgraphs' %}/{{ filename }}"
+               width=800 alt="[Message rate for {{ day }}]" >
+        </p>
+      {% endfor %}
+    </div>
+  {% endfor %}
+{% endfor %}
+
+{% endblock %}

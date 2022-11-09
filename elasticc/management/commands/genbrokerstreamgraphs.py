@@ -35,6 +35,8 @@ class Command(BaseCommand):
                              help="How many hours per bin (default: 4)" )
 
     def handle( self, *args, **options ):
+        _logger.info( "Starting genbrokerstreamgraphs" )
+        
         self.outdir.mkdir( parents=True, exist_ok=True )
 
         starthour = int( options['hour'] )
