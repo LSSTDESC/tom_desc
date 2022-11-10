@@ -683,6 +683,39 @@ class BrokerMessageView(PermissionRequiredMixin, django.views.View):
 # ======================================================================
 # Interactive views
 
+class BrokerSorter:
+    def getbrokerstruct( self ):
+        brokers = {}
+        cfers = BrokerClassifier.objects.all().order_by( 'brokerName', 'brokerVersion',
+                                                         'classifierName', 'classifierParams' )
+        # There's probably a faster pythonic way to make
+        # a hierarchy like this, but oh well.  This works.
+        curbroker = None
+        curversion = None
+        curcfer = None
+        for cfer in cfers:
+            if cfer.brokerName != curbroker:
+                curbroker = cfer.brokerName
+                curversion = cfer.brokerVersion
+                curcfer = cfer.classifierName
+                brokers[curbroker] = {
+                    curversion: {
+                        curcfer: [ [ cfer.classifierParams, cfer.classifierId ] ]
+                    }
+                }
+            elif cfer.brokerVersion != curversion:
+                curversion = cfer.brokerVersion
+                curcfer = cfer.classifierName
+                brokers[curbroker][curversion] = {
+                    curcfer: [ [ cfer.classifierParams, cfer.classifierId ] ] }
+            elif cfer.classifierName != curcfer:
+                curcfer = cfer.classifierName
+                brokers[curbroker][curversion][curcfer] = [ [ cfer.classifierParams, cfer.classifierId ] ]
+            else:
+                brokers[curbroker][curversion][curcfer].append( [ cfer.classifierParams, cfer.classifierId ] )
+
+        return brokers
+
 class AlertExplorer( LoginRequiredMixin, django.views.View ):
 
     def get( self, request, info=None ):
@@ -794,6 +827,7 @@ class ElasticcAdminSummary( PermissionRequiredMixin, django.views.View ):
         return HttpResponse( templ.render( context, request ) )
         
 # ======================================================================
+# This class is poorly named.  It does not show histograms.
 
 class ElasticcAlertStreamHistograms( LoginRequiredMixin, django.views.View ):
 
@@ -823,7 +857,82 @@ class ElasticcAlertStreamHistograms( LoginRequiredMixin, django.views.View ):
 
 # ======================================================================
 
-class ElasticcTmpBrokerHistograms( LoginRequiredMixin, django.views.View ):
+class ElasticcBrokerStreamGraphs( LoginRequiredMixin, django.views.View ):
+
+    def get( self, request, info=None ):
+        return self.post( request, info )
+
+    def post( self, request, info=None ):
+        templ = loader.get_template( "elasticc/brokerstreamrate.html" )
+        context = { "brokers": {} }
+        fnmatch = re.compile( "^(.*)_(\d{4})-(\d{2})-(\d{2})\.svg$" )
+
+        outdir = pathlib.Path(__file__).parent / "static/elasticc/brokerstreamgraphs"
+        files = outdir.glob( "*.svg" )
+        brokers = {}
+        for fname in files:
+            _logger.info( f"Parsing file {fname.name}" )
+            match = fnmatch.search( str(fname.name) )
+            if match is None:
+                continue
+            broker = match.group(1)
+            if broker not in brokers.keys():
+                brokers[broker] = {}
+            filedate = datetime.date( int(match.group(2)), int(match.group(3)), int(match.group(4)) )
+            week = filedate.isocalendar()[1]
+            weekstr = f'{filedate.year} Week {week}'
+            if weekstr not in brokers[broker].keys():
+                brokers[broker][weekstr] = {}
+            brokers[broker][weekstr][filedate.isoformat()] = fname.name
+
+        # Sort these dictionaries
+        brokers = dict( sorted( brokers.items() ) )
+        for broker in brokers.keys():
+            brokers[broker] = dict( sorted( brokers[broker].items() ) )
+            for week in brokers[broker]:
+                brokers[broker][week] = dict( sorted( brokers[broker][week].items() ) )
+
+        _logger.info( f"Brokers is: {brokers}" )
+        return HttpResponse( templ.render( { "brokers": brokers }, request ) )
+
+# ======================================================================
+
+class ElasticcBrokerCompletenessGraphs( LoginRequiredMixin, django.views.View, BrokerSorter ):
+
+    def get( self, request, info=None ):
+        return self.post( request, info )
+
+    def post( self, request, info=None ):
+        templ = loader.get_template( "elasticc/brokercompletenessperweek.html" )
+        context = {}
+        context['brokers'] = self.getbrokerstruct()
+        return HttpResponse( templ.render( context, request ) )
+
+# ======================================================================
+
+class ElasticcBrokerTimeDelayGraphs( LoginRequiredMixin, django.views.View, BrokerSorter ):
+    def get( self, request, info=None ):
+        return self.post( request, info )
+
+    def post( self, request, info=None ):
+        templ = loader.get_template( "elasticc/brokerdelaygraphs.html" )
+        context = { 'brokers': [] }
+        graphdir = pathlib.Path(__file__).parent / "static/elasticc/brokertiminggraphs"
+        with open( graphdir / "updatetime.txt" ) as ifp:
+            context['updatetime'] = ifp.readline().strip()
+        files = list( graphdir.glob( "*.svg" ) )
+        files.sort()
+        fnamematch = re.compile( '^(.*)\.svg' )
+        for fname in files:
+            match = fnamematch.search( fname.name )
+            if match is not None:
+                context['brokers'].append( match.group(1) )
+        return HttpResponse( templ.render( context, request ) )
+    
+
+# ======================================================================
+
+class ElasticcTmpBrokerHistograms( LoginRequiredMixin, django.views.View, BrokerSorter ):
 
     def get( self, request, info=None ):
         return self.post( request, info )
@@ -831,45 +940,14 @@ class ElasticcTmpBrokerHistograms( LoginRequiredMixin, django.views.View ):
     def post ( self, request, info=None ):
         templ = loader.get_template( "elasticc/tmp_brokeralerthist.html" )
         context = { 'brokers': {} }
-
         rundir = pathlib.Path(__file__).parent
-
-        cfers = BrokerClassifier.objects.all().order_by( 'brokerName', 'brokerVersion',
-                                                         'classifierName', 'classifierParams' )
-
-        # There's probably a faster pythonic way to make
-        # a hierarchy like this, but oh well.  This works.
-        curbroker = None
-        curversion = None
-        curcfer = None
-        for cfer in cfers:
-            if cfer.brokerName != curbroker:
-                curbroker = cfer.brokerName
-                curversion = cfer.brokerVersion
-                curcfer = cfer.classifierName
-                context['brokers'][curbroker] = {
-                    curversion: {
-                        curcfer: [ [ cfer.classifierParams, cfer.classifierId ] ]
-                    }
-                }
-            elif cfer.brokerVersion != curversion:
-                curversion = cfer.brokerVersion
-                curcfer = cfer.classifierName
-                context['brokers'][curbroker][curversion] = {
-                    curcfer: [ [ cfer.classifierParams, cfer.classifierId ] ] }
-            elif cfer.classifierName != curcfer:
-                curcfer = cfer.classifierName
-                context['brokers'][curbroker][curversion][curcfer] = [ [ cfer.classifierParams, cfer.classifierId ] ]
-            else:
-                context['brokers'][curbroker][curversion][curcfer].append( [ cfer.classifierParams,
-                                                                             cfer.classifierId ] )
-                
+        context['brokers'] = self.getbrokerstruct()
         return HttpResponse( templ.render( context, request ) )
         
 
 # ======================================================================
 
-class ElasticcMetrics( LoginRequiredMixin, django.views.View ):
+class ElasticcLatestConfMatrix( LoginRequiredMixin, django.views.View, BrokerSorter ):
 
     def get( self, request, info=None ):
         return self.post( request, info )
@@ -877,41 +955,10 @@ class ElasticcMetrics( LoginRequiredMixin, django.views.View ):
     def post( self, request, info=None ):
         templ = loader.get_template( "elasticc/basicmetrics.html" )
         context = { 'brokers': {} }
-
         rundir = pathlib.Path(__file__).parent
         with open( rundir / "static/elasticc/confmatrix_update.txt" ) as ifp:
             context['updatetime'] = ifp.readline().strip()
-
-        cfers = BrokerClassifier.objects.all().order_by( 'brokerName', 'brokerVersion',
-                                                         'classifierName', 'classifierParams' )
-
-        # There's probably a faster pythonic way to make
-        # a hierarchy like this, but oh well.  This works.
-        curbroker = None
-        curversion = None
-        curcfer = None
-        for cfer in cfers:
-            if cfer.brokerName != curbroker:
-                curbroker = cfer.brokerName
-                curversion = cfer.brokerVersion
-                curcfer = cfer.classifierName
-                context['brokers'][curbroker] = {
-                    curversion: {
-                        curcfer: [ [ cfer.classifierParams, cfer.classifierId ] ]
-                    }
-                }
-            elif cfer.brokerVersion != curversion:
-                curversion = cfer.brokerVersion
-                curcfer = cfer.classifierName
-                context['brokers'][curbroker][curversion] = {
-                    curcfer: [ [ cfer.classifierParams, cfer.classifierId ] ] }
-            elif cfer.classifierName != curcfer:
-                curcfer = cfer.classifierName
-                context['brokers'][curbroker][curversion][curcfer] = [ [ cfer.classifierParams, cfer.classifierId ] ]
-            else:
-                context['brokers'][curbroker][curversion][curcfer].append( [ cfer.classifierParams,
-                                                                             cfer.classifierId ] )
-                
+        context['brokers'] = self.getbrokerstruct()
         return HttpResponse( templ.render( context, request ) )
 
 # ======================================================================

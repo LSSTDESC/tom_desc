@@ -1,4 +1,3 @@
-
 {% extends 'tom_common/base.html' %}
 {% load static %}
 {% block title %}
@@ -14,15 +13,31 @@ ELAsTiCC
   see <a href="https://portal.nersc.gov/cfs/lsst/DESC_TD_PUBLIC/ELASTICC/">The
     DESC ELAsTiCC Challenge</a>.</p>
 
-<p>Useful things here:</p>
+<p>Streaming and Database Statistics:</p>
 
 <ul>
-  <li><a href="/elasticc/summary">A summary of alerts and broker
-      classifications</a></li>
-  <li><a href="/elasticc/metrics">Metrics of broker classifications
-      vs. true simulated object types</a></li>
-  <li><a href="/elasticc/adminsummary">An admin summary</a></li>
-  <li>...more to come</li>
+  <li class="exbelow"><a href="/elasticc/alertstreamhists">Graphs of hourly streaming rate of
+      original ELAsTiCC alerts sent to the ZADS broker</a> (updated
+      daily)</li>
+  <li class="exbelow"><a href="/elasticc/brokerstreamgraphs">Graphs of rate of messages received
+      from each broker</a> (updated daily)</li>
+  <li class="exbelow"><a href="/elasticc/brokercompletenessgraphs">Classifier
+      completeness</a> — fraction of alerts sent each week for which each
+    broker/classifier has sent at least one classification (updated daily)</li>
+  <li class="exbelow"><a href="/elasticc/brokertimedelays">Broker Time
+      Delays</a> — histogram of time delays between alerts being isused
+      and ingesting broker classifications (updated daily)</li>
+  <li class="exbelow"><a href="/elasticc/summary">A summary of alerts and broker
+      classifications</a> (Slow!)</li>
+  <li class="exbelow"><a href="/elasticc/adminsummary">An admin
+      summary</a> (Slow)</li>
 </ul>
+
+<p>Metrics:</p>
+<ul>
+  <li class="exbelow"><a href="/elasticc/latestconfmatrix">Confusion matrices for each
+      broker/classifier, using latest classification for each object</a> (updated
+      daily)</li>
+</uL>
 
 {% endblock %}
