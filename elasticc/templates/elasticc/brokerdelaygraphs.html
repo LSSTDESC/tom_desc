@@ -34,11 +34,21 @@ ELAsTiCC Broker Time Delays
   interface, it's the time that the message was received by the
   server.</p>
 
-{% for broker in brokers %}
+{% for broker,brokerdata in brokers.items %}
   <hr>
   <h3>{{ broker }}</h3>
-  <img src="{% static 'elasticc/brokertiminggraphs' %}/{{ broker }}.svg"
+  <img src="{% static 'elasticc/brokertiminggraphs' %}/{{ brokerdata.sum }}"
        width=1200 alt=["{{ broker }}"]>
+  <h4><button id="{{ broker }}button"
+              onclick="hideOrShow('{{ broker }}button', '{{ broker }}div')">Show
+    </button> by week</h4>
+  <div id="{{ broker }}div" style="display: none">
+    {% for week, fname in brokerdata.weeks.items %}
+      <p><b>{{broker}}, week of {{ week }}:</b></p>
+      <img src="{% static 'elasticc/brokertiminggraphs' %}/{{ fname }}"
+           width=1200 alt="[ {{ broker }} {{ week }} ]" >
+    {% endfor %}
+  </div>
 {% endfor %}
 
 {% endblock %}

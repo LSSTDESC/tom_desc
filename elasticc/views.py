@@ -910,6 +910,33 @@ class ElasticcBrokerCompletenessGraphs( LoginRequiredMixin, django.views.View, B
 
 # ======================================================================
 
+class ElasticcBrokerCompletenessVsNumDets( LoginRequiredMixin, django.views.View, BrokerSorter ):
+
+    def get( self, request, info=None ):
+        return self.post( request, info )
+
+    def post( self, request, info=None ):
+        templ = loader.get_template( "elasticc/brokercompletenessvsndets.html" )
+        context = {}
+        brokers = self.getbrokerstruct()
+
+        plotdir = pathlib.Path(__file__).parent / "static/elasticc/brokercompletenessvsndets"
+        for broker, versions in brokers.items():
+            for version, cfers in versions.items():
+                for cfer,params in cfers.items():
+                    for p in params:
+                        fp = plotdir / f"{p[1]}.svg"
+                        if not fp.exists():
+                            p.append( "<File missing>" )
+                        else:
+                            p.append( datetime.datetime.fromtimestamp( fp.stat().st_mtime )
+                                      .strftime( "%Y-%m-%d %H:%M" ) )
+
+        context = { 'brokers': brokers }
+        return HttpResponse( templ.render( context, request ) )
+        
+# ======================================================================
+
 class ElasticcBrokerTimeDelayGraphs( LoginRequiredMixin, django.views.View, BrokerSorter ):
     def get( self, request, info=None ):
         return self.post( request, info )
@@ -922,11 +949,26 @@ class ElasticcBrokerTimeDelayGraphs( LoginRequiredMixin, django.views.View, Brok
             context['updatetime'] = ifp.readline().strip()
         files = list( graphdir.glob( "*.svg" ) )
         files.sort()
-        fnamematch = re.compile( '^(.*)\.svg' )
+        weekmatch = re.compile( '^(.*)_(\d{4}-\d{2}-\d{2})\.svg$' )
+        summedmatch = re.compile( '^(.*)_summed\.svg$' )
+        brokers = set()
         for fname in files:
-            match = fnamematch.search( fname.name )
+            match = summedmatch.search( fname.name )
             if match is not None:
-                context['brokers'].append( match.group(1) )
+                brokers.add( match.group(1) )
+        brokers = list(brokers)
+        brokers.sort()
+
+        context['brokers'] = {}
+        
+        for broker in brokers:
+            context['brokers'][broker] = { 'sum': f'{broker}_summed.svg', 'weeks': {} }
+            for fname in files:
+                match = weekmatch.search( fname.name )
+                if ( match is not None ) and ( match.group(1) == broker ):
+                    week = match.group(2)
+                    context['brokers'][broker]['weeks'][week] = fname.name
+            
         return HttpResponse( templ.render( context, request ) )
     
 

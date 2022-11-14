@@ -25,6 +25,7 @@ urlpatterns = [
     path('alertstreamhists', views.ElasticcAlertStreamHistograms.as_view()),
     path('brokerstreamgraphs', views.ElasticcBrokerStreamGraphs.as_view()),
     path('brokercompletenessgraphs', views.ElasticcBrokerCompletenessGraphs.as_view()),
+    path('brokercompletenessvsndets', views.ElasticcBrokerCompletenessVsNumDets.as_view()),
     path('brokertimedelays', views.ElasticcBrokerTimeDelayGraphs.as_view()),
     path('tmpbrokeralerthists', views.ElasticcTmpBrokerHistograms.as_view()),
     

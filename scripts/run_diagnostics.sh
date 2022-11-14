@@ -14,7 +14,7 @@ echo "Running genbrokercompleteness"
 echo ""
 python manage.py genbrokercompleteness
 
-# This one also takes up to a couple of hours
+# This one takes an hour or more
 echo ""
 echo "Running genbrokerdelaygraphs"
 echo ""
