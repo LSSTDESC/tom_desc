@@ -26,11 +26,11 @@ from _consumekafkamsgs import MsgConsumer
 #             return super().default( obj )
 
 # ======================================================================
-        
+
 class BrokerConsumer:
     def __init__( self, server, groupid, topics=None, updatetopics=False,
                   schemaless=True, reset=False, extraconfig={},
-                  schemafile=None, loggername="BROKER" ):
+                  schemafile=None, pipe=None, loggername="BROKER" ):
 
         self.logger = logging.getLogger( loggername )
         self.logger.propagate = False
@@ -55,14 +55,15 @@ class BrokerConsumer:
             schemafile = _rundir / "elasticc.v0_9.brokerClassification.avsc"
 
         self.countlogger.info( f"************ Starting Brokerconsumer for {loggername} ****************" )
-            
+
+        self.pipe = pipe
         self.server = server
         self.groupid = groupid
         self.topics = topics
         self._updatetopics = updatetopics
         self._reset = reset
         self.extraconfig = extraconfig
-        
+
         self.schemaless = schemaless
         if not self.schemaless:
             self.countlogger.error( "CRASHING.  I only know how to handle schemaless streams." )
@@ -73,7 +74,7 @@ class BrokerConsumer:
         self.nmessagesconsumed = 0
 
         self.create_connection()
-        
+
     @property
     def reset( self ):
         return self._reset
@@ -81,7 +82,7 @@ class BrokerConsumer:
     @reset.setter
     def reset( self, val ):
         self._reset = val
-        
+
     def create_connection( self ):
         countdown = 5
         while countdown >= 0:
@@ -104,7 +105,7 @@ class BrokerConsumer:
                     self.logger.error( "Repeated exceptions connecting to broker, punting." )
                     self.countlogger.error( "Repeated exceptions connecting to broker, punting." )
                     raise RuntimeError( "Failed to connect to broker" )
-            
+
         if self._reset and ( self.topics is not None ):
             self.countlogger.info( f"*************** Resetting to start of broker kafka stream ***************" )
             self.reset_to_start()
@@ -115,11 +116,11 @@ class BrokerConsumer:
         self.countlogger.info( f"**************** Closing consumer connection ******************" )
         self.consumer.close()
         self.consumer = None
-            
+
     def update_topics( self, *args, **kwargs ):
         self.countlogger.info( "Subclass must implement this if you use it." )
         raise NotImplementedError( "Subclass must implement this if you use it." )
-        
+
     def reset_to_start( self ):
         self.logger.info( "Resetting all topics to start" )
         for topic in self.topics:
@@ -149,7 +150,7 @@ class BrokerConsumer:
         self.countlogger.info( f"...added {added['addedmsgs']} messages, "
                                f"{added['addedclassifiers']} classifiers, "
                                f"{added['addedclassifications']} classifications. " )
-        
+
     def poll( self, restart_time=datetime.timedelta(minutes=30) ):
         while True:
             if self._updatetopics:
@@ -160,16 +161,27 @@ class BrokerConsumer:
                 time.sleep(60)
             else:
                 self.logger.info( f"Subscribed to topics: {self.consumer.topics}; starting poll loop." )
+                self.countlogger.info( f"Subscribed to topics: {self.consumer.topics}; starting poll loop." )
                 try:
-                    self.consumer.poll_loop( handler=self.handle_message_batch,
-                                             max_consumed=None, max_runtime=restart_time )
-                    strio.write( f"Reached poll timeout for {self.server}; "
-                                 f"handled {self.consumer.tot_handled} messages. " )
+                    happy = self.consumer.poll_loop( handler=self.handle_message_batch,
+                                                     max_consumed=None, max_runtime=restart_time,
+                                                     pipe=self.pipe )
+                    if happy:
+                        strio.write( f"Reached poll timeout for {self.server}; "
+                                     f"handled {self.consumer.tot_handled} messages. " )
+                    else:
+                        strio.write( f"Poll loop received die command after handling "
+                                     f"{self.consumer.tot_handled} messages.  Exiting." )
+                        self.logger.info( strio.getvalue() )
+                        self.countlogger.info( strio.getvalue() )
+                        self.close_connection()
+                        return
                 except Exception as e:
                     otherstrio = io.StringIO("")
                     traceback.print_exc( file=otherstrio )
                     self.logger.warning( otherstrio.getvalue() )
                     strio.write( f"Exception polling: {str(e)}. " )
+
             strio.write( "Reconnecting.\n" )
             self.logger.info( strio.getvalue() )
             self.countlogger.info( strio.getvalue() )
@@ -179,7 +191,7 @@ class BrokerConsumer:
             self.create_connection()
 
 # ======================================================================
-        
+
 class AntaresConsumer(BrokerConsumer):
     def __init__( self, grouptag=None,
                   usernamefile='/secrets/antares_username', passwdfile='/secrets/antares_passwd',
@@ -207,10 +219,10 @@ class AntaresConsumer(BrokerConsumer):
         super().__init__( server, groupid, topics=topics, updatetopics=updatetopics,
                           extraconfig=extraconfig, loggername=loggername, **kwargs )
         self.logger.info( f"Antares group id is {groupid}" )
-        
+
 
 # ======================================================================
-        
+
 class FinkConsumer(BrokerConsumer):
     def __init__( self, grouptag=None, loggername="FINK", **kwargs ):
         server = "134.158.74.95:24499"
@@ -220,10 +232,10 @@ class FinkConsumer(BrokerConsumer):
         super().__init__( server, groupid, topics=topics, updatetopics=updatetopics,
                           loggername=loggername, **kwargs )
         self.logger.info( f"Fink group id is {groupid}" )
-        
+
 
 # ======================================================================
-        
+
 class AlerceConsumer(BrokerConsumer):
     def __init__( self, grouptag=None,
                   usernamefile='/secrets/alerce_username', passwdfile='/secrets/alerce_passwd',
@@ -258,51 +270,118 @@ class AlerceConsumer(BrokerConsumer):
                 tosub.append( topic )
         self.topics = tosub
         self.consumer.subscribe( self.topics )
-            
+
 # =====================================================================
 
 class Command(BaseCommand):
     help = 'Poll ELAsTiCC Brokers'
     schemafile = _rundir / "elasticc.v0_9.brokerClassification.avsc"
 
+    def __init__( self, *args, **kwargs ):
+        super().__init__( *args, **kwargs )
+        self.logger = logging.getLogger( "brokerpoll_baselogger" )
+        self.logger.propagate = False
+        logout = logging.FileHandler( _rundir.parent.parent.parent / f"logs/brokerpoll.log" )
+        self.logger.addHandler( logout )
+        formatter = logging.Formatter( f'[%(asctime)s - brokerpoll - %(levelname)s] - %(message)s',
+                                       datefmt='%Y-%m-%d %H:%M:%S' )
+        logout.setFormatter( formatter )
+        self.logger.setLevel( logging.INFO )
+
     def add_arguments( self, parser ):
         parser.add_argument( '-g', '--grouptag', default=None, help="Tag to add to end of kafka group ids" )
         parser.add_argument( '-r', '--reset', default=False, action='store_true',
                              help='Reset all stream pointers' )
 
+    def sigterm( self, sig="TERM" ):
+        self.logger.warning( f"Got a {sig} signal, trying to die." )
+        self.mustdie = True
+
+    def launch_broker( self, brokerclass, pipe, **options ):
+        signal.signal( signal.SIGINT,
+                       lambda sig, stack: self.logger.warning( f"{brokerclass.__name__} ignoring SIGINT" ) )
+        signal.signal( signal.SIGTERM,
+                       lambda sig, stack: self.logger.warning( f"{brokerclass.__name__} ignoring SIGTERM" ) )
+        consumer = brokerclass( grouptag=options['grouptag'], reset=options['reset'], pipe=pipe )
+        consumer.poll()
+
     def handle( self, *args, **options ):
-        do_antares = True
-        do_fink = True
-        do_alerce = True
-        join = None
-        
-        if do_antares:
-            def launch_antares():
-                consumer = AntaresConsumer( grouptag=options['grouptag'], reset=options['reset'] )
-                consumer.poll()
-            antares_process = multiprocessing.Process( target=launch_antares )
-            antares_process.start()
-            if join is None: join = antares_process
+        self.logger.info( "******** brokerpoll starting ***********" )
 
-        if do_fink:
-            def launch_fink():
-                consumer = FinkConsumer( grouptag=options['grouptag'], reset=options['reset'] )
-                consumer.poll()
-            fink_process = multiprocessing.Process( target=launch_fink )
-            fink_process.start()
-            if join is None: join = fink_process
+        self.mustdie = False
+        signal.signal( signal.SIGTERM, lambda sig, stack: self.sigterm( "TERM" ) )
+        signal.signal( signal.SIGINT, lambda sig, stack: self.sigterm( "INT" ) )
 
-        if do_alerce:
-            def launch_alerce():
-                consumer = AlerceConsumer( grouptag=options['grouptag'], reset=options['reset'] )
-                consumer.poll()
-            alerce_process = multiprocessing.Process( target=launch_alerce )
-            alerce_process.start()
-            if join is None: join = alerce_process
+        brokerstodo = { 'antares': AntaresConsumer,
+                        'fink': FinkConsumer,
+                        'alerce': AlerceConsumer }
+        brokers = {}
 
-        # Make sure that atexit stuff gets run when we get a TERM singal
-        # signal.signal( signal.SIGTERM, lambda *args : sys.exit(1) )
-        #...doesn't seem to work.  I bet django/tom subvert this.  Sigh.
-        
-        # Rob, put in a heartbeat thing or something
-        join = join.join()
+        # Launch a process for each broker that will poll that broker indefinitely
+
+        for name,brokerclass in brokerstodo.items():
+            self.logger.info( f"Launching thread for {name}" )
+            parentconn, childconn = multiprocessing.Pipe()
+            proc = multiprocessing.Process( target=lambda: self.launch_broker(brokerclass, childconn, **options) )
+            proc.start()
+            brokers[name] = { "process": proc,
+                              "pipe": parentconn,
+                              "lastheartbeat": time.monotonic() }
+
+        # Listen for a heartbeat from all processes.
+        # If we don't get a heartbeat for 5min,
+        # kill that process and restart it.
+
+        heartbeatwait = 2
+        toolongsilent = 30 # 300
+        while not self.mustdie:
+            try:
+                pipelist = [ b['pipe'] for i,b in brokers.items() ]
+                whichpipe = multiprocessing.connection.wait( pipelist, timeout=heartbeatwait )
+
+                brokerstorestart = set()
+                for name, broker in brokers.items():
+                    try:
+                        while broker['pipe'].poll():
+                            msg = broker['pipe'].recv()
+                            if ( 'message' not in msg ) or ( msg['message'] != "ok" ):
+                                self.logger.error( f"Got unexpected message from thread for {name}; "
+                                                   f"will restart: {msg}" )
+                                brokerstorestart.add( name )
+                            else:
+                                self.logger.debug( f"Got heartbeat from {name}" )
+                                broker['lastheartbeat'] = time.monotonic()
+                    except Exception as ex:
+                        self.logger.error( f"Got exception listening for heartbeat from {name}; will restart." )
+                        brokerstorestart.add( name )
+
+                for name, broker in brokers.items():
+                    dt = time.monotonic() - broker['lastheartbeat']
+                    if dt > toolongsilent:
+                        self.logger.error( f"It's been {dt:.0f} seconds since last heartbeat from {name}; "
+                                           f"will restart." )
+                        brokerstorestart.add( name )
+
+                for torestart in brokerstorestart:
+                    self.logger.warning( f"Killing and restarting process for {torestart}" )
+                    brokers[torestart]['process'].kill()
+                    brokers[torestart]['pipe'].close()
+                    del brokers[torestart]
+                    parentconn, childconn = multiprocessing.Pipe()
+                    proc = multiprocessing.Process( target=lambda: self.launch_broker( brokerstodo[torestart],
+                                                                                      childconn, **options ) )
+                    proc.start()
+                    brokers[torestart] = { "process": proc,
+                                           "pipe": parentconn,
+                                           "lastheartbeat": time.monotonic() }
+            except Exception as ex:
+                self.logger.exception( "brokerpoll got an exception, going to shut down." )
+                self.mustdie = True
+
+        # I chose 20s since kubernetes sends a TERM and then waits 30s before shutting things down
+        self.logger.warning( "Shutting down.  Sending die to all processes and waiting 20s" )
+        for name, broker in brokers.items():
+            broker['pipe'].send( { "command": "die" } )
+        time.sleep( 20 )
+        self.logger.warning( "Exiting." )
+        return

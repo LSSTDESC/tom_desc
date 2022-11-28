@@ -158,20 +158,23 @@ class MsgConsumer(object):
         self.logger.info( ofp.getvalue() )
         ofp.close()
 
-    def poll_loop( self, handler=None, max_consumed=None, max_runtime=datetime.timedelta(hours=1) ):
+    def poll_loop( self, handler=None, max_consumed=None, pipe=None, max_runtime=datetime.timedelta(hours=1) ):
         """Calls handler with batches of messages.
 
         handler : a callback that's called with batches of messages (the list
                   returned by confluent_kafka.Consumer.consume().
         max_consumed : Quit polling after this many messages have been
                        consumed (default: no limit)
+        pipe : A pipe to send regular heartbeats to, and to listen for "die" messages from.
         max_runtime : Quit polling after this much time has elapsed;
                       must be a datetime.timedelta object.  (Default: 1h.)
 
+        returns True if consumed ≥max_consumed or timed out, False if died due to die command
         """
         nconsumed = 0
         starttime = datetime.datetime.now()
         keepgoing = True
+        retval = True
         while keepgoing:
             self.logger.debug( f"Trying to consume {self.consume_nmsgs} messages "
                                f"with timeout {self.consume_timeout}..." )
@@ -192,8 +195,20 @@ class MsgConsumer(object):
                  or
                  ( ( max_runtime is not None ) and ( runtime > max_runtime ) ) ):
                 keepgoing = False
-        self.logger.debug( f"Stopping poll loop after consuming {nconsumed} messages during {runtime}" )
+            if pipe is not None:
+                pipe.send( { "message": "ok", "nconsumed": nconsumed, "runtime": runtime } )
+                if pipe.poll():
+                    msg = pipe.recv()
+                    if ( 'command' in msg ) and ( msg['command'] == 'die' ):
+                        self.logger.info( "Exiting poll loop due to die command." )
+                        retval = False
+                        keepgoing = False
+                    else:
+                        self.logger.error( f"Received unknown message from pipe, ignoring: {msg}" )
 
+        self.logger.info( f"Stopping poll loop after consuming {nconsumed} messages during {runtime}" )
+        return retval
+        
     def consume_one_message( self, timeout=None, handler=None ):
         """Both calls handler and returns a batch of 1 message."""
         timeout = self.consume_timeout if timeout is None else timeout
