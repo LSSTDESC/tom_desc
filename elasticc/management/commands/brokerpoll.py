@@ -333,7 +333,7 @@ class Command(BaseCommand):
         # kill that process and restart it.
 
         heartbeatwait = 2
-        toolongsilent = 30 # 300
+        toolongsilent = 300
         while not self.mustdie:
             try:
                 pipelist = [ b['pipe'] for i,b in brokers.items() ]
