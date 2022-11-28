@@ -12,3 +12,5 @@ li.exbelow { border-bottom: 1ex }
 
 .strike { text-decoration: line-through }
 
+.sup { vertical-align: super; font-size: 66% }
+.sub { vertical-align: sub; font-size: 66% }

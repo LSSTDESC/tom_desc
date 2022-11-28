@@ -33,13 +33,11 @@ class Command(BaseCommand):
     def add_arguments( self, parser) :
         pass
 
-    def get_delayhist( self, brokerids, cursor ):
+    def get_delayhist( self, brokerids, cursor, bucketleft=0, bucketright=6, dbucket=0.25,
+                       lowcutoff=1, highcutoff=9.99e5):
         queries = []
         subdicts = []
 
-        bucketleft = -2
-        bucketright = 8
-        dbucket = 1
         # ROB!  Play with Postgres to make sure floor is right here
 
         nbuckets = int( math.floor( ( bucketright - bucketleft ) / dbucket ) )
@@ -56,11 +54,17 @@ class Command(BaseCommand):
                            COUNT(tombucket) AS ntom
                   FROM (
                     SELECT whichweek,
-                           width_bucket( LOG( GREATEST( 0.001, EXTRACT(EPOCH FROM fulldelay) ) ),
+                           width_bucket( LOG( LEAST( GREATEST( {lowcutoff},
+                                                               EXTRACT(EPOCH FROM fulldelay) ),
+                                              {highcutoff} ) ),
                                          {bucketleft}, {bucketright}, {nbuckets} ) AS fullbucket,
-                           width_bucket( LOG( GREATEST( 0.001, EXTRACT(EPOCH FROM brokerdelay) ) ),
+                           width_bucket( LOG( LEAST( GREATEST( {lowcutoff},
+                                                     EXTRACT(EPOCH FROM brokerdelay) ),
+                                              {highcutoff} ) ),
                                          {bucketleft}, {bucketright}, {nbuckets} ) AS brokerbucket,
-                           width_bucket( LOG( GREATEST( 0.001, EXTRACT(EPOCH FROM tomdelay) ) ),
+                           width_bucket( LOG( LEAST( GREATEST( {lowcutoff},
+                                                               EXTRACT(EPOCH FROM tomdelay) ),
+                                              {highcutoff} ) ),
                                          {bucketleft}, {bucketright}, {nbuckets} ) AS tombucket
                                 
                     FROM (
@@ -87,6 +91,8 @@ class Command(BaseCommand):
         self.outdir.mkdir( parents=True, exist_ok=True )
         conn = None
 
+        dbucket = 0.25
+        
         try:
             updatetime = datetime.datetime.utcnow().date().isoformat()
             
@@ -111,7 +117,7 @@ class Command(BaseCommand):
                 for brokername in whichgroups:
                     brokerids = brokergroups[ brokername ]
                     _logger.info( f"Sending timings query for {brokername}" ) 
-                    rows = self.get_delayhist( brokerids, cursor )
+                    rows = self.get_delayhist( brokerids, cursor, dbucket=dbucket )
                     for row in rows:
                         d = { 'broker': brokername }
                         d.update( row )
@@ -146,8 +152,13 @@ class Command(BaseCommand):
             weeks = fulltimings.index.get_level_values('whichweek').unique()
             weekdates = { w: w.date().isoformat() for w in weeks }
             
-            minx = -3
-            maxx = 8
+            minx = 0
+            maxx = 6
+            xticks = range( minx, maxx+1, 1 )
+            xlabels = [ str(i) for i in xticks ]
+            xlabels[0] = f"≤{xlabels[0]}"
+            xlabels[-1] = f"≥{xlabels[-1]}"
+
             timingslist = [ fulltimings, brokertimings, tomtimings ]
             sumlist = [ sumfulltimings, sumbrokertimings, sumtomtimings ]
             titles = [ 'Original Alert to Classification Ingest',
@@ -166,7 +177,8 @@ class Command(BaseCommand):
                     ax.set_xlabel( r"$\log_{10}(\Delta t (\mathrm{s}))$", fontsize=14 )
                     ax.set_xlim( minx, maxx )
                     ax.set_ylabel( "N", fontsize=14 )
-                    ax.bar( df.index.values, df['n'].values, width=1.0, align='edge' )
+                    ax.bar( df.index.values, df['n'].values, width=dbucket, align='edge' )
+                    ax.set_xticks( xticks, labels=xlabels )
                     ax.tick_params( 'both', labelsize=12 )
                 _logger.info( f"Writing {str(outfile)})" )
                 fig.savefig( outfile )
