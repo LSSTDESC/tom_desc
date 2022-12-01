@@ -729,6 +729,11 @@ class BrokerMessage(models.Model):
         # at worst that this will lead to useless message objects
         # in the database that we can ignore.  I think.
 
+        # NOTE: See https://docs.djangoproject.com/en/3.0/ref/models/querysets/#bulk-create
+        # the caveats on bulk-create.  I'm assuming that addedmsgs will have the right
+        # value of brokerMessageId.  According to that page, this is only true for
+        # Postgres... which is what I'm using...
+        
         logger.debug( f'In BrokerMessage.load_batch, received {len(messages)} messages.' );
 
         messageobjects = {}
@@ -859,8 +864,10 @@ class BrokerMessage(models.Model):
         newcfications = BrokerClassification.objects.bulk_create( batch, len(kwargses) )
 
         # return newcfications
-        return { "addedmsgs": len(addedmsgs), "addedclassifiers": ncferstoadd,
-                 "addedclassifications": len(newcfications) }
+        return { "addedmsgs": len(addedmsgs),
+                 "addedclassifiers": ncferstoadd,
+                 "addedclassifications": len(newcfications),
+                 "firstbrokerMessageId": None if len(addedmsgs)==0 else addedmsgs[0].brokerMessageId }
         
 class BrokerClassifier(models.Model):
     """Model for a classifier producing an ELAsTiCC broker classification."""

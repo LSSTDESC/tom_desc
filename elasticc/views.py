@@ -594,11 +594,10 @@ class BrokerMessageView(PermissionRequiredMixin, django.views.View):
             
 
         batchret = BrokerMessage.load_batch( messageinfo, logger=_logger )
-        addedmsgs = batchret['addedmsgs']
-        
-        dex = addedmsgs[0].brokerMessageId if len(addedmsgs) > 0 else -1
+        dex = -1 if batchret['firstbrokerMessageId'] is None else batchret['firstbrokerMessageId']
         resp = JsonResponse( { 'brokerMessageId': dex,
-                               'num_loaded': len(addedmsgs) }, status=201 )
+                               'num_loaded': batchret['addedmsgs'] },
+                             status=201 )
         # I really wish there were a django function for this, as I'm not sure that
         # my string replace will always do the right thing.  What I'm after is the
         # url of the current view, but without any parameters passed
