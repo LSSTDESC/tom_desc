@@ -593,8 +593,9 @@ class BrokerMessageView(PermissionRequiredMixin, django.views.View):
                                   'msg': datum } )
             
 
-        addedmsgs = BrokerMessage.load_batch( messageinfo, logger=_logger )
-
+        batchret = BrokerMessage.load_batch( messageinfo, logger=_logger )
+        addedmsgs = batchret['addedmsgs']
+        
         dex = addedmsgs[0].brokerMessageId if len(addedmsgs) > 0 else -1
         resp = JsonResponse( { 'brokerMessageId': dex,
                                'num_loaded': len(addedmsgs) }, status=201 )
