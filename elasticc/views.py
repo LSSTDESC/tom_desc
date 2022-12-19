@@ -1004,6 +1004,30 @@ class ElasticcLatestConfMatrix( LoginRequiredMixin, django.views.View, BrokerSor
         return HttpResponse( templ.render( context, request ) )
 
 # ======================================================================
+
+class ElasticcProbVsClassAndT( LoginRequiredMixin, django.views.View, BrokerSorter ):
+    def get( self, request, info=None ):
+        return self.post( request, info )
+
+    def post( self, request, info=None ):
+        templ = loader.get_template( "elasticc/probvsclassandt.html" )
+        context = { 'brokers': {} }
+        rundir = pathlib.Path(__file__).parent
+        context['brokers'] = self.getbrokerstruct()
+
+        with connection.cursor() as cursor:
+            cursor.execute( 'SELECT DISTINCT ON("classId") c."classId",c.description '
+                            'FROM elasticc_diaobjecttruth t '
+                            'INNER JOIN elasticc_gentypeofclassid c ON t.gentype=c.gentype ' 
+                            'ORDER BY "classId"' )
+            rows = cursor.fetchall()
+            context['classids'] = { row[0]: row[1] for row in rows }
+
+        return HttpResponse( templ.render( context, request ) )
+
+
+
+# ======================================================================
 # ======================================================================
 # ======================================================================
                                                               

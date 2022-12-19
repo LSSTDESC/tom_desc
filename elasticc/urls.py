@@ -22,6 +22,7 @@ urlpatterns = [
     path('adminsummary', views.ElasticcAdminSummary.as_view()),
     path('summary', views.ElasticcSummary.as_view()),
     path('latestconfmatrix', views.ElasticcLatestConfMatrix.as_view()),
+    path('probvsclassandt', views.ElasticcProbVsClassAndT.as_view()),
     path('alertstreamhists', views.ElasticcAlertStreamHistograms.as_view()),
     path('brokerstreamgraphs', views.ElasticcBrokerStreamGraphs.as_view()),
     path('brokercompletenessgraphs', views.ElasticcBrokerCompletenessGraphs.as_view()),
