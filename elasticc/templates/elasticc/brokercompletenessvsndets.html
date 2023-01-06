@@ -1,0 +1,43 @@
+{% extends 'tom_common/base.html' %}
+{% load static %}
+{% block title %}
+ELAsTiCC Broker Completeness vs. Number of Detections
+{% endblock %}
+{% block additional_css %}
+<link rel="stylesheet" href="{% static 'elasticc/elasticc.css' %}">
+{% endblock %}
+{% block additional_js %}
+<script type="text/javascript" src="{% static 'elasticc/elasticc.js' %}"></script>
+{% endblock %}
+{% block content %}
+<h2>ELAsTiCC Broker Completeness Vs. Number of Detections</h2>
+
+<p>Each graph shows the fraction of alerts classified as a function of
+  the number of detections in that alert.  The first time an object is
+  detected, the number of detections will be 1; the second time 2; etc.
+  The vertical axis is the number of alerts for which there is at least
+  one classification from the broker, divided by the total number of
+  alerts that have been sent with that number of detections.</p>
+
+{% for broker,versions in brokers.items %}
+  {% for version,classifiers in versions.items %}
+    <hr>
+    <h3>{{ broker }} {{ version }}</h3>
+
+    {% for classifier,params in classifiers.items %}
+      {% for p in params %}
+        <p><button id="{{ p.1 }}button"
+                    onclick="hideOrShow('{{ p.1 }}button', '{{ p.1}}div')">Show
+          </button> <b>{{ classifier }} ({{ p.0 }})</b> </p>
+        <div id="{{ p.1 }}div" style="display: none">
+          <p>Updated {{ p.2 }} UTC</p>
+          <img src="{% static 'elasticc/brokercompletenessvsndets' %}/{{ p.1 }}.svg"
+               width=800 alt="[ Completeness for classifier {{ p.1 }}]" >
+          <p>ID {{ p.1 }}</p>
+        </div>
+      {% endfor %}
+    {% endfor %}
+  {% endfor %}
+{% endfor %}    
+
+{% endblock %}

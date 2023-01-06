@@ -283,7 +283,8 @@ ELASTICC_PARSERS = {
 CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.filebased.FileBasedCache',
-        'LOCATION': tempfile.gettempdir()
+        'LOCATION': tempfile.gettempdir(),
+        'TIMEOUT': 300
     }
 }
 

@@ -1,4 +1,5 @@
 import sys
+import pathlib
 import re
 import io
 import traceback
@@ -592,11 +593,11 @@ class BrokerMessageView(PermissionRequiredMixin, django.views.View):
                                   'msg': datum } )
             
 
-        addedmsgs = BrokerMessage.load_batch( messageinfo, logger=_logger )
-
-        dex = addedmsgs[0].brokerMessageId if len(addedmsgs) > 0 else -1
+        batchret = BrokerMessage.load_batch( messageinfo, logger=_logger )
+        dex = -1 if batchret['firstbrokerMessageId'] is None else batchret['firstbrokerMessageId']
         resp = JsonResponse( { 'brokerMessageId': dex,
-                               'num_loaded': len(addedmsgs) }, status=201 )
+                               'num_loaded': batchret['addedmsgs'] },
+                             status=201 )
         # I really wish there were a django function for this, as I'm not sure that
         # my string replace will always do the right thing.  What I'm after is the
         # url of the current view, but without any parameters passed
@@ -681,6 +682,39 @@ class BrokerMessageView(PermissionRequiredMixin, django.views.View):
 # ======================================================================
 # ======================================================================
 # Interactive views
+
+class BrokerSorter:
+    def getbrokerstruct( self ):
+        brokers = {}
+        cfers = BrokerClassifier.objects.all().order_by( 'brokerName', 'brokerVersion',
+                                                         'classifierName', 'classifierParams' )
+        # There's probably a faster pythonic way to make
+        # a hierarchy like this, but oh well.  This works.
+        curbroker = None
+        curversion = None
+        curcfer = None
+        for cfer in cfers:
+            if cfer.brokerName != curbroker:
+                curbroker = cfer.brokerName
+                curversion = cfer.brokerVersion
+                curcfer = cfer.classifierName
+                brokers[curbroker] = {
+                    curversion: {
+                        curcfer: [ [ cfer.classifierParams, cfer.classifierId ] ]
+                    }
+                }
+            elif cfer.brokerVersion != curversion:
+                curversion = cfer.brokerVersion
+                curcfer = cfer.classifierName
+                brokers[curbroker][curversion] = {
+                    curcfer: [ [ cfer.classifierParams, cfer.classifierId ] ] }
+            elif cfer.classifierName != curcfer:
+                curcfer = cfer.classifierName
+                brokers[curbroker][curversion][curcfer] = [ [ cfer.classifierParams, cfer.classifierId ] ]
+            else:
+                brokers[curbroker][curversion][curcfer].append( [ cfer.classifierParams, cfer.classifierId ] )
+
+        return brokers
 
 class AlertExplorer( LoginRequiredMixin, django.views.View ):
 
@@ -792,6 +826,207 @@ class ElasticcAdminSummary( PermissionRequiredMixin, django.views.View ):
 
         return HttpResponse( templ.render( context, request ) )
         
+# ======================================================================
+# This class is poorly named.  It does not show histograms.
+
+class ElasticcAlertStreamHistograms( LoginRequiredMixin, django.views.View ):
+
+    def get( self, request, info=None ):
+        return self.post( request, info )
+
+    def post( self, request, info=None ):
+        templ = loader.get_template( "elasticc/alertstreamhists.html" )
+        context = { 'weeks': {} }
+
+        tmpldir = pathlib.Path(__file__).parent / "static/elasticc/alertstreamhists"
+        files = list( tmpldir.glob( "*.svg" ) )
+        files.sort()
+        fnamematch = re.compile( "^([0-9]{4})-([0-9]{2})-([0-9]{2})\.svg$" )
+        for fname in files:
+            match = fnamematch.search( fname.name )
+            if match is not None:
+                date = datetime.date( int(match.group(1)), int(match.group(2)), int(match.group(3)) )
+                year, week, weekday = date.isocalendar()
+                wk = f"{year} week {week}"
+                if wk not in context['weeks']:
+                    context['weeks'][wk] = {}
+                context['weeks'][wk][date.strftime( "%a %Y %b %d" )] = fname.name
+
+        _logger.info( f"Context is: {context}" )
+        return HttpResponse( templ.render( context, request ) )
+
+# ======================================================================
+
+class ElasticcBrokerStreamGraphs( LoginRequiredMixin, django.views.View ):
+
+    def get( self, request, info=None ):
+        return self.post( request, info )
+
+    def post( self, request, info=None ):
+        templ = loader.get_template( "elasticc/brokerstreamrate.html" )
+        context = { "brokers": {} }
+        fnmatch = re.compile( "^(.*)_(\d{4})-(\d{2})-(\d{2})\.svg$" )
+
+        outdir = pathlib.Path(__file__).parent / "static/elasticc/brokerstreamgraphs"
+        files = outdir.glob( "*.svg" )
+        brokers = {}
+        for fname in files:
+            _logger.info( f"Parsing file {fname.name}" )
+            match = fnmatch.search( str(fname.name) )
+            if match is None:
+                continue
+            broker = match.group(1)
+            if broker not in brokers.keys():
+                brokers[broker] = {}
+            filedate = datetime.date( int(match.group(2)), int(match.group(3)), int(match.group(4)) )
+            week = filedate.isocalendar()[1]
+            weekstr = f'{filedate.year} Week {week}'
+            if weekstr not in brokers[broker].keys():
+                brokers[broker][weekstr] = {}
+            brokers[broker][weekstr][filedate.isoformat()] = fname.name
+
+        # Sort these dictionaries
+        brokers = dict( sorted( brokers.items() ) )
+        for broker in brokers.keys():
+            brokers[broker] = dict( sorted( brokers[broker].items() ) )
+            for week in brokers[broker]:
+                brokers[broker][week] = dict( sorted( brokers[broker][week].items() ) )
+
+        _logger.info( f"Brokers is: {brokers}" )
+        return HttpResponse( templ.render( { "brokers": brokers }, request ) )
+
+# ======================================================================
+
+class ElasticcBrokerCompletenessGraphs( LoginRequiredMixin, django.views.View, BrokerSorter ):
+
+    def get( self, request, info=None ):
+        return self.post( request, info )
+
+    def post( self, request, info=None ):
+        templ = loader.get_template( "elasticc/brokercompletenessperweek.html" )
+        context = {}
+        context['brokers'] = self.getbrokerstruct()
+        return HttpResponse( templ.render( context, request ) )
+
+# ======================================================================
+
+class ElasticcBrokerCompletenessVsNumDets( LoginRequiredMixin, django.views.View, BrokerSorter ):
+
+    def get( self, request, info=None ):
+        return self.post( request, info )
+
+    def post( self, request, info=None ):
+        templ = loader.get_template( "elasticc/brokercompletenessvsndets.html" )
+        context = {}
+        brokers = self.getbrokerstruct()
+
+        plotdir = pathlib.Path(__file__).parent / "static/elasticc/brokercompletenessvsndets"
+        for broker, versions in brokers.items():
+            for version, cfers in versions.items():
+                for cfer,params in cfers.items():
+                    for p in params:
+                        fp = plotdir / f"{p[1]}.svg"
+                        if not fp.exists():
+                            p.append( "<File missing>" )
+                        else:
+                            p.append( datetime.datetime.fromtimestamp( fp.stat().st_mtime )
+                                      .strftime( "%Y-%m-%d %H:%M" ) )
+
+        context = { 'brokers': brokers }
+        return HttpResponse( templ.render( context, request ) )
+        
+# ======================================================================
+
+class ElasticcBrokerTimeDelayGraphs( LoginRequiredMixin, django.views.View, BrokerSorter ):
+    def get( self, request, info=None ):
+        return self.post( request, info )
+
+    def post( self, request, info=None ):
+        templ = loader.get_template( "elasticc/brokerdelaygraphs.html" )
+        context = { 'brokers': [] }
+        graphdir = pathlib.Path(__file__).parent / "static/elasticc/brokertiminggraphs"
+        with open( graphdir / "updatetime.txt" ) as ifp:
+            context['updatetime'] = ifp.readline().strip()
+        files = list( graphdir.glob( "*.svg" ) )
+        files.sort()
+        weekmatch = re.compile( '^(.*)_(\d{4}-\d{2}-\d{2})\.svg$' )
+        summedmatch = re.compile( '^(.*)_summed\.svg$' )
+        brokers = set()
+        for fname in files:
+            match = summedmatch.search( fname.name )
+            if match is not None:
+                brokers.add( match.group(1) )
+        brokers = list(brokers)
+        brokers.sort()
+
+        context['brokers'] = {}
+        
+        for broker in brokers:
+            context['brokers'][broker] = { 'sum': f'{broker}_summed.svg', 'weeks': {} }
+            for fname in files:
+                match = weekmatch.search( fname.name )
+                if ( match is not None ) and ( match.group(1) == broker ):
+                    week = match.group(2)
+                    context['brokers'][broker]['weeks'][week] = fname.name
+            
+        return HttpResponse( templ.render( context, request ) )
+    
+
+# ======================================================================
+
+class ElasticcTmpBrokerHistograms( LoginRequiredMixin, django.views.View, BrokerSorter ):
+
+    def get( self, request, info=None ):
+        return self.post( request, info )
+
+    def post ( self, request, info=None ):
+        templ = loader.get_template( "elasticc/tmp_brokeralerthist.html" )
+        context = { 'brokers': {} }
+        rundir = pathlib.Path(__file__).parent
+        context['brokers'] = self.getbrokerstruct()
+        return HttpResponse( templ.render( context, request ) )
+        
+
+# ======================================================================
+
+class ElasticcLatestConfMatrix( LoginRequiredMixin, django.views.View, BrokerSorter ):
+
+    def get( self, request, info=None ):
+        return self.post( request, info )
+
+    def post( self, request, info=None ):
+        templ = loader.get_template( "elasticc/basicmetrics.html" )
+        context = { 'brokers': {} }
+        rundir = pathlib.Path(__file__).parent
+        with open( rundir / "static/elasticc/confmatrix_update.txt" ) as ifp:
+            context['updatetime'] = ifp.readline().strip()
+        context['brokers'] = self.getbrokerstruct()
+        return HttpResponse( templ.render( context, request ) )
+
+# ======================================================================
+
+class ElasticcProbVsClassAndT( LoginRequiredMixin, django.views.View, BrokerSorter ):
+    def get( self, request, info=None ):
+        return self.post( request, info )
+
+    def post( self, request, info=None ):
+        templ = loader.get_template( "elasticc/probvsclassandt.html" )
+        context = { 'brokers': {} }
+        rundir = pathlib.Path(__file__).parent
+        context['brokers'] = self.getbrokerstruct()
+
+        with connection.cursor() as cursor:
+            cursor.execute( 'SELECT DISTINCT ON("classId") c."classId",c.description '
+                            'FROM elasticc_diaobjecttruth t '
+                            'INNER JOIN elasticc_gentypeofclassid c ON t.gentype=c.gentype ' 
+                            'ORDER BY "classId"' )
+            rows = cursor.fetchall()
+            context['classids'] = { row[0]: row[1] for row in rows }
+
+        return HttpResponse( templ.render( context, request ) )
+
+
+
 # ======================================================================
 # ======================================================================
 # ======================================================================

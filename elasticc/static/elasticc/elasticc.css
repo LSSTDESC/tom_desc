@@ -7,4 +7,10 @@ table.elasticc_table1 tr { padding-top: 2px;
 table.elasticc_table1 td, table.elasticc_table1 th { padding-left: 1ex;
                                                      padding-right: 1ex;
                                                    }
-                          
+
+li.exbelow { border-bottom: 1ex }
+
+.strike { text-decoration: line-through }
+
+.sup { vertical-align: super; font-size: 66% }
+.sub { vertical-align: sub; font-size: 66% }

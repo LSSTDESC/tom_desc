@@ -1,0 +1,41 @@
+{% extends 'tom_common/base.html' %}
+{% load static %}
+{% block title %}
+ELAsTiCC Broker Completeness vs. Time
+{% endblock %}
+{% block additional_css %}
+<link rel="stylesheet" href="{% static 'elasticc/elasticc.css' %}">
+{% endblock %}
+{% block additional_js %}
+<script type="text/javascript" src="{% static 'elasticc/elasticc.js' %}"></script>
+{% endblock %}
+{% block content %}
+<h2>ELAsTiCC Broker Completeness Vs. Time</h2>
+
+<p>Each graph shows the fraction of alerts classified as a function of
+  time.  Alerts are grouped into weeks; each bar shows the fraction of
+  alerts sent that week for which we received at least one
+  classification.  (This classification could have been received much
+  later.)</p>
+
+{% for broker,versions in brokers.items %}
+  {% for version,classifiers in versions.items %}
+    <hr>
+    <h3>{{ broker }} {{ version }}</h3>
+
+    {% for classifier,params in classifiers.items %}
+      {% for p in params %}
+        <p><button id="{{ p.1 }}button"
+                    onclick="hideOrShow('{{ p.1 }}button', '{{ p.1}}div')">Show
+          </button> <b>{{ classifier }} ({{ p.0 }})</b> </p>
+        <div id="{{ p.1 }}div" style="display: none">
+          <img src="{% static 'elasticc/brokercompletenessgraphs' %}/{{ p.1 }}.svg"
+               width=800 alt="[ Completeness for classifier {{ p.1 }}]" >
+          <p>ID {{ p.1 }}</p>
+        </div>
+      {% endfor %}
+    {% endfor %}
+  {% endfor %}
+{% endfor %}    
+
+{% endblock %}
