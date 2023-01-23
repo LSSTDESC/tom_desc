@@ -718,7 +718,7 @@ class BrokerMessage(models.Model):
         topic is string, msgoffset is an integer, and msg is a dict that should
         match the elasticc.v0_9.brokerClassification.avsc schema
 
-        Returns the number of things that were actually added.
+        Returns information about numbers of things actually added.
         """
 
         # It's a hard problem to decide if a message already
@@ -729,6 +729,11 @@ class BrokerMessage(models.Model):
         # at worst that this will lead to useless message objects
         # in the database that we can ignore.  I think.
 
+        # NOTE: See https://docs.djangoproject.com/en/3.0/ref/models/querysets/#bulk-create
+        # the caveats on bulk-create.  I'm assuming that addedmsgs will have the right
+        # value of brokerMessageId.  According to that page, this is only true for
+        # Postgres... which is what I'm using...
+        
         logger.debug( f'In BrokerMessage.load_batch, received {len(messages)} messages.' );
 
         messageobjects = {}
@@ -820,8 +825,9 @@ class BrokerMessage(models.Model):
                                        'classifierName': cfication['classifierName'],
                                        'classifierParams': cfication['classifierParams'] } )
                     addedkeys.add( keycfer )
-        logger.debug( f'Adding {len(kwargses)} new classifiers.' )
-        if len(kwargses) > 0:
+        ncferstoadd = len(kwargses)
+        logger.debug( f'Adding {ncferstoadd} new classifiers.' )
+        if ncferstoadd > 0:
             objs = ( BrokerClassifier( **k ) for k in kwargses )
             batch = list( itertools.islice( objs, len(kwargses) ) )
             newcfers = BrokerClassifier.objects.bulk_create( batch, len(kwargses) )
@@ -858,7 +864,10 @@ class BrokerMessage(models.Model):
         newcfications = BrokerClassification.objects.bulk_create( batch, len(kwargses) )
 
         # return newcfications
-        return list( addedmsgs )
+        return { "addedmsgs": len(addedmsgs),
+                 "addedclassifiers": ncferstoadd,
+                 "addedclassifications": len(newcfications),
+                 "firstbrokerMessageId": None if len(addedmsgs)==0 else addedmsgs[0].brokerMessageId }
         
 class BrokerClassifier(models.Model):
     """Model for a classifier producing an ELAsTiCC broker classification."""
@@ -894,7 +903,7 @@ class BrokerClassification(models.Model):
     # diaObjectId = models.BigIntegerField()
     # diaSource = models.ForeignKey( DiaSource, on_delete=models.PROTECT, null=True )
 
-    classId = models.IntegerField()
+    classId = models.IntegerField( db_index=True )
     probability = models.FloatField()
 
     # JSON blob of additional information from the broker?

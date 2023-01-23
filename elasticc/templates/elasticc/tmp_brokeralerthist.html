@@ -1,0 +1,54 @@
+{% extends 'tom_common/base.html' %}
+{% load static %}
+{% block title %}
+ELAsTiCC Basic Broker Metrics
+{% endblock %}
+{% block additional_css %}
+<link rel="stylesheet" href="{% static 'elasticc/elasticc.css' %}">
+{% endblock %}
+{% block additional_js %}
+<script type="text/javascript" src="{% static 'elasticc/elasticc.js' %}"></script>
+{% endblock %}
+{% block content %}
+<h2>ELAsTiCC Broker Classification Counts</h2>
+
+<h3>As of 2022-10-27</h3>
+
+<p>The bar charts below show statistics on how many classifications
+  we've received on various alerts from brokers.</p>
+
+<p>The <b>horizontal</b> axis is
+  number of classifications per alert.  That is, if the number on the
+  horizontal axis is 25, it means that we've received probabilities for
+  25 classes for an alert.  There's no guarantee there aren't doubles,
+  and indeed in some cases we can be sure there are doubles.
+  (E.g. there aren't 75 different classes, so if the horizontal axis
+  says 75, there are some doubles.)  Counting of doubles will be done
+  in a separate investigation.  If the horizontal axis is 0, then we're
+  counting alerts for which that broker/classifier has sent <i>no</i>
+  class probabilities at all.</p>
+
+<p>The <b>vertical</b> axis is the number of alerts that have that many
+  classifications.</P>
+
+{% for broker,versions in brokers.items %}
+  {% for version,classifiers in versions.items %}
+    <hr>
+    <h3>{{ broker }} {{ version }}</h3>
+
+    {% for classifier,params in classifiers.items %}
+      {% for p in params %}
+        <p><button id="{{ p.1 }}button"
+                    onclick="hideOrShow('{{ p.1 }}button', '{{ p.1}}div')">Show
+          </button> <b>{{ classifier }} ({{ p.0 }})</b> </p>
+        <div id="{{ p.1 }}div" style="display: none">
+          <img src="{% static 'elasticc/tmp_brokeralerthist' %}/{{ p.1 }}.svg"
+               width=640 alt="[ Counts for classifier {{ p.1 }}]" >
+          <p>ID {{ p.1 }}</p>
+        </div>
+      {% endfor %}
+    {% endfor %}
+  {% endfor %}
+{% endfor %}    
+
+{% endblock %}

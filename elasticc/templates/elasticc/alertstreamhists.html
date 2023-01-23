@@ -1,0 +1,33 @@
+{% extends 'tom_common/base.html' %}
+{% load static %}
+{% block title %}
+ELAsTiCC Streaming History
+{% endblock %}
+{% block additional_css %}
+<link rel="stylesheet" href="{% static 'elasticc/elasticc.css' %}">
+{% endblock %}
+{% block additional_js %}
+<script type="text/javascript" src="{% static 'elasticc/elasticc.js' %}"></script>
+{% endblock %}
+{% block content %}
+<h2>ELAsTiCC Streaming History</h2>
+
+<p>The histograms below show the number of ELAsTiCC alerts streamed per
+  hour to the ZADS server, from which brokers pull the alerts for
+  classification.</p>
+
+{% for week, days in weeks.items %}
+  <p><button id="{{ week }}button"
+             onclick="hideOrShow('{{ week }}button', '{{ week }}div')">Show
+    </button> {{ week }} </p>
+  <div id="{{ week }}div" style="display: none">
+    {% for day, filename in days.items %}
+      <p><b>{{ day }}</b><br>
+      <img src="{% static 'elasticc/alertstreamhists' %}/{{ filename }}"
+           width=800 alt="[Hourly alerts streamed for {{ day }}]" >
+      </p>
+    {% endfor %}
+  </div>
+{% endfor %}
+
+{% endblock %}
