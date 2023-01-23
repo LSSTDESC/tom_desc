@@ -795,8 +795,9 @@ class ElasticcSummary( LoginRequiredMixin, django.views.View ):
                                 
 # ======================================================================
     
-class ElasticcAdminSummary( PermissionRequiredMixin, django.views.View ):
-    permission_required = 'elasticc.elasticc_admin'
+# class ElasticcAdminSummary( PermissionRequiredMixin, django.views.View ):
+#     permission_required = 'elasticc.elasticc_admin'
+class ElasticcAdminSummary( LoginRequiredMixin, django.views.View ):
     raise_exception = True
 
     def get( self, request, info=None ):
