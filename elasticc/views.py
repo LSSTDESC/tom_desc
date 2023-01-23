@@ -11,7 +11,7 @@ import django.db
 from django.db.models import Q
 from django.db import transaction, connection
 import django.urls
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse, JsonResponse, HttpResponseForbidden
 from django.template import loader
 from django.utils.decorators import method_decorator
 from django.shortcuts import render, get_object_or_404
@@ -575,6 +575,11 @@ class BrokerMessageView(PermissionRequiredMixin, django.views.View):
         
         
     def put( self, request, *args, **kwargs ):
+
+        ### 2023-01-23 : disabled as ELAsTiCC is over
+
+        return HttpResponseForbidden( "ELAsTiCC is over, posting classifications is disabled." )
+
         data = json.loads( request.body )
         if not isinstance( data, list ):
             data = [ data ]
