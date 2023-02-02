@@ -33,24 +33,31 @@ class Command(BaseCommand):
                             help=( 'definition of classification: '
                                    '"best" means having the largest probability over all classifier messages, '
                                    '"last_best" means having the largest probability for the most recent alert ' ) )
+        parser.add_argument('--outdir', default=None,
+                            help='Output directory relative to script (default: ../../static/elasticc/confmatrics/' )
+
         
     def handle( self, *args, **options ):
         self.outdir.mkdir( parents=True, exist_ok=True )
 
         # Jump through hoops to get access to the psycopg2 connection from django
         conn = django.db.connection.cursor().connection
-        client = ConfMatrixClient( conn )
+        client = ConfMatrixClient( conn, logger=_logger )
         _logger.info( "===== Classifiers =====" )
         for cid,c in client.classifiers.items():
             _logger.info( f"Logger {cid}: {c}" )
         _logger.info( "=======================" )
 
-        with open( self.staticdir / "confmatrix_update.txt" , "w" ) as ofp:
-            ofp.write( datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M UTC' ) )
+        if options['outdir'] is not None:
+            outdir = ( _rundir / options['outdir'] ).resolve()
+            with open( self.staticdir / "confmatrix_update.txt" , "w" ) as ofp:
+                ofp.write( datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M UTC' ) )
+        else:
+            outdir = self.outdir
         
         for cid in client.classifiers.keys():
             matrix = client.get_classifications( classifier_id=cid, definition=options['definition'] )
             client.plot_matrix( matrix[cid], extension="svg", norm=options['norm'],
-                                plotdir=self.outdir, namebyid=True )
+                                plotdir=outdir, namebyid=True )
             
         
