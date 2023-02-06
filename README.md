@@ -170,17 +170,21 @@ a private version for hacking.
 If you want to test the TOM out, you can deploy it on your local
 machine.  If you're lucky, all you need to do is:
 
-* Run `docker-compose up`.  This will use the `docker-compose.yml` file
+<ul>
+<li> Run <code>docker-compose up</code>.  This will use the <code>docker-compose.yml</code> file
   to either build or pull two images (the web server and the postgres
   server), and run two containers.  It will also create a docker volume
   named "tomdbdata" where postgres will store its contents, so that you
-  can persist the database from one run of the container to the next.
-* The first time you run it for a given postgres volume, once the
+          can persist the database from one run of the container to the next.</li>
+<li>The first time you run it for a given postgres volume, once the
   containers are up you need to run a shell on the server container with
-  `docker exec -it tom_desc_tom_1 /bin/bash` (substituting the name your
+  <code>docker exec -it tom_desc_tom_1 /bin/bash</code> (substituting the name your
   container got for "tom_desc_tom_1"), and then run the commands:
- * `python manage.py migrate`
- * `python manage.py createsuperuser` (and answer the prompts)
+  <ul>
+    <li><code>python manage.py migrate</code></li>
+    <li><code>python manage.py createsuperuser</code> (and answer the prompts)</li>
+  </ul></li>
+</ul>
 
 This will set up the database schema, and create root user.  At this
 point, you should be able to connect to your running TOM at
