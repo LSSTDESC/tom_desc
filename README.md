@@ -73,6 +73,11 @@ Currently defined are:
 * `https://desc-tom.lbl.gov/elasticc/diasource/`
 * `https://desc-tom.lbl.gov/elasticc/diatruth/`
 * `https://desc-tom.lbl.gov/elasticc/diaalert/`
+* (and some other things I should still document)
+
+Note that as the elasticc database has grown, many of these endpoints will
+time out before they're able to pull and send all of their informaiton.
+
 
 Called by themselves, they return a JSON dict as in the example above,
 with `count` giving the total number of objects (or sources or truth
@@ -85,7 +90,6 @@ single number (with a trailing slash after it) to pull down the
 information for that one object or source; that number is (respectively)
 diaObjectId or diaSourceId.  (For the Truth table, pass the relevant
 diaSourceId.)
-
 
 ## Database Schema and Notes
 
@@ -161,6 +165,65 @@ corresponds to anything in the broad class.
 The rest of this is only interesting if you want to develop it or deploy
 a private version for hacking.
 
+## Deployment with Docker
+
+If you want to test the TOM out, you can deploy it on your local
+machine.  If you're lucky, all you need to do is:
+
+* Run `docker-compose up`.  This will use the `docker-compose.yml` file
+  to either build or pull two images (the web server and the postgres
+  server), and run two containers.  It will also create a docker volume
+  named "tomdbdata" where postgres will store its contents, so that you
+  can persist the database from one run of the container to the next.
+
+* The first time you run it for a given postgres volume, once the
+  containers are up you need to run a shell on the server container with
+  `docker exec -it tom_desc_tom_1 /bin/bash` (substituting the name your
+  container got for "tom_desc_tom_1"), and then run the commands:
+
+** `python manage.py migrate`
+** `python manage.py createsuperuser` (and answer the prompts)
+
+This will set up the database schema, and create root user.  At this
+point, you should be able to connect to your running TOM at
+`localhost:8080`.
+
+If you ever run a server that exposes its interface to the outside web,
+you probably want to edit your local version of the file
+`secrets/django_secret_key`.  Don't commit anything sensitive to git,
+and especially don't upload it to github!
+
+### Populating the database
+
+TBD
+
+### Development and database migrations
+
+Note that the web software itself doesn't live in the docker image, but
+is volume mounted from the "tom_desc" subdirectory.  For development,
+you can just edit the software directly there.  To get the server to
+pull in your changes, you need to run a shell on the server's container
+and run `kill -HUP `.  That restarts the gunicorn webserver, which
+forces it to reread all of the python code that define the web ap.
+
+If you change any database schema, you have to get a shell on the
+server's container and:
+* `python manage.py makemigrations`
+* Check to make sure the migrations created look right, and do any
+  manual intervention that's needed.  (Ideally, manual intervention will
+  be unnecessary, or at worst small!)
+* `python manage.py migrate`
+* Deal with the situation if the migration didn't apply cleanly.
+* `kill -HUP ` to get the running webserver synced with the current code.
+
+BE CAREFUL ABOUT DATABASE MIGRATIONS.  For throw-away development
+environments, it's fine.  But, the nature of database migrations is such
+that forks in database schema history are potentially a lot more painful
+to deal with than forks in source code (where git and text merge can
+usually handle it without _too_ much pain).  If you're going to make
+migrations that you want to have pulled into the main branch, coordinate
+with the other people working on the DESC Tom.  (As of this writing,
+that's me, Rob Knop.)
 
 ## Deployment at NERSC
 
@@ -168,7 +231,8 @@ The server runs on NERSC Spin, in the `desc-tom` namespace of production
 m1727.  It reads its container image from
 `registry.services.nersc.gov/raknop/tom-desc-production`; that container
 image is built the Dockerfile in the "docker" subdirectory of this
-repository.
+repository.  (I also run another instance on the development Spin
+server, for, of course, development.)
 
 The actual web ap software is *not* read from the docker image (although
 a version of the software is packaged in the image).  Rather, the
@@ -177,28 +241,32 @@ file system.  This allows us to update the software without having to
 rebuild and redploy the image; the image only needs to be redeployed if
 we have to add prerequisite packages, or if we want to update the OS
 software for security patches and the like.  The actual TOM software is
-deployed at `/global/cfs/cdirs/m1727/tom/deploy_production/tom_desc`.
-Right now, that deployment is just handled as a git checkout.  After
-it's updated, things need to happen *on* the Spin server (migrations,
-telling the server to reload the software).  My (Rob's) notes on this
-are in `rob_notes.txt`.
+deployed at
+`/global/cfs/cdirs/desc-td/SOFTWARE/tom_deployment/production/tom_desc`
+(with the root volume for the web server in the `tom_desc` subdirectory
+below that).  Right now, that deployment is just handled as a git
+checkout.  After it's updated, things need to happen *on* the Spin
+server (migrations, telling the server to reload the software).  My
+(Rob's) notes on this are in `rob_notes.txt`.
 
 ### Steps for deployment
 
 This is assuming a deployment from scratch.  You probably don't want to
 do this on the production server, as you stand a chance of wiping out
-the existing database!
+the existing database!  For the passwords obscured below, look at the
+`0022_ro_users.py` migration file in `tom_desc/elasticc/migrations`.
 
 - Create a secrets volume with
      - django_secret_key equal to something long and secure
-     - postgres_password equao to fragile
-     - postgres_ro_password equal to SOMETHING
+     - postgres_password equal to fragile
+     - postgres_elasticc_ro equal to <the right password>
+     - postgres_elasticc_admin_ro equal to <the right password>
 - Create the postgres workload at spin.
-  - image: registry.services.nersc.gov/raknop/tom-desc-postgres
+  - image: rknop/tom-desc-postgres
   - env vars
-      - POSTGRES_DATA_DIR=/var/lib/postgresql/data
       - POSTGRES_PASSWORD_FILE=/secrets/postgres-password
       - POSTGRES_USER=postgres
+      - POSTGRES_DB=tom_desc
   - volume: persistent storage claim mounted at /var/lib/postgresql/data
       - Size to request: hard to say.  I put in 1024GB.
   - Bind-mount a volume to mount the secrets described above mounted at /secrets
@@ -214,15 +282,8 @@ the existing database!
           where uid and gid are of the postgres user (101 and 104 in my case)
       - Now set the postgres workload to a scalable deployment of 1 pod;
       - it should run happily.
-  - Create the postgres_ro user used by the db app:
-      - CREATE USER postgres_ro PASSWORD '{password}';   (password is what you put in secrets)
-      - GRANT CONNECT ON DATABASE tom_desc TO postgres_ro;
-      - In the tom_desc database (do "\c tom_desc" within psql):
-          - GRANT USAGE ON SCHEMA public TO postgres_ro;
-          - GRANT SELECT ON ALL TABLES IN SCHEMA public TO postg;res_ro;
-          - ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO postgres_ro;
 - Create the tom workload with:
-   - image registry.services.nersc.gov/raknop/tom-desc-production (or -dev)
+   - image rknop/tom-desc-production
    - env vars:
        - DB_HOST={name of the postgres workload}
        - DB_NAME=tom_desc
@@ -230,13 +291,15 @@ the existing database!
        - DB_USER=postgres
    - Volumes
        - secrets described above mounted at /secrets
-       - a bind mount of the CFS directory where there is a checkout of this archive; mount this at /tom_desc
-   - Under "Command", User ID must have the uid that owns the CFS directory, and Filesystem Group the gid
+       - a bind mount of the tom_desc subirectory of the CFS directory
+         where there is a checkout of this archive; mount this at
+         /tom_desc
+- Under "Command", User ID must have the uid that owns the CFS directory, and Filesystem Group the gid
    - Under "Security and Host Config"
        - Run as non-root must be "Yes"
        - Under "Security & Host Config", instead of the usual spin
          recommendations *only* add the NET_BIND_SERVICE capability
-   - Ingress, etc.           
+   - Create a ingress under "Load Balancing".  (More information needed.)
 
 When you first create the database and the TOM, the tom won't work,
 because the database tables aren't set up. Run a shell on the TOM's

@@ -16,3 +16,5 @@ hop-client==0.5.0
 avro==1.10.2
 fastavro
 kafka-python
+seaborn
+sklearn

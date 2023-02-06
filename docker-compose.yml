@@ -1,0 +1,33 @@
+version: "3.2"
+services:
+  tom:
+    image: rknop/tom-desc-production
+    build: ./docker_server
+    ports:
+      - "8080:8080"
+    depends_on:
+      - "postgres"
+    volumes:
+      - type: bind
+        source: ./tom_desc
+        target: /tom_desc
+      - type: bind
+        source: ./secrets
+        target: /secrets
+    environment:
+      - DB_USER=postgres
+      - DB_PASS=fragile
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=tom_desc
+  postgres:
+    image: rknop/tom-desc-postgres
+    build: ./docker_postgres
+    environment:
+      - POSTGRES_PASSWORD=fragile
+      - POSTGRES_USER=postgres
+      - POSTGRES_DB=tom_desc
+    volumes:
+      - tomdbdata:/var/lib/postgresql/data
+volumes:
+  tomdbdata:
