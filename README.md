@@ -193,7 +193,14 @@ point, you should be able to connect to your running TOM at
 If you ever run a server that exposes its interface to the outside web,
 you probably want to edit your local version of the file
 `secrets/django_secret_key`.  Don't commit anything sensitive to git,
-and especially don't upload it to github!
+and especially don't upload it to github!  (There *are* postgres
+passwords in the github archive, which would seem to voilate this
+warning.  The reason we're not worried about that is that both in the
+docker-compose file, and as the server is deployed in production, the
+postgres server is not directly accessible from outside, but only from
+within the docker environment (or, for production, the Spin
+namespace). Of course, it would be better to add the additional layer of
+security of obfuscating those passwords, but, whatever.)
 
 ### Populating the database
 
@@ -205,7 +212,7 @@ Note that the web software itself doesn't live in the docker image, but
 is volume mounted from the "tom_desc" subdirectory.  For development,
 you can just edit the software directly there.  To get the server to
 pull in your changes, you need to run a shell on the server's container
-and run `kill -HUP `.  That restarts the gunicorn webserver, which
+and run `kill -HUP 1`.  That restarts the gunicorn webserver, which
 forces it to reread all of the python code that define the web ap.
 
 If you change any database schema, you have to get a shell on the
