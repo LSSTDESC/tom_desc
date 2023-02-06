@@ -223,7 +223,7 @@ server's container and:
   be unnecessary, or at worst small!)
 * `python manage.py migrate`
 * Deal with the situation if the migration didn't apply cleanly.
-* `kill -HUP ` to get the running webserver synced with the current code.
+* `kill -HUP 1` to get the running webserver synced with the current code.
 
 BE CAREFUL ABOUT DATABASE MIGRATIONS.  For throw-away development
 environments, it's fine.  But, the nature of database migrations is such
