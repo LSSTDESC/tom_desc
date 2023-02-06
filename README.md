@@ -175,12 +175,10 @@ machine.  If you're lucky, all you need to do is:
   server), and run two containers.  It will also create a docker volume
   named "tomdbdata" where postgres will store its contents, so that you
   can persist the database from one run of the container to the next.
-
 * The first time you run it for a given postgres volume, once the
   containers are up you need to run a shell on the server container with
   `docker exec -it tom_desc_tom_1 /bin/bash` (substituting the name your
   container got for "tom_desc_tom_1"), and then run the commands:
-
  * `python manage.py migrate`
  * `python manage.py createsuperuser` (and answer the prompts)
 
