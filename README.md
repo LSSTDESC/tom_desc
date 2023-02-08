@@ -204,7 +204,39 @@ security of obfuscating those passwords, but, whatever.)
 
 ### Populating the database
 
-TBD
+<a href="https://portal.nersc.gov/cfs/lsst/DESC_TD_PUBLIC/users/raknop/elasticc_subset.sql">Here
+is a small subset</a> of the tables from September 2022-January 2203
+ELAsTiCC campaign.  It includes:
+
+* 1,000 objects selected randomly
+* 11,903 sources (and thus alerts) for those objects
+* 30,382 forced sources for those objects
+* 54 broker classifiers
+* 71,777 broker messages for those alerts
+* 1,535,533 broker classifications from those broker messages
+
+*Note*: this SQL dump is compatible with the schema in the database as
+of 2022-02-08.  If the schema evolve, then this SQL dump will
+(probably) no longer be able to be loaded into the database.
+
+To populate the `elasticc` tables of the database with this subset, copy
+this file to the `tom_desc` subdirectory of your checkout.  (That is, if
+your checkout is in `tom_desc`, copy this file to the `tom_desc/tom_desc/`
+directory.)  Get a shell on your running tom_desc_tom container (using a
+command something like `docker exec -it tom_desc_tom_1 /bin/bash`).
+Once there, run the command:
+
+`psql -h postgres -U postgres tom_desc < elasticc_subset.sql`
+
+You will be prompted for the postgres password, which is "fragile".
+(This postgres instance should not be accessible outside of your docker
+container environment, which is why it doesn't have a secure password.)
+If all goes well, you'll get a bunch of numbers telling you how many
+rows were put into various tables, and you will get no error messages.
+After that, your database should be populated.  Verify this by going
+to the link `http://localhost:8080/elasticc/summary` and verify
+that the numbers match what's listed above.  (You will need to be logged
+into your instance of the TOM for that page to load.)
 
 ### Development and database migrations
 
