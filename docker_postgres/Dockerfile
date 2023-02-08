@@ -13,7 +13,7 @@ WORKDIR /build
 # temporary files.  But, also, I need to compile q3c, so I temporariliy
 # install some dev stuff that I then purge... all in one big
 # RUN.
-RUN apt-get update && apt-get upgrade && \
+RUN apt-get update && apt-get -y upgrade && \
   apt-get -y install \
     make git gcc postgresql-13 postgresql-client-13 postgresql-13-postgis \
     postgresql-server-dev-13 pgtop libssl-dev libreadline-dev zlib1g-dev tmux && \
