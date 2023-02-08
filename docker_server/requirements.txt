@@ -17,4 +17,4 @@ avro==1.10.2
 fastavro
 kafka-python
 seaborn
-sklearn
+scikit-learn
