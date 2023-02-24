@@ -5,6 +5,7 @@ healpy>=1.14
 psycopg2===2.8.4
 tom-alerts-dash[scimma]>=0.1.2
 django-webpack-loader==0.6.0
+django-postgres-extra==2.0.8
 tomtoolkit>=2.6.5
 whitenoise~=5.2
 tom-antares
@@ -18,3 +19,4 @@ fastavro
 kafka-python
 seaborn
 scikit-learn
+tables

@@ -14,6 +14,7 @@ import logging.config
 import os
 import socket
 import tempfile
+import psqlextra
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -48,6 +49,7 @@ INSTALLED_APPS = [
     'django.contrib.postgres',
     'django.contrib.gis' ,
     'django_extensions',
+    'psqlextra',
     'guardian',
     'tom_common',
     'django_comments',
@@ -115,15 +117,12 @@ WSGI_APPLICATION = 'tom_desc.wsgi.application'
 
 DATABASES = {
     'default': {
-       # 'ENGINE': 'django.db.backends.sqlite3',
-       # 'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
-        'ENGINE': os.getenv('DB_ENGINE', 'django.contrib.gis.db.backends.postgis'),
-        # 'ENGINE': os.getenv('DB_ENGINE', 'django.db.backends.postgresql'),
+        'ENGINE': 'psqlextra.backend',
+        'POSTGRES_EXTRA_DB_BACKEND_BASE': 'django.contrib.gis.db.backends.postgis',
         'NAME': os.getenv('DB_NAME', 'tom_desc'),
         'USER': os.getenv('DB_USER', 'postgres'),
         'PASSWORD': os.getenv('DB_PASS', ''),
         'HOST': os.getenv('DB_HOST', 'tom-desc-postgis'),
-        # 'HOST': os.getenv('DB_HOST', 'localhost'),
         'PORT': os.getenv('DB_PORT', '5432'),
     }
 }

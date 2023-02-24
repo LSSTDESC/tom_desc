@@ -11,6 +11,8 @@ import django.db
 from django.db import models
 from django.utils.functional import cached_property
 import django.contrib.postgres.indexes as indexes
+import psqlextra.types
+import psqlextra.models
 import psycopg2.extras
 import pandas
 
@@ -889,15 +891,33 @@ class BrokerClassifier(models.Model):
             models.Index(fields=["brokerName", "brokerVersion", "classifierName", "classifierParams"]),
         ]
 
-
-class BrokerClassification(models.Model):
+class BrokerClassification(psqlextra.models.PostgresPartitionedModel):
     """Model for a classification from an ELAsTiCC broker."""
 
+    class PartitioningMeta:
+        method = psqlextra.types.PostgresPartitioningMethod.LIST
+        key = [ 'classifierId' ]
+        
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                name="unique_constarint_brokerclassification_partitionkey",
+                fields=( 'classifierId', 'classificationId' )
+            ),
+        ]
+    
     classificationId = models.BigAutoField(primary_key=True)
     dbMessage = models.ForeignKey( BrokerMessage, db_column='brokerMessageId', on_delete=models.CASCADE, null=True )
-    classifier = models.ForeignKey( BrokerClassifier, db_column='classifierId',
-                                      on_delete=models.CASCADE, null=True )
-
+    # I really want to make a foreign key here, but I haven't figured
+    # out how to get Django to succesfully create a unique
+    # constraint and a partition on a foreign key.  Either I get try to
+    # partition on "classifierId" and I get an error from Django saying
+    # that that field doesn't exist, or I try to partition on
+    # "classifier" and I get an error from Postgres saying that that
+    # field doesn't exist.  (ORM considered harmful.)
+    # classifier = models.ForeignKey( BrokerClassifier, db_column='classifierId',
+    #                                   on_delete=models.CASCADE, null=True )
+    classifierId = models.BigIntegerField()
     # These next three can be determined by looking back at the linked dbMessage
     # alertId = models.BigIntegerField()
     # diaObjectId = models.BigIntegerField()
