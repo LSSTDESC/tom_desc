@@ -1,0 +1,64 @@
+{% extends 'tom_common/base.html' %}
+{% load static %}
+{% block title %}
+ELAsTiCC Broker Probability vs. Class and t
+{% endblock %}
+{% block additional_css %}
+<link rel="stylesheet" href="{% static 'elasticc/elasticc.css' %}">
+{% endblock %}
+{% block additional_js %}
+<script type="text/javascript" src="{% static 'elasticc/elasticc.js' %}"></script>
+{% endblock %}
+{% block content %}
+<h2>ELAsTiCC Metrics: Broker Probability vs. Class and Δt</h2>
+
+<p>(Generation is triggered manually, last on 2022-12-19 (in progress).)</p>
+<!-- python manage.py gen_classprob_vs_t -->
+
+<p>The plots below are divided by Broker/Classifier and by the true type
+  of the object.  For each true type, we average the reported
+  probabilities over all objects of that true type, separating them out
+  by the broker's classification and by 5-day time bins.  Time is
+  relative to the true peak time of the object.  (That is "whatever the
+  peak time is in the truth table"; I'm not sure what that is for
+  non-transients.)</p>
+
+<p>Shortcoming alert: the heat map represents the avereage of all
+  provided classifications for objects of a given true type and for a
+  given time range.  Classifications that have not been provided should
+  probably be averaged in as a 0% classification, but right now they are
+  not.  What this means is that, for example, if there are 1,000 Type Ia
+  supernovae, and a broker classified <i>one</i> of them at t=0 as an
+  AGN, but never gave a probability for AGN for any of the others, on
+  this plot that would show up as on average a high AGN probability at
+  t=0 for Type Ia supernovae, even though it should really show up as
+  only 10<span class="sup">-3</span>.  It's not clear how big an issue
+  this really is in practice.</p>
+
+{% for broker,versions in brokers.items %}
+  {% for version,classifiers in versions.items %}
+    <hr>
+    <h3>{{ broker }} {{ version }}</h3>
+
+    {% for classifier,params in classifiers.items %}
+      {% for p in params %}
+        <p><button id="{{ p.1 }}button"
+                    onclick="hideOrShow('{{ p.1 }}button', '{{ p.1}}div')">Show
+          </button> <b>{{ classifier }} ({{ p.0 }})</b> </p>
+        <div id="{{ p.1 }}div" style="display: none">
+           <p>Classifier ID {{ p.1 }}</p>
+          {% for classid,classname in classids.items %}
+            <br>
+            <h4>True class {{ classname }} (
+              <a href="{% static 'elasticc/probmetrics' %}/{{ p.1 }}_{{ classid }}.cvs">CVS File</a> )</h4>
+
+            <img src="{% static 'elasticc/probmetrics' %}/{{ p.1 }}_{{ classid }}.svg"
+                 width=600 alt="[ Missing plot for broker {{ p.1 }} type {{ classid }} ]" >
+          {% endfor %}
+        </div>
+      {% endfor %}
+    {% endfor %}
+  {% endfor %}
+{% endfor %}    
+
+{% endblock %}
