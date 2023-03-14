@@ -356,6 +356,71 @@ class DiaAlert(Createable):
     _irritating_django_id_map = { 'diaObjectId': 'diaObject_id',
                                   'diaSourceId': 'diaSource_id' }
 
+    def reconstruct( self ):
+        """Reconstruct the dictionary that represents this alert.
+        
+        It's not just a matter of dumping fields, as it also has to decide if the alert
+        should include previous photometry and previous forced photometry, and then
+        has to pull all that from the database.
+        """
+        alert = { "alertId": self.alertId,
+                  "diaSource": {},
+                  "prvDiaSources": [],
+                  "prvDiaForcedSources": [],
+                  "prvDiaNondetectionLimits": [],
+                  "diaObject": {},
+                  "cutoutDifference": None,
+                  "cutoutTemplate": None
+                 }
+
+        sourcefields = [ "diaSourceId", "ccdVisitId", "parentDiaSourceId", "midPointTai",
+                        "filterName", "ra", "decl", "psFlux", "psFluxErr", "snr", "nobs" ]
+        
+        for field in sourcefields:
+            alert["diaSource"][field] = getattr( self.diaSource, field )
+        # Special handling since django insists on naming the object field
+        # differently from the database column I told it to use
+        alert["diaSource"]["diaObjectId"] = self.diaSource.diaObject_id
+
+        objectfields = [ "diaObjectId", "simVersion", "ra", "decl", "mwebv", "mwebv_err",
+                         "z_final", "z_final_err" ]
+        for suffix in [ "", "2" ]:
+            for hgfield in [ "ellipticity", "sqradius", "zspec", "zspec_err", "zphot", "zphot_err",
+                             "zphot_q000", "zphot_q010", "zphot_q020", "zphot_q030", "zphot_q040",
+                             "zphot_q050", "zphot_q060", "zphot_q070", "zphot_q080", "zphot_q090",
+                             "zphot_q100", "zphot_p50",
+                             "mag_u", "mag_g", "mag_r", "mag_i", "mag_z", "mag_Y",
+                             "ra", "dec", "snsep",
+                             "magerr_u", "magerr_g", "magerr_r", "magerr_i", "magerr_z", "magerr_Y" ]:
+                objectfields.append( f"hostgal{suffix}_{hgfield}" )
+        for field in objectfields:
+            alert["diaObject"][field] = getattr( self.diaObject, field )
+        
+        objsources = DiaSource.objects.filter( diaObject_id=self.diaSource.diaObject_id ).order_by( "midPointTai" )
+        for prevsource in objsources:
+            if prevsource.diaSourceId == self.diaSource.diaSourceId: break
+            newprevsource = {}
+            for field in sourcefields:
+                newprevsource[field] = getattr( prevsource, field )
+            newprevsource["diaObjectId"] = self.diaSource.diaObject_id
+            alert["prvDiaSources"].append( newprevsource )
+
+        # If this source is the same night as the original detection, then
+        # there will be no forced source information
+        if self.diaSource.midPointTai - objsources[0].midPointTai > 0.5:
+            objforced = DiaForcedSource.objects.filter( diaObject_id=self.diaSource.diaObject_id,
+                                                        midPointTai__gte=objsources[0].midPointTai-30.,
+                                                        midPointTai__lt=self.diaSource.midPointTai )
+            for forced in objforced:
+                newforced = {}
+                for field in [ "diaForcedSourceId", "ccdVisitId", "midPointTai",
+                               "filterName", "psFlux", "psFluxErr", "totFlux", "totFluxErr" ]:
+                    newforced[field] = getattr( forced, field )
+                newforced["diaObjectId"] = forced.diaObject_id
+                alert["prvDiaForcedSources"].append( newforced )
+
+        return alert
+
 # Perhaps I should be using django ManyToMany here?
 # I do this manually because it mapps directly to
 # SQL, so if somebody hits the table with SQL
