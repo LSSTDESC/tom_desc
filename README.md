@@ -354,3 +354,30 @@ The branch `main` has the current production code.
 
 Make a branch `/u/{yourname}/{name}` to do dev work, which (if
 appropriate) may later be merged into `main`.
+
+
+# Notes for ELASTICC
+
+## ELASTICC
+
+### Streaming to ZADS
+
+This is in the `LSSTDESC/elasticc` archive, under the `stream-to-zads` directory.  The script `stream-to-zads.py` is designed to run in a Spin container; it reads alerts from where they are on disk, and based on the directory names of the alerts (which are linked to dates), and configuration, figures out what it needs to send
+
+### Pulling from brokers
+
+The django management command
+`elasticc/management/commands/brokerpoll.py` handled the broker polling.
+It ran in its own Spin container with the same Docker image as the main
+tom web server (but did not open a webserver port to the outside world).
+
+
+## ELASTICC2
+
+### Streaming to ZADS
+
+The django management command `elasticc/management/commands/send_elasticc_alerts.py` is able to construct avro alerts from the tables in the database, and send those avro alerts on to a kafka server.
+
+### Fake broker
+
+In the `LSSTDESC/elasticc` archive, under the `stream-to-zads` directory, there is a script `fakebroker.py`.  This is able to read ELaSTiCC alerts from one kafka server, construct broker messages (which are the right structure, but have no real thought behind the classifications), and send those broker messages on to another kafka server.
