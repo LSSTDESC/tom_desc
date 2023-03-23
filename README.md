@@ -209,14 +209,14 @@ is a small subset</a> of the tables from September 2022-January 2203
 ELAsTiCC campaign.  It includes:
 
 * 1,000 objects selected randomly
-* 11,903 sources (and thus alerts) for those objects
-* 30,382 forced sources for those objects
+* 10,145 sources (and thus alerts) for those objects
+* 28.900 forced sources for those objects
 * 54 broker classifiers
-* 71,777 broker messages for those alerts
-* 1,535,533 broker classifications from those broker messages
+* 60,586 broker messages for those alerts
+* 1,306,702 broker classifications from those broker messages
 
 *Note*: this SQL dump is compatible with the schema in the database as
-of 2022-02-08.  If the schema evolve, then this SQL dump will
+of 2022-03-23.  If the schema evolve, then this SQL dump will
 (probably) no longer be able to be loaded into the database.
 
 To populate the `elasticc` tables of the database with this subset, copy

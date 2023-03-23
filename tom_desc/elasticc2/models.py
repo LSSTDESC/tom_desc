@@ -1,5 +1,10 @@
 import sys
+import math
+import time
+import datetime
+import pytz
 import logging
+import itertools
 import psqlextra.types
 import psqlextra.models
 import psycopg2.extras
@@ -277,11 +282,14 @@ class DiaAlert(Createable):
 
         # If this source is the same night as the original detection, then
         # there will be no forced source information
+        # A THING.  I had *thought* that the forced source table was a superset
+        # of the source table for elasticc, but it turns out practically speaking
+        # that that's not the case; investigation required.  
         if self.diaSource.midPointTai - objsources[0].midPointTai > 0.5:
             objforced = DiaForcedSource.objects.filter( diaObject_id=self.diaSource.diaObject_id,
                                                         midPointTai__gte=objsources[0].midPointTai-30.,
                                                         midPointTai__lt=self.diaSource.midPointTai )
-            _logger.warn( f"Found {len(objforced)} previous" )
+            # _logger.warn( f"Found {len(objforced)} previous" )
             for forced in objforced:
                 newforced = {}
                 for field in [ "diaForcedSourceId", "ccdVisitId", "midPointTai",
@@ -563,9 +571,9 @@ class DiaObjectOfTarget(models.Model):
         newtargs = []
         newobjids = []
         for newobj in newobjs:
-            targ = tom_targets.model.Target(
+            targ = tom_targets.models.Target(
                 name = f"ELAsTiCC2 {newobj[0]}",
-                type = "unknown",
+                type = "SIDEREAL",
                 ra = newobj[1],
                 dec = newobj[2],
                 epoch=2000
@@ -575,8 +583,8 @@ class DiaObjectOfTarget(models.Model):
 
         newlinks = []
         for targ, newobj in zip( newtargs, newobjs ):
-            newlink.append( cls( diaObject_id=newobj[0],
-                                 tomtarget_id=targ.id ) )
+            newlinks.append( cls( diaObject_id=newobj[0],
+                                  tomtarget_id=targ.id ) )
         if len(newlinks) > 0:
             addedlinks = cls.objects.bulk_create( newlinks )
                 
@@ -819,7 +827,7 @@ class BrokerMessage(models.Model):
                 keycfer = ( f"{msg['msg']['brokerName']}_{msg['msg']['brokerVersion']}_"
                             f"{cfication['classifierName']}_{cfication['classifierParams']}" )
                 kwargs = { 'dbMessage': messageobjects[keymess],
-                           'classifier': classifiers[keycfer],
+                           'classifierId': classifiers[keycfer].classifierId,
                            'classId': cfication['classId'],
                            'probability': cfication['probability'] }
                 kwargses.append( kwargs )
