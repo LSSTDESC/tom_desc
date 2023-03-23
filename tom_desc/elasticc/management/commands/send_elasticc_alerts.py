@@ -33,14 +33,16 @@ class Command(BaseCommand):
     def add_arguments( self, parser ):
         parser.add_argument( '-d', '--through-day', type=float, default=None, required=True,
                              help="Sets simulation date: stream alerts with source through this midPointTai" )
-        parser.add_argument( '-k', '--kafka-server', default='brahms.lbl.gov:9092', help="Kafka server to stream to" )
-        parser.add_argument( '-t', '--kafka-topic', default='elasticc-test-only', help="Kafka topic" )
+        parser.add_argument( '-k', '--kafka-server', default='brahms.lbl.gov:9092',
+                             help="Kafka server to stream to (defaut: %(default)s)" )
+        parser.add_argument( '-t', '--kafka-topic', default='elasticc-test-only',
+                             help="Kafka topic (default: %(default)s)" )
         parser.add_argument( '-s', '--alert-schema', default=f'{_rundir}/elasticc.v0_9.alert.avsc',
-                             help='File with AVRO schema' )
+                             help='File with AVRO schema (default: %(default)s)' )
         parser.add_argument( '--daily-delay', type=float, default=0.,
-                             help="Delay this many seconds between simulated MJDs" )
+                             help="Delay this many seconds between simulated MJDs (default: %(default)s)" )
         parser.add_argument( '-l', '--log-every', default=10000, type=int,
-                             help="Log alerts sent at this interval; 0=don't log" )
+                             help="Log alerts sent at this interval; 0=don't log (default: %(default)s)" )
         parser.add_argument( '--do', action='store_true', default=False,
                              help="Actually do it (otherwise, it's a dry run)" )
 
@@ -52,7 +54,8 @@ class Command(BaseCommand):
             sa.save()
         
     def handle( self, *args, **options ):
-        self.logger.info( "**** streaming starting ****" )
+        dr = 'DRY RUN ONLY' if not options['do'] else ""
+        self.logger.info( f"**** streaming starting {dr}****" )
         self.logger.info( f"Streaming to {options['kafka_server']} topic {options['kafka_topic']}" )
         self.logger.info( f"Streaming alerts through midPointTai {options['through_day']}" )
 
@@ -65,7 +68,6 @@ class Command(BaseCommand):
         if len(alerts) == 0:
             return
 
-        import pdb; pdb.set_trace()
         schema = fastavro.schema.load_schema( options['alert_schema'] )
 
         if options['do']:
