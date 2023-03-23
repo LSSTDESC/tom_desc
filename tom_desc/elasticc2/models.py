@@ -289,8 +289,8 @@ class DiaAlert(Createable):
                     newforced[field] = getattr( forced, field )
                 newforced["diaObjectId"] = forced.diaObject_id
                 alert["prvDiaForcedSources"].append( newforced )
-        else:
-            _logger.warn( "Not adding previous" )
+        # else:
+        #     _logger.warn( "Not adding previous" )
                 
 
         return alert

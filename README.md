@@ -249,7 +249,7 @@ forces it to reread all of the python code that define the web ap.
 
 If you change any database schema, you have to get a shell on the
 server's container and:
-* `python manage.py makemigrations`
+* `python manage.py pgmakemigrations` (**NOTE**: Do NOT run makemigrations, which is what django and tom documentation will tell you to do, as the models use some postgres extentions (in particular, partitioned tables) that makemigrations will not succesfully pick up.)
 * Check to make sure the migrations created look right, and do any
   manual intervention that's needed.  (Ideally, manual intervention will
   be unnecessary, or at worst small!)
