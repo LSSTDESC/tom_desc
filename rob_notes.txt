@@ -96,7 +96,18 @@ Then, once the database is set back up, on the pod for the workload:
   psql -U postgres -h tom-rknop-dev-postgres tom_desc -f users.sql
 
 You will still manually need to make groups and permissions and add them
-back.
+back.  Right now, that means making and adding users to elasticc_brokers
+and elasticc_admin.
+
+The permissions you have to set:
+
+  perm = Permission.objects.get( codename='elasticc_admin' )
+  group = Group.objects.get( name='elasticc_admin' )
+  group.permissions.add( perm )
+
+  perm = Permission.objects.get( codename='elasticc_broker' )
+  group = Group.objects.get( name='elasticc_broker' )
+  group.permissions.add( perm )
 
 ======================================================================
 
