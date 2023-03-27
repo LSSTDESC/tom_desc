@@ -165,6 +165,14 @@ corresponds to anything in the broad class.
 The rest of this is only interesting if you want to develop it or deploy
 a private version for hacking.
 
+## Branch Management
+
+The branch `main` has the current production code.
+
+Make a branch `/u/{yourname}/{name}` to do dev work, which (if
+appropriate) may later be merged into `main`.
+
+
 ## Deployment with Docker
 
 If you want to test the TOM out, you can deploy it on your local
@@ -292,10 +300,48 @@ server (migrations, telling the server to reload the software).  My
 
 ### Steps for deployment
 
-This is assuming a deployment from scratch.  You probably don't want to
-do this on the production server, as you stand a chance of wiping out
-the existing database!  For the passwords obscured below, look at the
-`0022_ro_users.py` migration file in `tom_desc/elasticc/migrations`.
+This is assuming a deployment from scratch.  You probably don't want to do this on the production server, as you stand a chance of wiping out the existing database!  Only do this if you really know what you're doing (which, at the moment, is probably only Rob.)
+
+### With the command line
+
+Do `module load spin` on perlmutter.  Do `rancher context switch` to get in the right rancher cluster and context.  Create a namespace (if it doesn't exist already) with `rancher namespace create <name>`.  Rob uses `desc-tom` on the spin dev cluster, and for production deployment, `desc-tom` and `desc-tom-2` on the production cluster.
+
+- Create the persistent volume claim.  Make a copy of and edit `tom-rknop-dev-postgres-pvc.yaml` to be consistent with everything.  Be careful about this; a bunch of things need to be edited for consistency (including lots of names, namespaces, and references.  This will be fraught if you don't know what you're doing.  There are things like "workloadselector" that have to be consistent with the namespace name and the deployment name.  When done, create the pvc with
+   `rancher kubectl apply --namespace=<namespace> -f <filename>`
+
+- Create the postgres deployment.  Make a copy of and edit `tom-rknop-dev-postgres.yaml`, again being careful to get everything right!  Create the postgres installation with another `rancher kubectl apply` command, giving the new yaml filename.  You can check that the deployment is there with `rancher kubectl get deployment --namespace=<namesdpace>`, and that it's running with `rancher kubectl get pods --namespace=<namespace>`.  Check the logs of the pod to make sure postgres created its directory structure on the persistent volume, and got started up right, with `rancher kubectl logs --namepace=<filename> <podname>`, where you can get the podname from the output of the `get pods` command.
+
+- Create the postgres service; this is the thing that's needed so that the TOM web ap server is able to communicate internally with the postgres server.  This "just happens" when you do it from the UI, but you have to do it as a separate step here.  The yaml file to copy and edit is `tom-rknop-dev-postgres-service.yaml`.
+
+- Create the secrets.  The yaml file to copy and edit is `tom-rknop-dev-secrets.yaml`.
+
+- Create the webap server.  The yaml file to copy and edit is `tom-rknop-dev-app.yaml`.  There is an additional wrinkle with this.  Right now, I do *not* have the django code baked into the Docker image, because everything is still under active development.  Rather, I have the django code in a directory on CFS, and a mount that as a volume in spin.  This requires running the workload under the same UID as the owner of the directory.  This means (at least) editing some fields under `spec.template.metadata.annotations`
+  - `nersc.gov/collab_uids`
+  - `nersc.gov/gid`
+  - `nersc.gov/gids`
+  - `nersc.gov/uid`
+  - `nersc.gov/username`
+...and maybe some others.
+
+- Create the tom webap service; `tom-rknop-dev-app-service.yaml`.
+
+- Create the service for the ingress:
+
+- Create the ingress: `<filename>`.  Deal with certificates; I do this in the UI right now, and am not sure how to translate it properly to command-line stuff.
+
+- Once everything is set up, you still have to actually create the database; to do this, get a shell on the app server with `rancher kubectl exec --stdin --tty --namespace=<namespace> <podname> -- /bin/bash` and run
+  - `python manage.py migrate`
+  - `python manage.py createsuperuser`
+
+- You then probably want to do things to copy users and populate databases and things....
+
+- Whenever making any changes to the code (which *might* include manual database manipulation, but hopefully doesn't), you need to tell the `gunicorn` web server on the app workload to refresh itself.  Do this with a shell on that workload with `kill -HUP 1`.
+
+### With the UI
+
+**This may be out of date!  In fact, it certainly is, because Spin is migrating to a new UI (the "cluster explorer"), and this is for the old one.  But, it may be out of date even for that.**
+
+For the passwords obscured below, look at the `0022_ro_users.py` migration file in `tom_desc/elasticc/migrations`.
 
 - Create a secrets volume with
      - django_secret_key equal to something long and secure
@@ -348,13 +394,17 @@ workload, and then do `python manage.py migrate` to set up those
 database tables.  When done, do `kill -HUP 1` to restart the web
 server.  This is only necessary when you start the first time.
 
-## Branch Management
+### Copying users
 
-The branch `main` has the current production code.
+I haven't figured out the "right" way to do this with django, so here's an ugly hack.
 
-Make a branch `/u/{yourname}/{name}` to do dev work, which (if
-appropriate) may later be merged into `main`.
+- On the existing server, run
+   `pg_dump -h <postgreshost> -U postgres tom_desc -t auth_user -a -f users.sql`
 
+- Edit the .sql file to remove the rows with `AnonymousUser` and `root`.
+
+- Restore the dump on the new server with
+   `psql -h <postgreshost> -U postgres tom_desc < users.sql`
 
 # Notes for ELASTICC
 
