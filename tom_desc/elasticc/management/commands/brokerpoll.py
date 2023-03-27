@@ -271,6 +271,19 @@ class AlerceConsumer(BrokerConsumer):
         self.topics = tosub
         self.consumer.subscribe( self.topics )
 
+# ======================================================================
+
+class BrahmsConsumer(BrokerConsumer):
+    def __init__( self, grouptag=None, loggername="BRAHMS", **kwargs ):
+        server = "brahms.lbl.gov:9092"
+        groupid = "elasticc-lbnl" + ( "" if grouptag is None else "-" + grouptag )
+        topics = [ 'elasticc-brokermsg-20220316-3' ]
+        updatetopics = False
+        super().__init__( server, groupid, topics=topics, updatetopics=updatetopics,
+                          loggername=loggername, **kwargs )
+        self.logger.info( f"Brahms group id is {groupid}" )
+
+
 # =====================================================================
 
 class Command(BaseCommand):
@@ -312,9 +325,10 @@ class Command(BaseCommand):
         signal.signal( signal.SIGTERM, lambda sig, stack: self.sigterm( "TERM" ) )
         signal.signal( signal.SIGINT, lambda sig, stack: self.sigterm( "INT" ) )
 
-        brokerstodo = { 'antares': AntaresConsumer,
-                        'fink': FinkConsumer,
-                        'alerce': AlerceConsumer }
+        # brokerstodo = { 'antares': AntaresConsumer,
+        #                 'fink': FinkConsumer,
+        #                 'alerce': AlerceConsumer }
+        brokerstodo = { 'brahms': BrahmsConsumer }
         brokers = {}
 
         # Launch a process for each broker that will poll that broker indefinitely

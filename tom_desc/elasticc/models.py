@@ -920,7 +920,7 @@ class BrokerMessage(models.Model):
                 keycfer = ( f"{msg['msg']['brokerName']}_{msg['msg']['brokerVersion']}_"
                             f"{cfication['classifierName']}_{cfication['classifierParams']}" )
                 kwargs = { 'dbMessage': messageobjects[keymess],
-                           'classifier': classifiers[keycfer],
+                           'classifierId': classifiers[keycfer].classifierId,
                            'classId': cfication['classId'],
                            'probability': cfication['probability'] }
                 kwargses.append( kwargs )
