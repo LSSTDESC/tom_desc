@@ -1,4 +1,5 @@
 Rob's workflow
+ ---> THIS IS CHANGING AS I USE YAML FILES AND THE COMMAND LINE
 
   * In the local checked out tree ( $HOME/desc/tom_desc )
      * Edit code
@@ -134,3 +135,99 @@ GOOGLE_CLOUD_PROJECT pitt-broker-user-project
 There's also the secret
 
 GCP_auth_key-pitt_broker_user_project.json
+
+======================================================================
+
+Making a partial elasticc backup (for testing purposes).
+
+FIRST, have to make temp tables
+
+CREATE TABLE temp_diaobject (LIKE elasticc_diaobject);
+CREATE TABLE temp_diasource (LIKE elasticc_diasource);
+CREATE TABLE temp_diaforcedsource (LIKE elasticc_diaforcedsource);
+CREATE TABLE temp_diaalert (LIKE elasticc_diaalert);
+CREATE TABLE temp_diaobjecttruth (LIKE elasticc_diaobjecttruth);
+CREATE TABLE temp_diatruth (LIKE elasticc_diatruth);
+CREATE TABLE temp_brokermessage (LIKE elasticc_brokermessage);
+CREATE TABLE temp_brokerclassifier (LIKE elasticc_brokerclassifier);
+CREATE TABLE temp_brokerclassification (LIKE elasticc_brokerclassification);
+
+Copy over some objects
+
+INSERT INTO temp_diaobject SELECT * FROM elasticc_diaobject
+   ORDER BY RANDOM() LIMIT 1000;
+INSERT INTO temp_diasource SELECT * FROM elasticc_diasource
+   WHERE "diaObjectId" IN
+     ( SELECT "diaObjectId" FROM temp_diaobject );
+INSERT INTO temp_diaforcedsource SELECT * FROM elasticc_diaforcedsource
+   WHERE "diaObjectId" IN
+     ( SELECT "diaObjectId" FROM temp_diaobject );
+INSERT INTO temp_diaalert SELECT * FROM elasticc_diaalert
+   WHERE "diaObjectId" IN
+     ( SELECT "diaObjectId" FROM temp_diaobject );
+INSERT INTO temp_diaobjecttruth SELECT * FROM elasticc_diaobjecttruth
+   WHERE "diaObjectId" IN
+     ( SELECT "diaObjectId" FROM temp_diaobject );
+INSERT INTO temp_diatruth SELECT * FROM elasticc_diatruth
+  WHERE "diaObjectId" IN
+     ( SELECT "diaObjectId" FROM temp_diaobject );
+INSERT INTO temp_brokerclassifier SELECT * FROM elasticc_brokerclassifier;
+INSERT INTO temp_brokermessage SELECT * FROM elasticc_brokermessage
+  WHERE "diaSourceId" IN
+     ( SELECT "diaSourceId" FROM temp_diasource );
+INSERT INTO temp_brokerclassification
+  SELECT * FROM elasticc_brokerclassification
+  WHERE "brokerMessageId" IN
+     ( SELECT "brokerMessageId" from temp_brokermessage );
+
+Then dump out the temp tables
+
+  pg_dump -h <server> -U postgres --data-only -f elasticc_sample.sql
+     -t temp_diaobject -t temp_diasource -t temp_diaforcedsource \
+     -t temp_diaobjecttruth -t temp_diatruth \
+     -t temp_diaalert -t temp_brokerclassifier \
+     -t temp_brokermessage -t temp_brokerclassification \
+     tom_desc 
+
+Delete the temp tables:
+
+DROP TABLE temp_diaobject;
+DROP TABLE temp_diasource;
+DROP TABLE temp_diaforcedsource;
+DROP TABLE temp_diaalert;
+DROP TABLE temp_diaobjecttruth;
+DROP TABLE temp_diatruth;
+DROP TABLE temp_message;
+DROP TABLE temp_brokerclassifier;
+DROP TABLE temp_brokerclassification;
+
+
+Now the painful part.  First, pg_dump does *not* dump the tables in the
+order you requested, so even though I listed them in an order above that
+would allow restoration without complaints about missing foreign keys,
+the dump file won't have that.  So, you have to emacs the enormous dump
+file and make some edits:
+
+* Rename all temp_* tables to elasticc_*
+* Order the data for the tables in the order
+
+     elasticc_diaobject
+     elasticc_diasource
+     elasticc_diaforcedsource
+     elasticc_diaalert
+     elasticc_diaobjecttruth
+     elasticc_diatruth
+     elasticc_brokerclassifier
+     elasticc_brokermessage
+     elasticc_brokerclassification
+
+* Add to the bottom a fix to the three auto sequence that these tables
+  use. (NOTE : look at the sequences actually created in the django
+  migration to make sure these names are right!!!!!)
+
+SELECT setval(public.'"elasticc_brokerclassification_classificationId_seq"',
+              ( SELECT 1+MAX("classificationId") FROM public.elasticc_brokerclassification ) );
+SELECT setval(public.'"elasticc_brokerclassifier_dbClassifierIndex_seq"',
+              ( SELECT 1+MAX("classifierId") FROM public.elasticc_brokerclassifier ) );
+SELECT setval(public.'"elasticc_brokermessage_dbMessageIndex_seq"',
+              ( SELECT 1+MAX("brokerMessageId") FROM public.elasticc_brokermessage ) );
