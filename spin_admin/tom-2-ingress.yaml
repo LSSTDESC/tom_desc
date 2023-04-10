@@ -29,3 +29,16 @@ spec:
             port:
               number: 8080
         pathType: ImplementationSpecific
+  - host: desc-tom-2.lbl.gov
+    http:
+      paths:
+      - backend:
+          service:
+            name: tom-2-ingress-service
+            port:
+              number: 8080
+        pathType: ImplementationSpecific
+  tls:
+  - hosts:
+    - desc-tom-2.lbl.gov
+    secretName: tom-2-cert
