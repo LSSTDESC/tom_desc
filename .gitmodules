@@ -13,3 +13,6 @@
 [submodule "tom_alerts_dash"]
 	path = tom_desc/extern/tom_alerts_dash
 	url = git@github.com:TOMToolkit/tom_alerts_dash.git
+[submodule "tom_desc/extern/tom_scimma"]
+	path = tom_desc/extern/tom_scimma
+	url = git@github.com:TOMToolkit/tom_scimma.git

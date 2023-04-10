@@ -179,6 +179,15 @@ If you want to test the TOM out, you can deploy it on your local
 machine.  If you're lucky, all you need to do is:
 
 <ul>
+
+<li> Run <code>git submodule update --recursive</code>.  There are a
+  number of git submodules that have the standard TOM code.  By default,
+  when you clone, git doesn't clone submodules, so do this in order to
+  make sure all that stuff is there.  (Alternative, if instead of just
+  <code>git clone...</code> you did <code>git clone --recurse-submodules
+  ...</code>, then you've already taken care of this step.)  If you do a
+  <code>git pull</code> later, you either need to do <code>git pull
+  --recurse-submodules</code>, or repeat this step after the pull.</li>
 <li> Run <code>docker-compose up</code>.  This will use the <code>docker-compose.yml</code> file
   to either build or pull two images (the web server and the postgres
   server), and run two containers.  It will also create a docker volume
