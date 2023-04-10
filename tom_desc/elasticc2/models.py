@@ -9,6 +9,8 @@ import psqlextra.types
 import psqlextra.models
 import psycopg2.extras
 from django.db import models
+from guardian.shortcuts import assign_perm
+from django.contrib.auth.models import Group
 
 # NOTE FOR ROB
 #
@@ -568,6 +570,7 @@ class DiaObjectOfTarget(models.Model):
         # the database queries more efficient.  However, that would bypass
         # any hooks that tom_targets has added to its save() method,
         # which scares me.
+        public = Group.objects.filter( name='Public' ).first()
         newtargs = []
         newobjids = []
         for newobj in newobjs:
@@ -580,6 +583,7 @@ class DiaObjectOfTarget(models.Model):
             )
             targ.save()
             newtargs.append( targ )
+        assign_perm( 'tom_targets.view_target', public, newtargs )
 
         newlinks = []
         for targ, newobj in zip( newtargs, newobjs ):
