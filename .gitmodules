@@ -1,3 +1,15 @@
 [submodule "tom_base"]
-	path = tom_base
+	path = tom_desc/extern/tom_base
 	url = git@github.com:rknop/tom_base.git
+[submodule "tom_antares"]
+	path = tom_desc/extern/tom_antares
+	url = git@github.com:TOMToolkit/tom_antares.git
+[submodule "tom_fink"]
+	path = tom_desc/extern/tom_fink
+	url = git@github.com:TOMToolkit/tom_fink.git
+[submodule "tom_pittgoogle"]
+	path = tom_desc/extern/tom_pittgoogle
+	url = git@github.com:mwvgroup/tom_pittgoogle.git
+[submodule "tom_alerts_dash"]
+	path = tom_desc/extern/tom_alerts_dash
+	url = git@github.com:TOMToolkit/tom_alerts_dash.git

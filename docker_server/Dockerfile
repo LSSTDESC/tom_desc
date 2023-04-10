@@ -19,11 +19,11 @@ RUN ln -s /usr/bin/python3 /usr/bin/python
 
 RUN pip install --upgrade pip
 
-COPY requirements.txt .
+COPY pip-packages.txt .
 RUN pip install \
 	--no-cache \
 	--disable-pip-version-check \
-	--requirement requirements.txt && \
+	--requirement pip-packages.txt && \
     rm -rf /.cache/pip
 
 # Will mount /tom_desc from a host directory

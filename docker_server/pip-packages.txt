@@ -1,0 +1,31 @@
+gunicorn[gevent]==20.0.4
+django-cors-headers>=3.7
+django-webpack-loader==1.8.1
+django-postgres-extra==2.0.8
+django-extensions==3.2.1
+psycopg2===2.9.6
+kafka-python
+avro==1.10.2
+fastavro
+
+factory_boy==2.12.0
+guardian==0.2.2
+healpy>=1.14
+scikit-learn
+seaborn
+tables
+whitenoise~=5.2
+
+antares-client==1.1
+fink-client~=2.0
+hop-client==0.5.0
+#
+# I'm including all of these as git submodules
+#  now rather than pulling them from PyPI,
+#  as I am going to modify some things in tom_base
+#
+# tomtoolkit>=2.6.5
+# tom-antares
+# tom-fink
+# tom-pittgoogle==0.1.11
+# tom-alerts-dash[scimma]>=0.1.2
