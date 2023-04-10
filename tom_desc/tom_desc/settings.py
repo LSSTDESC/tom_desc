@@ -66,6 +66,7 @@ INSTALLED_APPS = [
     'tom_dataproducts',
     'db.apps.DbConfig',
     'elasticc.apps.ElasticcConfig',
+    'elasticc2.apps.Elasticc2Config',
     'stream.apps.StreamConfig',
     'automatisation.apps.AutomatisationConfig',
 ]
