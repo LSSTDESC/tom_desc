@@ -358,7 +358,8 @@ Do `module load spin` on perlmutter.  Do `rancher context switch` to get in the 
 
 - Create the `Public` Group.   (The TOM documentation seems to imply that this group should have been
   created automatically, but that doesn't seem to be the case.)
-  - ```
+  -
+```
 python manage.py shell
 >>> from django.contrib.auth.models import Group
 >>> g = Group( name='Public' )
