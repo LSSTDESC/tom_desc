@@ -207,6 +207,20 @@ This will set up the database schema, and create root user.  At this
 point, you should be able to connect to your running TOM at
 `localhost:8080`.
 
+Next, you need to create the "Public" group.  You need to do this before
+adding any users.  If all is well, any users added thereafter will
+automatically be added to this group.  Some of the DESC specific code
+will break if this group does not exist.  (The TOM documentation seems
+to imply that this group should have been created automatically, but
+that doesn't seem to be the case.)  To do this:
+```
+python manage.py shell
+>>> from django.contrib.auth.models import Group
+>>> g = Group( name='Public' )
+>>> g.save()
+>>> exit()
+```
+
 If you ever run a server that exposes its interface to the outside web,
 you probably want to edit your local version of the file
 `secrets/django_secret_key`.  Don't commit anything sensitive to git,
@@ -341,6 +355,16 @@ Do `module load spin` on perlmutter.  Do `rancher context switch` to get in the 
 - Once everything is set up, you still have to actually create the database; to do this, get a shell on the app server with `rancher kubectl exec --stdin --tty --namespace=<namespace> <podname> -- /bin/bash` and run
   - `python manage.py migrate`
   - `python manage.py createsuperuser`
+
+- Create the `Public` Group.   (The TOM documentation seems to imply that this group should have been
+  created automatically, but that doesn't seem to be the case.)
+  - ```
+python manage.py shell
+>>> from django.contrib.auth.models import Group
+>>> g = Group( name='Public' )
+>>> g.save()
+>>> exit()
+```
 
 - You then probably want to do things to copy users and populate databases and things....
 

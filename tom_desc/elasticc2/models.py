@@ -583,6 +583,7 @@ class DiaObjectOfTarget(models.Model):
             )
             targ.save()
             newtargs.append( targ )
+        # _logger.debug( f"Saved {len(newtargs)} new tom targets" )
         assign_perm( 'tom_targets.view_target', public, newtargs )
 
         newlinks = []
@@ -591,6 +592,7 @@ class DiaObjectOfTarget(models.Model):
                                   tomtarget_id=targ.id ) )
         if len(newlinks) > 0:
             addedlinks = cls.objects.bulk_create( newlinks )
+            # _logger.debug( f"Bulk created {len(newlinks)} links" )
                 
 
 # ======================================================================
