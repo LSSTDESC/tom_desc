@@ -14,7 +14,7 @@ from django.contrib.auth.models import Group
 
 # NOTE FOR ROB
 #
-# Schema are mostly the same as for elasticc.
+# Many schema are similar to elasticc.
 # However, I'm not inheriting, because I think that would
 # break things horribly.  All the refernces to other models
 # in what I inherit is probably going to be in the elasticc
@@ -24,11 +24,14 @@ from django.contrib.auth.models import Group
 # So, lots of copied code.
 
 
+# My customizations:
 # Support for the Q3c indexing scheme, index names up to 63 characters
 # (django limits to 30, postgres has more), and the Createable base class
 # that defines the "create" and "load_or_create" methods for bulk
 # upserting.
 from db.models import q3c_ang2ipix, LongNameBTreeIndex, Createable
+
+# Link to tom targets
 import tom_targets.models
 
 _logger = logging.getLogger(__name__)
@@ -80,7 +83,6 @@ class PPDBDiaObject(Createable):
     hostgal_zphot_q080 = models.FloatField( null=True )
     hostgal_zphot_q090 = models.FloatField( null=True )
     hostgal_zphot_q100 = models.FloatField( null=True )
-    hostgal_zphot_p50 = models.FloatField( null=True )
     hostgal_mag_u = models.FloatField( null=True )
     hostgal_mag_g = models.FloatField( null=True )
     hostgal_mag_r = models.FloatField( null=True )
@@ -113,7 +115,6 @@ class PPDBDiaObject(Createable):
     hostgal2_zphot_q080 = models.FloatField( null=True )
     hostgal2_zphot_q090 = models.FloatField( null=True )
     hostgal2_zphot_q100 = models.FloatField( null=True )
-    hostgal2_zphot_p50 = models.FloatField( null=True )
     hostgal2_mag_u = models.FloatField( null=True )
     hostgal2_mag_g = models.FloatField( null=True )
     hostgal2_mag_r = models.FloatField( null=True )
@@ -149,7 +150,6 @@ class PPDBDiaObject(Createable):
         _create_kws.append( f'hostgal{_gal}_snsep' )
         _create_kws.append( f'hostgal{_gal}_ellipticity' )
         _create_kws.append( f'hostgal{_gal}_sqradius' )
-        _create_kws.append( f'hostgal{_gal}_zphot_p50' )
         for _phot in [ 'q000', 'q010', 'q020', 'q030', 'q040', 'q050', 'q060', 'q070', 'q080', 'q090', 'q100' ]:
             _create_kws.append( f'hostgal{_gal}_zphot_{_phot}' )
         for _band in [ 'u', 'g', 'r', 'i', 'z', 'y' ]:
@@ -165,11 +165,8 @@ class PPDBDiaObject(Createable):
 # in.  (And, then, at some regular period, we'll have to get updates.)
 class PPDBDiaSource(Createable):
     ppdbdiasource_id = models.BigIntegerField( primary_key=True, unique=True, db_index=True )
-    ccdvisitid = models.BigIntegerField( )
     ppdbdiaobject = models.ForeignKey( PPDBDiaObject, db_column='ppdbdiaobject_id',
                                        on_delete=models.CASCADE, null=True )
-    # I'm not using a foreign key for parentDiaSource to allow things to be loaded out of order
-    parent_ppdbdiasource_id = models.BigIntegerField( null=True )
     midpointtai = models.FloatField( db_index=True )
     filtername = models.TextField()
     ra = models.FloatField( )
@@ -177,7 +174,6 @@ class PPDBDiaSource(Createable):
     psflux = models.FloatField()
     psfluxerr = models.FloatField()
     snr = models.FloatField( )
-    nobs = models.FloatField( null=True )
 
     class Meta:
         indexes = [
@@ -187,25 +183,21 @@ class PPDBDiaSource(Createable):
     
     _pk = 'ppdbdiasource_id'
     # WARNING : I later assume that these are in the same order as _create_kws in DiaSource
-    _create_kws = [ 'ppdbdiasource_id', 'ccdvisitid', 'ppdbdiaobject_id', 'parent_ppdbdiasource_id',
-                    'midpointtai', 'filtername', 'ra', 'decl', 'psflux', 'psfluxerr', 'snr', 'nobs' ]
+    _create_kws = [ 'ppdbdiasource_id', 'ppdbdiaobject_id',
+                    'midpointtai', 'filtername', 'ra', 'decl', 'psflux', 'psfluxerr', 'snr' ]
     _dict_kws = _create_kws
     
 # Same status as DiaSource (see comment above)
 class PPDBDiaForcedSource(Createable):
     ppdbdiaforcedsource_id = models.BigIntegerField( primary_key=True, unique=True, db_index=True )
-    ccdvisitid = models.BigIntegerField( )
     ppdbdiaobject = models.ForeignKey( PPDBDiaObject, db_column='ppdbdiaobject_id', on_delete=models.CASCADE )
     midpointtai = models.FloatField( db_index=True )
     filtername = models.TextField()
     psflux = models.FloatField()
     psfluxerr = models.FloatField()
-    totflux = models.FloatField()
-    totfluxerr = models.FloatField()
 
     _pk = 'ppdbdiaforcedsource_id'
-    _create_kws = [ 'ppdbdiaforcedsource_id', 'ccdvisitid', 'ppdbdiaobject_id',
-                    'midpointtai', 'filtername', 'psflux', 'psfluxerr', 'totflux', 'totfluxerr' ]
+    _create_kws = [ 'ppdbdiaforcedsource_id', 'ppdbdiaobject_id', 'midpointtai', 'filtername', 'psflux', 'psfluxerr' ]
     _dict_kws = _create_kws
 
 # Alerts that will be sent out as a simulation of LSST alerts.
@@ -227,7 +219,7 @@ class PPDBAlert(Createable):
     # cutoutTemplate
 
     _pk = 'ppdbalert_id'
-    _create_kws = [ 'ppdbaalert_id', 'ppdbdiasource', 'ppdbdiaobject' ]
+    _create_kws = [ 'ppdbalert_id', 'ppdbdiasource_id', 'ppdbdiaobject_id' ]
     _dict_kws = [ 'ppdbalert_id', 'ppdbdiasource_id', 'ppdbdiaobject_id', 'alertsenttimestamp' ]
 
     def reconstruct( self ):
@@ -237,18 +229,15 @@ class PPDBAlert(Createable):
         should include previous photometry and previous forced photometry, and then
         has to pull all that from the database.
         """
-        alert = { "alertId": self.ppdbalertid,
+        alert = { "alertId": self.ppdbalert_id,
                   "diaSource": {},
                   "prvDiaSources": [],
                   "prvDiaForcedSources": [],
-                  "prvDiaNondetectionLimits": [],
                   "diaObject": {},
-                  "cutoutDifference": None,
-                  "cutoutTemplate": None
                  }
 
-        sourcefields = [ "diaSourceId", "diaObjectId", "ccdVisitId", "parentDiaSourceId", "midPointTai",
-                        "filterName", "ra", "decl", "psFlux", "psFluxErr", "snr", "nobs" ]
+        sourcefields = [ "diaSourceId", "diaObjectId", "midPointTai",
+                         "filterName", "ra", "decl", "psFlux", "psFluxErr", "snr" ]
         sourcefieldmap = { i: i.lower() for i in sourcefields }
         sourcefieldmap["diaSourceId"] = "ppdbdiasource_id"
         sourcefieldmap["diaObjectId"] = "ppdbdiaobject_id"
@@ -260,8 +249,7 @@ class PPDBAlert(Createable):
         for suffix in [ "", "2" ]:
             for hgfield in [ "ellipticity", "sqradius", "zspec", "zspec_err", "zphot", "zphot_err",
                              "zphot_q000", "zphot_q010", "zphot_q020", "zphot_q030", "zphot_q040",
-                             "zphot_q050", "zphot_q060", "zphot_q070", "zphot_q080", "zphot_q090",
-                             "zphot_q100", "zphot_p50",
+                             "zphot_q050", "zphot_q060", "zphot_q070", "zphot_q080", "zphot_q090", "zphot_q100",
                              "mag_u", "mag_g", "mag_r", "mag_i", "mag_z", "mag_Y",
                              "ra", "dec", "snsep",
                              "magerr_u", "magerr_g", "magerr_r", "magerr_i", "magerr_z", "magerr_Y" ]:
@@ -276,7 +264,7 @@ class PPDBAlert(Createable):
                        .filter( ppdbdiaobject_id=self.ppdbdiasource.ppdbdiaobject_id )
                        .order_by( "midpointtai" ) )
         for prevsource in objsources:
-            if prevsource.diasourceid == self.ppdbdiasource.diasourceid: break
+            if prevsource.ppdbdiasource_id == self.ppdbdiasource.ppdbdiasource_id: break
             newprevsource = {}
             for field in sourcefields:
                 newprevsource[field] = getattr( prevsource, sourcefieldmap[ field ] )
@@ -284,12 +272,9 @@ class PPDBAlert(Createable):
 
         # If this source is the same night as the original detection, then
         # there will be no forced source information
-        # A THING.  I had *thought* that the forced source table was a superset
-        # of the source table for elasticc, but it turns out practically speaking
-        # that that's not the case; investigation required.
 
-        forcedsourcefields = [ "diaForcedSourceId", "diaObjectId", "ccdVisitId", "midPointTai",
-                               "filterName", "psFlux", "psFluxErr", "totFlux", "totFluxErr" ]
+        forcedsourcefields = [ "diaForcedSourceId", "diaObjectId", "midPointTai",
+                               "filterName", "psFlux", "psFluxErr" ]
         forcedsourcefieldmap = { i: i.lower() for i in forcedsourcefields }
         forcedsourcefieldmap[ "diaForcedSourceId" ] = "ppdbdiaforcedsource_id"
         forcedsourcefieldmap[ "diaObjectId" ] = "ppdbdiaobject_id"
@@ -297,7 +282,7 @@ class PPDBAlert(Createable):
         if self.ppdbdiasource.midpointtai - objsources[0].midpointtai > 0.5:
             objforced = PPDBDiaForcedSource.objects.filter( ppdbdiaobject_id=self.ppdbdiasource.ppdbdiaobject_id,
                                                             midpointtai__gte=objsources[0].midpointtai-30.,
-                                                            midpointtai__lt=self.diaSource.midpointtai )
+                                                            midpointtai__lt=self.ppdbdiasource.midpointtai )
             # _logger.warn( f"Found {len(objforced)} previous" )
             for forced in objforced:
                 newforced = {}
@@ -314,91 +299,91 @@ class PPDBAlert(Createable):
 # Truth tables.  Of course, LSST PPDB won't really have these, but
 # we have them for our simulation.
 
-class DiaTruth(Createable):
-    # I can't use a foreign key constraint here because there will be truth entries for
-    # sources for which there was no alert, and as such which will not be in the
-    # DiaSource table.  But, DiaSource will be unique, so make it the primary key.
-    ppdbdiasource_id = models.BigIntegerField( primary_key=True )
-    ppdbdiaobject_id = models.BigIntegerField( null=True, db_index=True )
-    mjd = models.FloatField( null=True )
-    detect = models.BooleanField( null=True )
-    gentype = models.IntegerField( null=True )
-    genmag = models.FloatField( null=True )
+# class DiaTruth(Createable):
+#     # I can't use a foreign key constraint here because there will be truth entries for
+#     # sources for which there was no alert, and as such which will not be in the
+#     # DiaSource table.  But, DiaSource will be unique, so make it the primary key.
+#     ppdbdiasource_id = models.BigIntegerField( primary_key=True )
+#     ppdbdiaobject_id = models.BigIntegerField( null=True, db_index=True )
+#     mjd = models.FloatField( null=True )
+#     detect = models.BooleanField( null=True )
+#     gentype = models.IntegerField( null=True )
+#     genmag = models.FloatField( null=True )
 
-    _pk = 'ppdbdiasource_id'
-    _create_kws = [ 'ppdbdiasource_id', 'ppdbdiaobject_id', 'mjd', 'detect', 'gentype', 'genmag' ]
-    _dict_kws = _create_kws
+#     _pk = 'ppdbdiasource_id'
+#     _create_kws = [ 'ppdbdiasource_id', 'ppdbdiaobject_id', 'mjd', 'detect', 'gentype', 'genmag' ]
+#     _dict_kws = _create_kws
     
-    # # I'm not making DiaTruth a subclass of Createable here because the data coming
-    # #   in doesn't have the right keywords, and because I need to do some custom
-    # #   checks for existence of stuff in other tables.
+#     # # I'm not making DiaTruth a subclass of Createable here because the data coming
+#     # #   in doesn't have the right keywords, and because I need to do some custom
+#     # #   checks for existence of stuff in other tables.
 
-    # def to_dict( self ):
-    #     return { i: getattr( self, i ) for i in [ 'ppdbdiasource_id', 'ppdbdiaobject_id',
-    #                                               'mjd', 'detect', 'gentype', 'genmag' ] }
+#     # def to_dict( self ):
+#     #     return { i: getattr( self, i ) for i in [ 'ppdbdiasource_id', 'ppdbdiaobject_id',
+#     #                                               'mjd', 'detect', 'gentype', 'genmag' ] }
     
-    # @staticmethod
-    # def create( data ):
-    #     try:
-    #         source = PPDBDiaSource.objects.get( diasourceid=data['SourceID'] )
-    #         if source.ppdbdiaobject_id != data['SNID']:
-    #             raise ValueError( f"SNID {data['SNID']} doesn't match "
-    #                               f"ppdbdiaobject_id {source.ppdbdiaobject_id} "
-    #                               f"for PPDBDiaSource {source.ppdbdiasourceid}" )
-    #         if math.fabs( float( data['MJD'] - source.midpointtai ) > 0.01 ):
-    #             raise ValueError( f"MJD {data['MJD']} doesn't match "
-    #                               f"midpointtai {source.midpointtai} "
-    #                               f"for PPDBDiaSource {source.ppdbdiasource_id}" )
-    #     except PPDBDiaSource.DoesNotExist:
-    #         if data['DETECT']:
-    #             raise ValueError( f'No SourceID {data["SourceID"]} for a DETECT=true truth entry' )
-    #     curtruth = DiaTruth(
-    #         ppdbdiasource_id = int( data['SourceID'] ),
-    #         ppdbdiaobject_id = int( data['SNID'] ),
-    #         detect = bool( data['DETECT'] ),
-    #         mjd = float( data['MJD'] ),
-    #         gentype = int( data['TRUE_GENTYPE'] ),
-    #         genmag = float( data['TRUE_GENMAG'] )
-    #     )
-    #     curtruth.save()
-    #     return curtruth
+#     # @staticmethod
+#     # def create( data ):
+#     #     try:
+#     #         source = PPDBDiaSource.objects.get( diasourceid=data['SourceID'] )
+#     #         if source.ppdbdiaobject_id != data['SNID']:
+#     #             raise ValueError( f"SNID {data['SNID']} doesn't match "
+#     #                               f"ppdbdiaobject_id {source.ppdbdiaobject_id} "
+#     #                               f"for PPDBDiaSource {source.ppdbdiasourceid}" )
+#     #         if math.fabs( float( data['MJD'] - source.midpointtai ) > 0.01 ):
+#     #             raise ValueError( f"MJD {data['MJD']} doesn't match "
+#     #                               f"midpointtai {source.midpointtai} "
+#     #                               f"for PPDBDiaSource {source.ppdbdiasource_id}" )
+#     #     except PPDBDiaSource.DoesNotExist:
+#     #         if data['DETECT']:
+#     #             raise ValueError( f'No SourceID {data["SourceID"]} for a DETECT=true truth entry' )
+#     #     curtruth = DiaTruth(
+#     #         ppdbdiasource_id = int( data['SourceID'] ),
+#     #         ppdbdiaobject_id = int( data['SNID'] ),
+#     #         detect = bool( data['DETECT'] ),
+#     #         mjd = float( data['MJD'] ),
+#     #         gentype = int( data['TRUE_GENTYPE'] ),
+#     #         genmag = float( data['TRUE_GENMAG'] )
+#     #     )
+#     #     curtruth.save()
+#     #     return curtruth
     
-    # @staticmethod
-    # def load_or_create( data ):
-    #     try:
-    #         curtruth = DiaTruth.objects.get( ppdbdiasource_id=data['SourceID'] )
-    #         # VERIFY THAT STUFF MATCHES?????
-    #         return curtruth
-    #     except DiaTruth.DoesNotExist:
-    #         return DiaTruth.create( data )
+#     # @staticmethod
+#     # def load_or_create( data ):
+#     #     try:
+#     #         curtruth = DiaTruth.objects.get( ppdbdiasource_id=data['SourceID'] )
+#     #         # VERIFY THAT STUFF MATCHES?????
+#     #         return curtruth
+#     #     except DiaTruth.DoesNotExist:
+#     #         return DiaTruth.create( data )
 
-    # @staticmethod
-    # def bulk_load_or_create( data ):
-    #     """Pass a list of dicts."""
-    #     dsids = [ i['SourceID'] for i in data ]
-    #     curobjs = list( DiaTruth.objects.filter( ppdbdiasource_id__in=dsids ) )
-    #     exists = set( [ i.ppdbdiasource_id for i in curobjs ] )
-    #     sources = set( PPDBDiaSource.objects.values_list( 'ppdbdiasource_id', flat=True )
-    #                    .filter( ppdbdiasource_id__in=dsids ) )
-    #     newobjs = set()
-    #     missingsources = set()
-    #     for newdata in data:
-    #         if newdata['SourceID'] in exists:
-    #             continue
-    #         if newdata['SourceID'] not in sources and newdata['DETECT']:
-    #             missingsources.add( newdata['SourceID'] )
-    #             continue
-    #         # ROB : you don't verify that the diaSourceId exists in the source table!
-    #         newobjs.add( DiaTruth( ppdbdiasource_id = int( newdata['SourceID'] ),
-    #                                ppdbdiaobject_id = int( newdata['SNID'] ),
-    #                                detect = bool( newdata['DETECT'] ),
-    #                                mjd = float( newdata['MJD'] ),
-    #                                gentype = int( newdata['TRUE_GENTYPE'] ),
-    #                                genmag = float( newdata['TRUE_GENMAG'] ) ) )
-    #     if len(newobjs) > 0:
-    #         addedobjs = DiaTruth.objects.bulk_create( newobjs )
-    #         curobjs.extend( addedobjs )
-    #     return curobjs, missingsources
+#     # @staticmethod
+#     # def bulk_load_or_create( data ):
+#     #     """Pass a list of dicts."""
+#     #     dsids = [ i['SourceID'] for i in data ]
+#     #     curobjs = list( DiaTruth.objects.filter( ppdbdiasource_id__in=dsids ) )
+#     #     exists = set( [ i.ppdbdiasource_id for i in curobjs ] )
+#     #     sources = set( PPDBDiaSource.objects.values_list( 'ppdbdiasource_id', flat=True )
+#     #                    .filter( ppdbdiasource_id__in=dsids ) )
+#     #     newobjs = set()
+#     #     missingsources = set()
+#     #     for newdata in data:
+#     #         if newdata['SourceID'] in exists:
+#     #             continue
+#     #         if newdata['SourceID'] not in sources and newdata['DETECT']:
+#     #             missingsources.add( newdata['SourceID'] )
+#     #             continue
+#     #         # ROB : you don't verify that the diaSourceId exists in the source table!
+#     #         newobjs.add( DiaTruth( ppdbdiasource_id = int( newdata['SourceID'] ),
+#     #                                ppdbdiaobject_id = int( newdata['SNID'] ),
+#     #                                detect = bool( newdata['DETECT'] ),
+#     #                                mjd = float( newdata['MJD'] ),
+#     #                                gentype = int( newdata['TRUE_GENTYPE'] ),
+#     #                                genmag = float( newdata['TRUE_GENMAG'] ) ) )
+#     #     if len(newobjs) > 0:
+#     #         addedobjs = DiaTruth.objects.bulk_create( newobjs )
+#     #         curobjs.extend( addedobjs )
+#     #     return curobjs, missingsources
 
 
 class DiaObjectTruth(Createable):
@@ -458,7 +443,7 @@ class DiaObjectTruth(Createable):
     def bulk_load_or_create( cls, data, kwmap=None ):
         """Pass an array of dicts."""
         pks = [ i['ppdbdiaobject_id'] for i in data ]
-        diaobjs = list( ppdbdiaobject.objects.filter( pk__in=pks ) )
+        diaobjs = list( PPDBDiaObject.objects.filter( pk__in=pks ) )
         objids = set( [ i.ppdbdiaobject_id for i in diaobjs ] )
         datatoload = [ i for i in data if i['ppdbdiaobject_id'] in objids ]
         if len(datatoload) > 0:
@@ -541,7 +526,6 @@ class DiaObject(Createable):
     hostgal_zphot_q080 = models.FloatField( null=True )
     hostgal_zphot_q090 = models.FloatField( null=True )
     hostgal_zphot_q100 = models.FloatField( null=True )
-    hostgal_zphot_p50 = models.FloatField( null=True )
     hostgal_mag_u = models.FloatField( null=True )
     hostgal_mag_g = models.FloatField( null=True )
     hostgal_mag_r = models.FloatField( null=True )
@@ -574,7 +558,6 @@ class DiaObject(Createable):
     hostgal2_zphot_q080 = models.FloatField( null=True )
     hostgal2_zphot_q090 = models.FloatField( null=True )
     hostgal2_zphot_q100 = models.FloatField( null=True )
-    hostgal2_zphot_p50 = models.FloatField( null=True )
     hostgal2_mag_u = models.FloatField( null=True )
     hostgal2_mag_g = models.FloatField( null=True )
     hostgal2_mag_r = models.FloatField( null=True )
@@ -610,7 +593,6 @@ class DiaObject(Createable):
         _create_kws.append( f'hostgal{_gal}_snsep' )
         _create_kws.append( f'hostgal{_gal}_ellipticity' )
         _create_kws.append( f'hostgal{_gal}_sqradius' )
-        _create_kws.append( f'hostgal{_gal}_zphot_p50' )
         for _phot in [ 'q000', 'q010', 'q020', 'q030', 'q040', 'q050', 'q060', 'q070', 'q080', 'q090', 'q100' ]:
             _create_kws.append( f'hostgal{_gal}_zphot_{_phot}' )
         for _band in [ 'u', 'g', 'r', 'i', 'z', 'y' ]:
@@ -621,11 +603,8 @@ class DiaObject(Createable):
 
 class DiaSource(Createable):
     diasource_id = models.BigIntegerField( primary_key=True, unique=True, db_index=True )
-    ccdvisitid = models.BigIntegerField( )
     diaobject = models.ForeignKey( DiaObject, db_column='diaobject_id',
                                    on_delete=models.CASCADE, null=True )
-    # I'm not using a foreign key for parentDiaSource to allow things to be loaded out of order
-    parent_diasource_id = models.BigIntegerField( null=True )
     midpointtai = models.FloatField( db_index=True )
     filtername = models.TextField()
     ra = models.FloatField( )
@@ -633,7 +612,6 @@ class DiaSource(Createable):
     psflux = models.FloatField()
     psfluxerr = models.FloatField()
     snr = models.FloatField( )
-    nobs = models.FloatField( null=True )
 
     class Meta:
         indexes = [
@@ -643,24 +621,20 @@ class DiaSource(Createable):
     
     _pk = 'diasource_id'
     # WARNING : I later assume that these are in the same order as _create_kws in PPDBDiaSource
-    _create_kws = [ 'diasource_id', 'ccdvisitid', 'diaobject_id', 'parent_diasource_id',
-                    'midpointtai', 'filtername', 'ra', 'decl', 'psflux', 'psfluxerr', 'snr', 'nobs' ]
+    _create_kws = [ 'diasource_id', 'diaobject_id',
+                    'midpointtai', 'filtername', 'ra', 'decl', 'psflux', 'psfluxerr', 'snr' ]
     
 # Same status as DiaSource (see comment above)
 class DiaForcedSource(Createable):
     diaforcedsource_id = models.BigIntegerField( primary_key=True, unique=True, db_index=True )
-    ccdvisitid = models.BigIntegerField( )
     diaobject = models.ForeignKey( PPDBDiaObject, db_column='diaobject_id', on_delete=models.CASCADE )
     midpointtai = models.FloatField( db_index=True )
     filtername = models.TextField()
     psflux = models.FloatField()
     psfluxerr = models.FloatField()
-    totflux = models.FloatField()
-    totfluxerr = models.FloatField()
 
     _pk = 'diaforcedsource_id'
-    _create_kws = [ 'diaforcedsource_id', 'ccdvisitid', 'diaobject_id',
-                    'midpointtai', 'filtername', 'psflux', 'psfluxerr', 'totflux', 'totfluxerr' ]
+    _create_kws = [ 'diaforcedsource_id', 'diaobject_id', 'midpointtai', 'filtername', 'psflux', 'psfluxerr' ]
 
 
 # Store linkages between TOM targets and DiaObject entries.  This could

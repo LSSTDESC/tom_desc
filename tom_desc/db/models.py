@@ -1,6 +1,13 @@
+import io
+import psycopg2
+import psycopg2.extras
+import pandas
+
+import django.db
 from django.db import models
 import django.contrib.postgres.indexes as indexes
 from django.utils.functional import cached_property
+
 
 # Create your models here.
 
@@ -58,7 +65,7 @@ class Createable(models.Model):
 
         """
         if kwmap is None:
-            kwmap = self._create_kws_map if hasattr( self, '_create_kws_map' ) else {}
+            kwmap = cls._create_kws_map if hasattr( cls, '_create_kws_map' ) else {}
 
         # I could probably do this with a dict comprehension, but this will be more... comprehensible
         datamap = {}
@@ -85,7 +92,7 @@ class Createable(models.Model):
     
     @classmethod
     def create( cls, data, kwmap=None ):
-        """Create a new object based on data.
+        """Create a new object based on data.  data must be a dict of { kw: value } for a single table row.
 
         See data_to_createdict for definition of parameters
 
@@ -107,7 +114,6 @@ class Createable(models.Model):
 
     @classmethod
     def which_exist( cls, pks ):
-
         """Pass a list of primary key, get a list of the ones that already exist."""
         q = cls.objects.filter( pk__in=pks )
         return [ getattr(i, i._pk) for i in q ]
@@ -118,8 +124,11 @@ class Createable(models.Model):
     def bulk_insert_onlynew( cls, data, kwmap=None ):
         """Insert a bunch of data into the database.  Ignores records that conflict with things present.
 
-        data is a list of dicts; the keys in all dicts MUST be the same.
-        It (and kwmap) will be run through data_to_createdict
+        data can be:
+          * a dict of { kw: iterable }.  All of the iterables must have the same length, 
+            and must be something that pandas.DataFrame could handle
+          * a list of dicts.  The keys in all dicts must be the same
+        data and kwmap will be run through data_to_createdict
 
         Returns the number of rows actually inserted (which may be less than len(data)).
 
@@ -151,7 +160,10 @@ class Createable(models.Model):
             df.to_csv( strio, index=False, header=False, sep='\t', na_rep='\\N' )
             strio.seek(0)
             # Have to quote the column names because many have mixed case.
-            columns = [ f'"{c}"' for c in df.columns.values ]
+            # (...didn't work, there were extra " in the command sent.
+            # this will break if columns aren't all lower case)
+            # columns = [ f'"{c}"' for c in df.columns.values ]
+            columns = df.columns.values
             cursor.copy_from( strio, "bulk_upsert", columns=columns, size=1048576 )
             q = f"INSERT INTO {cls._meta.db_table} SELECT * FROM bulk_upsert ON CONFLICT DO NOTHING"
             cursor.execute( q )

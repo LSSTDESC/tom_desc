@@ -11,6 +11,7 @@ import fastavro
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
+raise RuntimeError( "This is currently broken -- rob, fix for database table name refactor" )
 from elasticc2.models import DiaAlert, DiaObject, DiaSource, DiaForcedSource
 
 _rundir = pathlib.Path(__file__).parent
