@@ -11,8 +11,7 @@ import fastavro
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
-raise RuntimeError( "This is currently broken -- rob, fix for database table name refactor" )
-from elasticc2.models import DiaAlert, DiaObject, DiaSource, DiaForcedSource
+from elasticc2.models import PPDBAlert
 
 _rundir = pathlib.Path(__file__).parent
 
@@ -35,8 +34,8 @@ class Command(BaseCommand):
         parser.add_argument( '-d', '--through-day', type=float, default=None, required=True,
                              help="Sets simulation date: stream alerts with source through this midPointTai" )
         parser.add_argument( '-k', '--kafka-server', default='brahms.lbl.gov:9092', help="Kafka server to stream to" )
-        parser.add_argument( '-t', '--kafka-topic', default='elasticc-test-only', help="Kafka topic" )
-        parser.add_argument( '-s', '--alert-schema', default=f'{_rundir}/elasticc.v0_9.alert.avsc',
+        parser.add_argument( '-t', '--kafka-topic', default='elasticc-test-20230418', help="Kafka topic" )
+        parser.add_argument( '-s', '--alert-schema', default=f'{_rundir}/elasticc.v0_9_1.alert.avsc',
                              help='File with AVRO schema' )
         parser.add_argument( '--daily-delay', type=float, default=0.,
                              help="Delay this many seconds between simulated MJDs" )
@@ -47,9 +46,9 @@ class Command(BaseCommand):
 
     @transaction.atomic
     def update_alertsent( self, ids ):
-        sentalerts = DiaAlert.objects.filter( pk__in=ids )
+        sentalerts = PPDBAlert.objects.filter( pk__in=ids )
         for sa in sentalerts:
-            sa.alertSentTimestamp = datetime.datetime.now( datetime.timezone.utc )
+            sa.alertsenttimestamp = datetime.datetime.now( datetime.timezone.utc )
             sa.save()
         
     def handle( self, *args, **options ):
@@ -57,10 +56,10 @@ class Command(BaseCommand):
         self.logger.info( f"Streaming to {options['kafka_server']} topic {options['kafka_topic']}" )
         self.logger.info( f"Streaming alerts through midPointTai {options['through_day']}" )
 
-        alerts = ( DiaAlert.objects
-                   .filter( alertSentTimestamp__isnull=True,
-                            diaSource__midPointTai__lte=options['through_day'] )
-                   .order_by( 'diaSource__midPointTai' ) )
+        alerts = ( PPDBAlert.objects
+                   .filter( alertsenttimestamp__isnull=True,
+                            ppdbdiasource__midpointtai__lte=options['through_day'] )
+                   .order_by( 'ppdbdiasource__midpointtai' ) )
         self.logger.info( f"{len(alerts)} alerts to stream" )
 
         if len(alerts) == 0:
@@ -98,7 +97,7 @@ class Command(BaseCommand):
             fastavro.write.schemaless_writer( msgio, schema, alert.reconstruct() )
             if options['do']:
                 producer.produce( options['kafka_topic'], msgio.getvalue() )
-                ids_produced.append( alert.alertId )
+                ids_produced.append( alert.ppdbalert_id )
                 
         if len(ids_produced) > 0:
             if options['do']:

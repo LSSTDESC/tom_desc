@@ -54,7 +54,7 @@ class BrokerConsumer:
         self.countlogger.setLevel( logging.INFO )
 
         if schemafile is None:
-            schemafile = _rundir / "elasticc.v0_9.brokerClassification.avsc"
+            schemafile = _rundir / "elasticc.v0_9_1.brokerClassification.avsc"
 
         self.countlogger.info( f"************ Starting Brokerconsumer for {loggername} ****************" )
 

@@ -8,6 +8,7 @@ import itertools
 import psqlextra.types
 import psqlextra.models
 import psycopg2.extras
+import django.db
 from django.db import models
 from guardian.shortcuts import assign_perm
 from django.contrib.auth.models import Group
@@ -40,8 +41,8 @@ _formatter = logging.Formatter( f'[%(asctime)s - %(levelname)s] - %(message)s' )
 _logout.setFormatter( _formatter )
 _logger.propagate = False
 _logger.addHandler( _logout )
-_logger.setLevel( logging.INFO )
-# _logger.setLevel( logging.DEBUG )
+# _logger.setLevel( logging.INFO )
+_logger.setLevel( logging.DEBUG )
 
 # ======================================================================
 # ======================================================================
@@ -663,8 +664,7 @@ class DiaObjectOfTarget(models.Model):
     def maybe_new_elasticc_targets( cls, objids, ras, decs ):
         """Given a list of objects (with coordinates), add new TOM targets for objects that don't already exist
         """
-        # django weirdness : even though I told it to make the database column
-        # diaObjectId, the field that django gets is diaObject_id.
+        _logger.debug( f"objids={objids}" )
         preexisting = cls.objects.filter( diaobject_id__in=objids )
         preexistingids = [ o.diaobject_id for o in preexisting ]
         newobjs = [ ( objids[i], ras[i], decs[i] )
@@ -675,6 +675,7 @@ class DiaObjectOfTarget(models.Model):
         # the database queries more efficient.  However, that would bypass
         # any hooks that tom_targets has added to its save() method,
         # which scares me.
+        _logger.debug( f'newobjs = {newobjs}' )
         newtargs = []
         newobjids = []
         for newobj in newobjs:
@@ -687,6 +688,7 @@ class DiaObjectOfTarget(models.Model):
             )
             targ.save()
             newtargs.append( targ )
+        _logger.debug( f'len(newtargs) = {len(newtargs)}' )
         # _logger.debug( f"Saved {len(newtargs)} new tom targets" )
         public = Group.objects.filter( name='Public' ).first()
         assign_perm( 'tom_targets.view_target', public, newtargs )
@@ -806,7 +808,7 @@ class BrokerMessage(models.Model):
 
         messageobjects = {}
         kwargses = []
-        sourceids = []
+        sourceids = set()
         utc = pytz.timezone( "UTC" )
         for msg in messages:
             timestamp = msg['timestamp']
@@ -826,7 +828,7 @@ class BrokerMessage(models.Model):
                            'brokeringesttimestamp': msg['msg']['brokerIngestTimestamp'],
                 }
                 kwargses.append( kwargs )
-                sourceids.append( msg['msg']['diaSourceId'] )
+                sourceids.add( msg['msg']['diaSourceId'] )
             else:
                 logger.error( f'Key {keymess} showed up more than once in a message batch!' )
         logger.debug( f'Bulk creating {len(kwargses)} messages.' )
@@ -838,11 +840,14 @@ class BrokerMessage(models.Model):
                 raise RunTimeError( "Something bad has happened." )
             addedmsgs = BrokerMessage.objects.bulk_create( batch, len(kwargses) )
             for addedmsg in addedmsgs:
-                keymess = f"{addedmsg.streamMessageId}_{addedmsg.topicName}_{addedmsg.alertId}"
+                keymess = f"{addedmsg.streammessage_id}_{addedmsg.topicname}_{addedmsg.alert_id}"
                 messageobjects[ keymess ] = addedmsg
         else:
             addedmsgs = []
 
+
+        # _logger.debug( f"After adding messages, len(sourceids)={len(sourceids)}" )
+            
         # Add any new objects (and associated TOM targets) and any new
         # sources that we just found out about in this message.  For
         # real LSST, this will involve querying the PPDB, and we
@@ -861,6 +866,7 @@ class BrokerMessage(models.Model):
         origautocommit = None
         gratuitous = None
         cursor = None
+        newobjs = []
         try:
             # Have to jump through some hoops to get the actual psycopg2
             # connection from django; we need this to turn off autocommit
@@ -874,19 +880,34 @@ class BrokerMessage(models.Model):
             cursor.execute( "INSERT INTO all_objids "
                             "  SELECT ppdbdiaobject_id, MAX(midpointtai) FROM elasticc2_ppdbdiasource "
                             "    WHERE ppdbdiasource_id IN %(sourceids)s GROUP BY ppdbdiaobject_id",
-                            { 'sourceids': sourceids } )
+                            { 'sourceids': tuple( sourceids ) } )
+            # ****
+            # cursor.execute( "SELECT COUNT(*) AS count FROM all_objids" )
+            # row = cursor.fetchone()
+            # _logger.debug( f'all_objids has {row["count"]} rows' )
+            # ****
             cursor.execute( "CREATE TEMP TABLE existing_objids( id bigint, latesttai double precision  )" )
             cursor.execute( "INSERT INTO existing_objids "
                             "  SELECT a.id, a.latesttai FROM all_objids a "
                             "  INNER JOIN elasticc2_diaobject o ON o.diaobject_id=a.id" )
-            cursor.execute( "CREATE TEMP TABLE new_objs ( LIKE elasticc2_diaobject" )
-            newobjsfields = ','.join( DiaObjects._create_kws )
+            # ****
+            # cursor.execute( "SELECT COUNT(*) AS count FROM existing_objids" )
+            # row = cursor.fetchone()
+            # _logger.debug( f'existing_objids has {row["count"]} rows' )
+            # ****
+            cursor.execute( "CREATE TEMP TABLE new_objs ( LIKE elasticc2_diaobject )" )
+            newobjsfields = ','.join( DiaObject._create_kws )
             ppdbobjsfields = ','.join( [ f"o.{i}" for i in PPDBDiaObject._create_kws ] )
             cursor.execute( f"INSERT INTO new_objs({newobjsfields}) "
                             f" SELECT {ppdbobjsfields} FROM elasticc2_ppdbdiaobject o "
                             f" INNER JOIN all_objids a ON o.ppdbdiaobject_id=a.id "
                             f" WHERE o.ppdbdiaobject_id NOT IN "
                             f"   ( SELECT id FROM existing_objids )" )
+            # ****
+            # cursor.execute( "SELECT COUNT(*) AS count FROM new_objs" )
+            # row = cursor.fetchone()
+            # _logger.debug( f'new_objs has {row["count"]} rows' )
+            # ****
             cursor.execute( f"INSERT INTO elasticc2_diaobject SELECT * FROM new_objs" )
 
             # WARNING : I'm doing this slightly wrong.  Really, we shouldn't
@@ -901,42 +922,87 @@ class BrokerMessage(models.Model):
                             "  SELECT s.ppdbdiasource_id FROM elasticc2_ppdbdiasource s "
                             "  INNER JOIN all_objids a ON s.ppdbdiaobject_id=a.id "
                             "  WHERE s.midpointtai <= a.latesttai" )
+            # ****
+            # cursor.execute( "SELECT COUNT(*) AS count FROM allsourceids" )
+            # row = cursor.fetchone()
+            # _logger.debug( f'allsourceids has {row["count"]} rows' )
+            # ****
             cursor.execute( "CREATE TEMP TABLE existingsourceids( id bigint )" )
             cursor.execute( "INSERT INTO existingsourceids "
-                            "  SELECT a.id FROM allsourceids "
+                            "  SELECT a.id FROM allsourceids a "
                             "  INNER JOIN elasticc2_diasource s ON s.diasource_id=a.id" )
+            # ****
+            # cursor.execute( "SELECT COUNT(*) AS count FROM existingsourceids" )
+            # row = cursor.fetchone()
+            # _logger.debug( f'existingsourceids has {row["count"]} rows' )
+            # ****
             cursor.execute( "CREATE TEMP TABLE new_srcs ( LIKE elasticc2_diasource )" )
             newsrcfields = ','.join( DiaSource._create_kws )
             ppdbsrcfields = ','.join( [ f"s.{i}" for i in PPDBDiaSource._create_kws ] )
-            cursor.execute( f"INSERT INTO new_srcs({newsrcfields} "
+            _logger.debug( f'ppdbsrcfields = {ppdbsrcfields}' )
+            cursor.execute( f"INSERT INTO new_srcs({newsrcfields}) "
                             f" SELECT {ppdbsrcfields} FROM elasticc2_ppdbdiasource s "
                             f" INNER JOIN allsourceids a ON s.ppdbdiasource_id=a.id "
                             f" WHERE s.ppdbdiasource_id NOT IN "
                             f"   ( SELECT id FROM existingsourceids )" )
+            # ****
+            # cursor.execute( "SELECT COUNT(*) AS count FROM new_srcs" )
+            # row = cursor.fetchone()
+            # _logger.debug( f'new_srcs has {row["count"]} rows' )
+            # ****
+            cursor.execute( f"INSERT INTO elasticc2_diasource SELECT * FROM new_srcs" )
 
             cursor.execute( "CREATE TEMP TABLE allforcedids( id bigint )" )
             cursor.execute( "INSERT INTO allforcedids "
                             "  SELECT s.ppdbdiaforcedsource_id FROM elasticc2_ppdbdiaforcedsource s "
                             "  INNER JOIN all_objids a ON s.ppdbdiaobject_id=a.id "
                             "  WHERE s.midpointtai <= a.latesttai" )
+            # ****
+            # cursor.execute( "SELECT COUNT(*) AS count FROM allforcedids" )
+            # row = cursor.fetchone()
+            # _logger.debug( f'allforcedids has {row["count"]} rows' )
+            # ****
             cursor.execute( "CREATE TEMP TABLE existingforcedids( id bigint )" )
             cursor.execute( "INSERT INTO existingforcedids "
-                            "  SELECT a.id FROM allforcedids "
+                            "  SELECT a.id FROM allforcedids a "
                             "  INNER JOIN elasticc2_diaforcedsource s ON s.diaforcedsource_id=a.id" )
+            # ****
+            # cursor.execute( "SELECT COUNT(*) AS count FROM existingforcedids" )
+            # row = cursor.fetchone()
+            # _logger.debug( f'existingforcedids {row["count"]} rows' )
+            # ****
             cursor.execute( "CREATE TEMP TABLE new_forced ( LIKE elasticc2_diaforcedsource )" )
             newforcedfields = ','.join( DiaForcedSource._create_kws )
             ppdbforcedfields = ','.join( [ f"s.{i}" for i in PPDBDiaForcedSource._create_kws ] )
-            cursor.execute( f"INSERT INTO new_forced({newforcedfields} "
+            cursor.execute( f"INSERT INTO new_forced({newforcedfields}) "
                             f" SELECT {ppdbforcedfields} FROM elasticc2_ppdbdiaforcedsource s "
                             f" INNER JOIN allforcedids a ON s.ppdbdiaforcedsource_id=a.id "
                             f" WHERE s.ppdbdiaforcedsource_id NOT IN "
                             f"   ( SELECT id FROM existingforcedids )" )
-
+            # ****
+            # cursor.execute( "SELECT COUNT(*) AS count FROM new_forced" )
+            # row = cursor.fetchone()
+            # _logger.debug( f'new_forced {row["count"]} rows' )
+            # ****
+            cursor.execute( f"INSERT INTO elasticc2_diaforcedsource SELECT * FROM new_forced" )
+            
             cursor.execute( f"SELECT diaobject_id,ra,decl FROM new_objs" )
             newobjs = cursor.fetchall()
 
+            # Turns out that temp tables aren't dropped at the end of a transaction
+            cursor.execute( "DROP TABLE new_forced" )
+            cursor.execute( "DROP TABLE existingforcedids" )
+            cursor.execute( "DROP TABLE allforcedids" )
+            cursor.execute( "DROP TABLE new_srcs" )
+            cursor.execute( "DROP TABLE existingsourceids" )
+            cursor.execute( "DROP TABLE allsourceids" )
+            cursor.execute( "DROP TABLE new_objs" )
+            cursor.execute( "DROP TABLE existing_objids" )
+            cursor.execute( "DROP TABLE all_objids" )
+            
             conn.commit()
         except Exception as e:
+            _logger.exception( e )
             if conn is not None:
                 conn.rollback()
                 raise e
@@ -972,21 +1038,20 @@ class BrokerMessage(models.Model):
         condcache = set()
         for msg in messages:
             i += 1
-            for cfication in msg['msg']['classifications']:
-                sigstr = ( f"{msg['msg']['brokerName']}_{msg['msg']['brokerVersion']}_"
-                           f"{cfication['classifierName']}_{cfication['classifierParams']}" )
-                if sigstr not in condcache:
-                    newcond = ( models.Q( brokername = msg['msg']['brokerName'] ) &
-                                models.Q( brokerversion = msg['msg']['brokerVersion'] ) &
-                                models.Q( classifiername = cfication['classifierName'] ) &
-                                models.Q( classifierparams = cfication['classifierParams'] ) )
-                    cferconds |= newcond
-                condcache.add( sigstr )
-            curcfers = BrokerClassifier.objects.filter( cferconds )
-            for cur in curcfers:
-                keycfer = ( f"{cur.brokerName}_{cur.brokerVersion}_"
-                            f"{cur.classifierName}_{cur.classifierParams}" )
-                classifiers[ keycfer ] = cur
+            sigstr = ( f"{msg['msg']['brokerName']}_{msg['msg']['brokerVersion']}_"
+                       f"{msg['msg']['classifierName']}_{msg['msg']['classifierParams']}" )
+            if sigstr not in condcache:
+                newcond = ( models.Q( brokername = msg['msg']['brokerName'] ) &
+                            models.Q( brokerversion = msg['msg']['brokerVersion'] ) &
+                            models.Q( classifiername = msg['msg']['classifierName'] ) &
+                            models.Q( classifierparams = msg['msg']['classifierParams'] ) )
+                cferconds |= newcond
+            condcache.add( sigstr )
+        curcfers = BrokerClassifier.objects.filter( cferconds )
+        for cur in curcfers:
+            keycfer = ( f"{cur.brokername}_{cur.brokerversion}_"
+                        f"{cur.classifiername}_{cur.classifierparams}" )
+            classifiers[ keycfer ] = cur
         logger.debug( f'Found {len(classifiers)} existing classifiers.' )
                 
         # Create new classifiers as necessary
@@ -994,15 +1059,14 @@ class BrokerMessage(models.Model):
         addedkeys = set()
         kwargses = []
         for msg in messages:
-            for cfication in msg['msg']['classifications']:
-                keycfer = ( f"{msg['msg']['brokerName']}_{msg['msg']['brokerVersion']}_"
-                            f"{cfication['classifierName']}_{cfication['classifierParams']}" )
-                if ( keycfer not in classifiers.keys() ) and ( keycfer not in addedkeys ):
-                    kwargses.append( { 'brokername': msg['msg']['brokerName'],
-                                       'brokerversion': msg['msg']['brokerVersion'],
-                                       'classifiername': cfication['classifierName'],
-                                       'classifierparams': cfication['classifierParams'] } )
-                    addedkeys.add( keycfer )
+            keycfer = ( f"{msg['msg']['brokerName']}_{msg['msg']['brokerVersion']}_"
+                        f"{msg['msg']['classifierName']}_{msg['msg']['classifierParams']}" )
+            if ( keycfer not in classifiers.keys() ) and ( keycfer not in addedkeys ):
+                kwargses.append( { 'brokername': msg['msg']['brokerName'],
+                                   'brokerversion': msg['msg']['brokerVersion'],
+                                   'classifiername': msg['msg']['classifierName'],
+                                   'classifierparams': msg['msg']['classifierParams'] } )
+                addedkeys.add( keycfer )
         ncferstoadd = len(kwargses)
         logger.debug( f'Adding {ncferstoadd} new classifiers.' )
         if ncferstoadd > 0:
@@ -1010,8 +1074,8 @@ class BrokerMessage(models.Model):
             batch = list( itertools.islice( objs, len(kwargses) ) )
             newcfers = BrokerClassifier.objects.bulk_create( batch, len(kwargses) )
             for curcfer in newcfers:
-                keycfer = ( f"{curcfer.brokerName}_{curcfer.brokerVersion}_"
-                            f"{curcfer.classifierName}_{curcfer.classifierParams}" )
+                keycfer = ( f"{curcfer.brokername}_{curcfer.brokerversion}_"
+                            f"{curcfer.classifiername}_{curcfer.classifierparams}" )
                 classifiers[ keycfer ] = curcfer
                 # logger.debug( f'key: {keycfer}; brokerName: {curcfer.brokerName}; '
                 #                f'brokerVersion: {curcfer.brokerVersion}; classifierName: {curcfer.ClassifierName}; '
@@ -1027,9 +1091,9 @@ class BrokerMessage(models.Model):
             if len( msg['msg']['classifications'] ) == 0:
                 continue
             keymess = ( f"{msg['msgoffset']}_{msg['topic']}_{msg['msg']['alertId']}" )
+            keycfer = ( f"{msg['msg']['brokerName']}_{msg['msg']['brokerVersion']}_"
+                        f"{msg['msg']['classifierName']}_{msg['msg']['classifierParams']}" )
             for cfication in msg['msg']['classifications']:
-                keycfer = ( f"{msg['msg']['brokerName']}_{msg['msg']['brokerVersion']}_"
-                            f"{cfication['classifierName']}_{cfication['classifierParams']}" )
                 kwargs = { 'dbmessage': messageobjects[keymess],
                            'classifier_id': classifiers[keycfer].classifier_id,
                            'classid': cfication['classId'],
