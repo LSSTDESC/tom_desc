@@ -140,7 +140,7 @@ class Command(BaseCommand):
         dump = astropy.io.ascii.read( dumpfile )
 
         if len( options['files'] ) == 0:
-            headfiles = direc.glob( '*HEAD.FITS.gz' )
+            headfiles = list( direc.glob( '*HEAD.FITS.gz' ) )
         else:
             headfiles = options['files']
             headfiles = [ direc / h for h in headfiles ]
@@ -161,7 +161,10 @@ class Command(BaseCommand):
             photfiles.append( photfile )
 
         # Load the HEAD/PHOT files
-            
+
+        self.logger.debug( f'Headfiles: {[headfiles]}' )
+        self.logger.debug( f'Photfiles: {[photfiles]}' )
+        
         for headfile, photfile in zip( headfiles, photfiles ):
             self.logger.info( f"Reading {headfile.name}" )
 
