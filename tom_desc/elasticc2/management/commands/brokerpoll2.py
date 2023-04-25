@@ -75,7 +75,6 @@ class BrokerConsumer:
 
         self.nmessagesconsumed = 0
 
-        self.create_connection()
 
     @property
     def reset( self ):
@@ -154,13 +153,14 @@ class BrokerConsumer:
                                f"{added['addedclassifications']} classifications. " )
 
     def poll( self, restart_time=datetime.timedelta(minutes=30) ):
+        self.create_connection()
         while True:
             if self._updatetopics:
                 self.update_topics()
             strio = io.StringIO("")
             if len(self.consumer.topics) == 0:
-                self.logger.info( "No topics, will wait 1m and reconnect." )
-                time.sleep(60)
+                self.logger.info( "No topics, will wait 10s and reconnect." )
+                time.sleep(10)
             else:
                 self.logger.info( f"Subscribed to topics: {self.consumer.topics}; starting poll loop." )
                 self.countlogger.info( f"Subscribed to topics: {self.consumer.topics}; starting poll loop." )
@@ -184,6 +184,13 @@ class BrokerConsumer:
                     self.logger.warning( otherstrio.getvalue() )
                     strio.write( f"Exception polling: {str(e)}. " )
 
+            if self.pipe.poll():
+                msg = self.pipe.recv()
+                if ( 'command' in msg ) and ( msg['command'] == 'die' ):
+                    self.logger.info( "No topics, but also exiting broker poll due to die command." )
+                    self.countlogger.info( "No topics, but also existing broker poll due to die command." )
+                    self.close_connection()
+                    return
             strio.write( "Reconnecting.\n" )
             self.logger.info( strio.getvalue() )
             self.countlogger.info( strio.getvalue() )
@@ -286,6 +293,8 @@ class AlerceConsumer(BrokerConsumer):
         self.consumer.subscribe( self.topics )
 
 # =====================================================================
+# To make this die cleanly, send the USR1 signal to it
+# (SIGTERM doesn't work because django captures that, sadly.)
 
 class Command(BaseCommand):
     help = 'Poll ELAsTiCC Brokers'
@@ -324,6 +333,8 @@ class Command(BaseCommand):
                        lambda sig, stack: self.logger.warning( f"{brokerclass.__name__} ignoring SIGINT" ) )
         signal.signal( signal.SIGTERM,
                        lambda sig, stack: self.logger.warning( f"{brokerclass.__name__} ignoring SIGTERM" ) )
+        signal.signal( signal.SIGUSR1,
+                       lambda sig, stack: self.logger.warning( f"{brokerclass.__name__} ignoring SIGUSR1" ) )
         consumer = brokerclass( pipe=pipe, **options )
         consumer.poll()
 
@@ -333,6 +344,7 @@ class Command(BaseCommand):
         self.mustdie = False
         signal.signal( signal.SIGTERM, lambda sig, stack: self.sigterm( "TERM" ) )
         signal.signal( signal.SIGINT, lambda sig, stack: self.sigterm( "INT" ) )
+        signal.signal( signal.SIGUSR1, lambda sig, stack: self.sigterm( "USR1" ) )
 
         brokerstodo = {}
         if options['do_alerce']:

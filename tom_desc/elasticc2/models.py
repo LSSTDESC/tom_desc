@@ -1018,12 +1018,13 @@ class BrokerMessage(models.Model):
                 origautocommit = None
                 conn = None
         
-        # Create TOM targets
-        
-        targobjids = [ row['diaobject_id'] for row in newobjs ]
-        targobjras = [ row['ra'] for row in newobjs ]
-        targobjdecs = [ row['decl'] for row in newobjs ]
-        DiaObjectOfTarget.maybe_new_elasticc_targets( targobjids, targobjras, targobjdecs )
+        # Create TOM targets if necessary
+
+        if len(newobjs) > 0:
+            targobjids = [ row['diaobject_id'] for row in newobjs ]
+            targobjras = [ row['ra'] for row in newobjs ]
+            targobjdecs = [ row['decl'] for row in newobjs ]
+            DiaObjectOfTarget.maybe_new_elasticc_targets( targobjids, targobjras, targobjdecs )
 
         # Figure out which classifiers already exist.
         # I need to figure out if there's a way to tell Django
@@ -1109,7 +1110,7 @@ class BrokerMessage(models.Model):
         return { "addedmsgs": len(addedmsgs),
                  "addedclassifiers": ncferstoadd,
                  "addedclassifications": len(newcfications),
-                 "firstbrokerMessageId": None if len(addedmsgs)==0 else addedmsgs[0].brokerMessageId }
+                 "firstbrokermessage_id": None if len(addedmsgs)==0 else addedmsgs[0].brokermessage_id }
         
 class BrokerClassifier(models.Model):
     """Model for a classifier producing an ELAsTiCC broker classification."""
@@ -1148,7 +1149,7 @@ class BrokerClassification(psqlextra.models.PostgresPartitionedModel):
         ]
     
     classification_id = models.BigAutoField(primary_key=True)
-    dbMessage = models.ForeignKey( BrokerMessage, db_column='brokermessage_id', on_delete=models.CASCADE, null=True )
+    dbmessage = models.ForeignKey( BrokerMessage, db_column='brokermessage_id', on_delete=models.CASCADE, null=True )
     # I really want to make a foreign key here, but I haven't figured
     # out how to get Django to succesfully create a unique
     # constraint and a partition on a foreign key.  Either I get try to
