@@ -27,8 +27,8 @@ class Command(BaseCommand):
     def add_arguments( self, parser) :
         parser.add_argument( '--start', default='2022-09-28',
                              help='YYYY-MM-DD of first day to look at (default: 2022-09-28)' )
-        parser.add_argument( '--end', default=None,
-                             help='YYYY-MM-DD of last day to look at (default: current day - 1)' )
+        parser.add_argument( '--end', default='2023-01-15',
+                             help='YYYY-MM-DD of last day to look at (default: 2023-01-15)' )
         parser.add_argument( '--hour', default=18,
                              help='UTC Hour where the "day" starts (default: 18)' )
 
