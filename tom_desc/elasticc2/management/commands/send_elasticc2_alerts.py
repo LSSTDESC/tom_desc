@@ -46,6 +46,8 @@ class Command(BaseCommand):
                              help='File with AVRO schema' )
         parser.add_argument( '--daily-delay', type=float, default=0.,
                              help="Delay this many seconds between simulated MJDs" )
+        parser.add_argument( '-f', '--flush-every', default=1000, type=int,
+                             help="Flush the kafka producer every this man alerts" )
         parser.add_argument( '-l', '--log-every', default=10000, type=int,
                              help="Log alerts sent at this interval; 0=don't log" )
         parser.add_argument( '-r', '--runningfile', default=f'{_rundir}/isrunning.log',
@@ -124,23 +126,27 @@ class Command(BaseCommand):
                                                        'linger.ms': 50 } )
 
             ids_produced = []
+            totflushed = 0
             lastmjd = -99999
             nextlog = 0
             for i, alert in enumerate( alerts ):
 
                 if ( options['log_every'] > 0 ) and ( i >= nextlog ):
-                    self.logger.info( f"Have sent {i} of {len(alerts)} alerts" )
+                    self.logger.info( f"Have processed {i} of {len(alerts)} alerts, {totflushed} flushed." )
                     nextlog += options['log_every']
 
                 if ( lastmjd > 0 ) and ( alert.midPointTai - lastmjd > 0.5 ):
                     if len(ids_produced) > 0 :
                         if options['do']:
                             producer.flush()
+                            totflushed += len( ids_produced )
                             self.update_alertsent( ids_produced )
                     if options['daily_delay'] > 0:
                         self.logger.info( f"Sleeping {options['daily_delay']} at end of mjd {lastmjd}" )
                         time.sleep( options['daily_delay'] )
-                    lastmjd = alerts.midPointTai
+                    self.logger.info( f'Jumping from day {lastmjd} to {alert.midPointTai}; '
+                                      f'have flushed {totflushed} alerts total.' )
+                    lastmjd = alert.midPointTai
                     ids_produced = []
 
                 msgio = io.BytesIO()
@@ -149,11 +155,20 @@ class Command(BaseCommand):
                     producer.produce( options['kafka_topic'], msgio.getvalue() )
                     ids_produced.append( alert.ppdbalert_id )
 
+                if len(ids_produced) >= options['flush_every']:
+                    if options['do']:
+                        producer.flush()
+                        totflushed += len( ids_produced )
+                        self.update_alertsent( ids_produced )
+                    ids_produced = []
+                    
             if len(ids_produced) > 0:
                 if options['do']:
                     producer.flush()
+                    totflushed += len( ids_produced )
                     self.update_alertsent( ids_produced )
+                ids_produced = []
 
-            self.logger.info( f"**** Done sending {len(alerts)} alerts ****" )
+            self.logger.info( f"**** Done sending {len(alerts)} alerts; {totflushed} flushed ****" )
         finally:
             runningfile.unlink()
