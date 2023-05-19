@@ -1,17 +1,95 @@
+import sys
 import re
 import json
 import datetime
 
 import django.db
 import django.views
-from django.http import HttpResponse, JsonResponse, HttpResponseForbidden
-from django.shortcuts import render
+import django.forms.models
+from django.http import HttpResponse, JsonResponse, HttpResponseForbidden, HttpResponseBadRequest
+from django.shortcuts import render, get_object_or_404
 from django.contrib.auth.mixins import PermissionRequiredMixin, LoginRequiredMixin
 
-from elasticc2.models import BrokerMessage
+import rest_framework
 
-# Create your views here.
+from elasticc2.models import BrokerMessage, PPDBDiaObject, PPDBDiaSource, PPDBDiaForcedSource
+from elasticc2.serializers import PPDBDiaObjectSerializer, PPDBDiaSourceSerializer, PPDBDiaForcedSourceSerializer
 
+# ======================================================================
+# DJango REST interfaces
+
+class PPDBDiaObjectViewSet( rest_framework.viewsets.ReadOnlyModelViewSet ):
+    permission_classes = [ rest_framework.permissions.IsAuthenticated ]
+    queryset = PPDBDiaObject.objects.all()
+    serializer_class = PPDBDiaObjectSerializer
+
+class PPDBDiaSourceViewSet( rest_framework.viewsets.ReadOnlyModelViewSet ):
+    permission_classes = [ rest_framework.permissions.IsAuthenticated ]
+    queryset = PPDBDiaSource.objects.all()
+    serializer_class = PPDBDiaSourceSerializer
+
+class PPDBDiaForcedSourceViewSet( rest_framework.viewsets.ReadOnlyModelViewSet ):
+    permission_classes = [ rest_framework.permissions.IsAuthenticated ]
+    queryset = PPDBDiaForcedSource.objects.all()
+    serializer_class = PPDBDiaForcedSourceSerializer
+
+class PPDBDiaObjectSourcesViewSet( rest_framework.viewsets.ReadOnlyModelViewSet ):
+    permission_classes = [ rest_framework.permissions.IsAuthenticated ]
+    queryset = PPDBDiaObject.objects.all()
+    serializer_class = None
+
+    def list( self, request, pk=None ):
+        return rest_framework.response.Response( status=rest_framework.status.HTTP_400_BAD_REQUEST,
+                                                 data="Must give an object id" )
+    
+    def retrieve( self, request, pk=None ):
+        obj = get_object_or_404( self.queryset, pk=pk )
+        objserializer = PPDBDiaObjectSerializer( obj )
+        objdict = dict( objserializer.data )
+        srcs = PPDBDiaSource.objects.filter( ppdbdiaobject_id=pk )
+        objdict[ 'ppdbdiasources' ] = []
+        for src in srcs:
+            ser = PPDBDiaSourceSerializer( src )
+            objdict[ 'ppdbdiasources' ].append( ser.data )
+        objdict[ 'ppdbdiaforcedsources' ] = []
+        frcsrcs = PPDBDiaForcedSource.objects.filter( ppdbdiaobject_id=pk )
+        for src in frcsrcs:
+            ser = PPDBDiaForcedSourceSerializer( src )
+            objdict[ 'ppdbdiaforcedsources' ].append( ser.data )
+        return rest_framework.response.Response( objdict )
+
+class PPDBDiaObjectAndPrevSourcesForSourceViewSet( rest_framework.viewsets.ReadOnlyModelViewSet ):
+    permission_classes = [ rest_framework.permissions.IsAuthenticated ]
+    queryset = PPDBDiaSource.objects.all()
+    serializer_class = None
+
+    def list( self, request, pk=None ):
+        return rest_framework.response.Response( status=rest_framework.status.HTTP_400_BAD_REQUEST,
+                                                 data="Must give a source id" )
+
+    def retrieve( self, request, pk=None ):
+        sys.stderr.write( f"Trying to get source {pk}" )
+        src = get_object_or_404( PPDBDiaSource.objects.all(), pk=pk )
+        sys.stderr.write( f"Trying to get object {src.ppdbdiaobject_id}" )
+        obj = get_object_or_404( PPDBDiaObject.objects.all(), pk=src.ppdbdiaobject_id )
+        objserializer = PPDBDiaObjectSerializer( obj )
+        objdict = dict( objserializer.data )
+        objdict[ 'ppdbdiasources' ] = []
+        objdict[ 'ppdbdiaforcedsources' ] = []
+        srcs = ( PPDBDiaSource.objects
+                 .filter( ppdbdiaobject_id=src.ppdbdiaobject_id )
+                 .filter( midpointtai__lte=src.midpointtai ) )
+        frcsrcs = ( PPDBDiaForcedSource.objects
+                    .filter( ppdbdiaobject_id=src.ppdbdiaobject_id )
+                    .filter( midpointtai__lte=src.midpointtai ) )
+        for src in srcs:
+            ser = PPDBDiaSourceSerializer( src )
+            objdict[ 'ppdbdiasources' ].append( ser.data )
+        for src in frcsrcs:
+            ser = PPDBDiaForcedSourceSerializer( src )
+            objdict[ 'ppdbdiaforcedsources' ].append( ser.data )
+        return rest_framework.response.Response( objdict )
+    
 # ======================================================================
 # A REST interface (but not using the Django REST framework) for
 # viewing and posting broker messages.  Posting broker messages
