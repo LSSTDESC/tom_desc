@@ -110,6 +110,8 @@ class BrokerConsumer:
         if self._reset and ( self.topics is not None ):
             self.countlogger.info( f"*************** Resetting to start of broker kafka stream ***************" )
             self.reset_to_start()
+            # Only want to reset the first time the connection is opened!
+            self._reset = False
 
         self.countlogger.info( f"**************** Consumer connection opened *****************" )
 

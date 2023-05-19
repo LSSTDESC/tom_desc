@@ -628,7 +628,7 @@ class DiaSource(Createable):
 # Same status as DiaSource (see comment above)
 class DiaForcedSource(Createable):
     diaforcedsource_id = models.BigIntegerField( primary_key=True, unique=True, db_index=True )
-    diaobject = models.ForeignKey( PPDBDiaObject, db_column='diaobject_id', on_delete=models.CASCADE )
+    diaobject = models.ForeignKey( DiaObject, db_column='diaobject_id', on_delete=models.CASCADE )
     midpointtai = models.FloatField( db_index=True )
     filtername = models.TextField()
     psflux = models.FloatField()
@@ -881,6 +881,7 @@ class BrokerMessage(models.Model):
                             "  SELECT ppdbdiaobject_id, MAX(midpointtai) FROM elasticc2_ppdbdiasource "
                             "    WHERE ppdbdiasource_id IN %(sourceids)s GROUP BY ppdbdiaobject_id",
                             { 'sourceids': tuple( sourceids ) } )
+            cursor.execute( "CREATE INDEX ON all_objids(id)" );
             # ****
             # cursor.execute( "SELECT COUNT(*) AS count FROM all_objids" )
             # row = cursor.fetchone()
@@ -922,6 +923,7 @@ class BrokerMessage(models.Model):
                             "  SELECT s.ppdbdiasource_id FROM elasticc2_ppdbdiasource s "
                             "  INNER JOIN all_objids a ON s.ppdbdiaobject_id=a.id "
                             "  WHERE s.midpointtai <= a.latesttai" )
+            cursor.execute( "CREATE INDEX ON allsourceids(id)" )
             # ****
             # cursor.execute( "SELECT COUNT(*) AS count FROM allsourceids" )
             # row = cursor.fetchone()
@@ -957,6 +959,7 @@ class BrokerMessage(models.Model):
                             "  SELECT s.ppdbdiaforcedsource_id FROM elasticc2_ppdbdiaforcedsource s "
                             "  INNER JOIN all_objids a ON s.ppdbdiaobject_id=a.id "
                             "  WHERE s.midpointtai <= a.latesttai" )
+            cursor.execute( "CREATE INDEX ON allforcedids(id)" )
             # ****
             # cursor.execute( "SELECT COUNT(*) AS count FROM allforcedids" )
             # row = cursor.fetchone()
