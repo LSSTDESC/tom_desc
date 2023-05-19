@@ -923,6 +923,7 @@ class BrokerMessage(models.Model):
                             "  SELECT s.ppdbdiasource_id FROM elasticc2_ppdbdiasource s "
                             "  INNER JOIN all_objids a ON s.ppdbdiaobject_id=a.id "
                             "  WHERE s.midpointtai <= a.latesttai" )
+            cursor.execute( "CREATE INDEX ON allsourceids(id)" )
             # ****
             # cursor.execute( "SELECT COUNT(*) AS count FROM allsourceids" )
             # row = cursor.fetchone()
@@ -958,6 +959,7 @@ class BrokerMessage(models.Model):
                             "  SELECT s.ppdbdiaforcedsource_id FROM elasticc2_ppdbdiaforcedsource s "
                             "  INNER JOIN all_objids a ON s.ppdbdiaobject_id=a.id "
                             "  WHERE s.midpointtai <= a.latesttai" )
+            cursor.execute( "CREATE INDEX ON allforcedids(id)" )
             # ****
             # cursor.execute( "SELECT COUNT(*) AS count FROM allforcedids" )
             # row = cursor.fetchone()
