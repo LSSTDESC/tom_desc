@@ -61,7 +61,7 @@ class TomClient:
             # designed for use in API scripts like this one, rather than desgined
             # for interactive users.
             raise RuntimeError( "Failed to log in.  I think.  Put in a debug break and look at res.text" )
-        self._rqs.update = { 'X-CSRFTokien': self._rqs.cookies['csrftoken'] }
+        self._rqs.headers.update( { 'X-CSRFToken': self._rqs.cookies['csrftoken'] } )
 
     def request( self, method="GET", page=None, **kwargs ):
         """Send a request to the TOM
