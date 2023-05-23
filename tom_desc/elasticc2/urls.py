@@ -12,5 +12,11 @@ router.register( f'ppdbdiaobjectwithsources', views.PPDBDiaObjectSourcesViewSet 
 router.register( f'ppdbdiaobjectofsource', views.PPDBDiaObjectAndPrevSourcesForSourceViewSet )
 
 urlpatterns = [
-    path( '', include( ( router.urls, 'elasticc' ), namespace=app_name ) )
+    path( '', views.Elasticc2MainView.as_view(), name='elasticc2' ),
+
+    path( 'adminsummary', views.Elasticc2AdminSummary.as_view() ),
+    path( 'alertstreamhists', views.Elasticc2AlertStreamHistograms.as_view() ),
+    path( 'classifiers', views.Elasticc2KnownClassifiers.as_view() ),
+    
+    path( '', include( ( router.urls, 'elasticc2' ), namespace=app_name ) )
 ]

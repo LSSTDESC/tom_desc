@@ -1,19 +1,131 @@
 import sys
 import re
-import json
+import pathlib
 import datetime
+import json
+import logging
 
 import django.db
 import django.views
 import django.forms.models
+from django.db import transaction, connection
+from django.db.models import Q
 from django.http import HttpResponse, JsonResponse, HttpResponseForbidden, HttpResponseBadRequest
 from django.shortcuts import render, get_object_or_404
 from django.contrib.auth.mixins import PermissionRequiredMixin, LoginRequiredMixin
+from django.template import loader
 
 import rest_framework
 
-from elasticc2.models import BrokerMessage, PPDBDiaObject, PPDBDiaSource, PPDBDiaForcedSource
+from elasticc2.models import PPDBDiaObject, PPDBDiaSource, PPDBDiaForcedSource, PPDBAlert, DiaObjectTruth
+from elasticc2.models import DiaObject, DiaSource, DiaForcedSource, BrokerMessage, BrokerClassifier
 from elasticc2.serializers import PPDBDiaObjectSerializer, PPDBDiaSourceSerializer, PPDBDiaForcedSourceSerializer
+
+# I tried inherting from the root logger, but it
+#  doesn't seem to have the formatting built in;
+#  I guess djano makes its own formatting instead
+#  of using logging's.  Sigh.
+_logger = logging.getLogger(__name__)
+_logout = logging.StreamHandler( sys.stderr )
+_formatter = logging.Formatter( f'[%(asctime)s - %(levelname)s] - %(message)s' )
+_logout.setFormatter( _formatter )
+_logger.propagate = False
+_logger.addHandler( _logout )
+# _logger.setLevel( logging.INFO )
+_logger.setLevel( logging.DEBUG )
+
+# ======================================================================
+
+class Elasticc2MainView( LoginRequiredMixin, django.views.View ):
+    def get( self, request ):
+        templ = loader.get_template( "elasticc2/elasticc2.html" )
+        return HttpResponse( templ.render( {}, request ) )
+
+# ======================================================================
+
+class Elasticc2KnownClassifiers( LoginRequiredMixin, django.views.View ):
+    def get( self, request ):
+        templ = loader.get_template( 'elasticc2/classifiers.html' )
+
+        cfers = list( BrokerClassifier.objects.all() )
+        cfers.sort( key=lambda x : f"{x.brokername}{x.brokerversion}{x.classifiername}{x.classifierparams}" )
+
+        context = { "cfers": [ { 'id': x.classifier_id,
+                                 'brokername': x.brokername,
+                                 'brokerversion': x.brokerversion,
+                                 'classifiername': x.classifiername,
+                                 'classifierparams': x.classifierparams }
+                               for x in cfers ] }
+        return HttpResponse( templ.render( context, request ) )
+
+
+# ======================================================================
+
+class Elasticc2AdminSummary( PermissionRequiredMixin, django.views.View ):
+    permission_required = 'elasticc.elasticc_admin'
+    raise_exception = True
+
+    def get( self, request, info=None ):
+        return self.post( request, info )
+
+    def post( self, request, info=None ):
+        templ = loader.get_template( "elasticc2/admin_summary.html" )
+        context = { "testing": "Hello, world!" }
+
+        context['tabcounts'] = []
+        # context['tabcounts'] = [ { 'name': 'blah', 'count': 42 } ]
+        for tab in [ PPDBDiaObject, PPDBDiaSource, PPDBDiaForcedSource, DiaObjectTruth, PPDBAlert,
+                     DiaObject, DiaSource, DiaForcedSource ]:
+            context['tabcounts'].append( { 'name': tab.__name__,
+                                           'count': tab.objects.count() } )
+            if tab == PPDBAlert:
+                notdated = tab.objects.filter( alertsenttimestamp=None ).count()
+                dated = tab.objects.filter( ~Q(alertsenttimestamp=None) ).count()
+                context['tabcounts'][-1]['sent'] = dated
+                context['tabcounts'][-1]['unsent'] = notdated
+        # _logger.info( f'context = {context}' )
+
+        with connection.cursor() as cursor:
+            cursor.execute( 'SELECT COUNT(o.diaobject_id),t.gentype,m.classid,m.description '
+                            'FROM elasticc2_diaobject o '
+                            'LEFT JOIN elasticc2_diaobjecttruth t ON t.ppdbdiaobject_id=o.diaobject_id '
+                            'LEFT JOIN elasticc2_gentypeofclassid m ON m.gentype=t.gentype '
+                            'GROUP BY t.gentype,m.classid,m.description '
+                            'ORDER BY m."classid"' )
+            rows=cursor.fetchall()
+            context['objtypecounts'] = rows
+
+        return HttpResponse( templ.render( context, request ) )
+
+# ======================================================================    
+
+class Elasticc2AlertStreamHistograms( LoginRequiredMixin, django.views.View ):
+    def get( self, request, info=None ):
+        return self.post( request, info )
+
+    def post( self, request, info=None ):
+        templ = loader.get_template( "elasticc2/alertstreamhists.html" )
+        context = { 'weeks': {} }
+
+        tmpldir = pathlib.Path(__file__).parent / "static/elasticc2/alertstreamhists"
+        _logger.debug( f"Looking in directory {tmpldir}" )
+        files = list( tmpldir.glob( "*.svg" ) )
+        files.sort()
+        _logger.debug( f"Found {len(files)} files" )
+        fnamematch = re.compile( "^([0-9]{4})-([0-9]{2})-([0-9]{2})\.svg$" )
+        for fname in files:
+            match = fnamematch.search( fname.name )
+            if match is not None:
+                date = datetime.date( int(match.group(1)), int(match.group(2)), int(match.group(3)) )
+                year, week, weekday = date.isocalendar()
+                wk = f"{year} week {week}"
+                if wk not in context['weeks']:
+                    context['weeks'][wk] = {}
+                context['weeks'][wk][date.strftime( "%a %Y %b %d" )] = fname.name
+
+        # _logger.info( f"Context is: {context}" )
+        return HttpResponse( templ.render( context, request ) )
+
 
 # ======================================================================
 # DJango REST interfaces
@@ -134,13 +246,13 @@ class BrokerMessageView(PermissionRequiredMixin, django.views.View):
                 # business at the top.
                 params={ 'objids': tuple( str(objid).split(",") ) }
                 with django.db.connection.cursor() as cursor:
-                    cursor.execute( 'SELECT COUNT(b."brokerMessageId") FROM elasticc_brokermessage b'
-                                    ' INNER JOIN elasticc_diasource s ON b."diaSourceId"=s."diaSourceId"'
+                    cursor.execute( 'SELECT COUNT(b."brokerMessageId") FROM elasticc2_brokermessage b'
+                                    ' INNER JOIN elasticc2_diasource s ON b."diaSourceId"=s."diaSourceId"'
                                     ' WHERE s."diaObjectId" IN %(objids)s', params=params )
                     row = cursor.fetchone()
                     n = row[0]
                 msgs = BrokerMessage.objects.raw(
-                    'SELECT * FROM elasticc_brokermessage b INNER JOIN elasticc_diasource s'
+                    'SELECT * FROM elasticc2_brokermessage b INNER JOIN elasticc2_diasource s'
                     ' ON b."diaSourceId"=s."diaSourceId" WHERE s."diaObjectId" IN %(objids)s', params=params )
 
             elif ( len(args) == 1 ) and ( ( "sourceid" in args.keys() ) or ( "diasourceid" in args.keys() ) ):
