@@ -18,5 +18,9 @@ urlpatterns = [
     path( 'alertstreamhists', views.Elasticc2AlertStreamHistograms.as_view() ),
     path( 'classifiers', views.Elasticc2KnownClassifiers.as_view() ),
     
+    path('brokermessage/<int:info>/', views.BrokerMessageView.as_view(), name='brokermesssage-int'),
+    path('brokermessage/<path:info>/', views.BrokerMessageView.as_view(), name='brokermessage-path'),
+    path('brokermessage/', views.BrokerMessageView.as_view(), name='brokermessage-noparam'),
+
     path( '', include( ( router.urls, 'elasticc2' ), namespace=app_name ) )
 ]
