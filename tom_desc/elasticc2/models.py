@@ -22,6 +22,10 @@ from django.contrib.auth.models import Group
 # namespace, not in the elasticc2 namespace, which will cause
 # no end of confusion.
 #
+# I considered making an elasticc_base class, but chances are
+# that if we do ELAsTiCC 3, schema will change enough again
+# to make it not worth the effor I'd put in now.
+#
 # So, lots of copied code.
 
 
@@ -664,7 +668,7 @@ class DiaObjectOfTarget(models.Model):
     def maybe_new_elasticc_targets( cls, objids, ras, decs ):
         """Given a list of objects (with coordinates), add new TOM targets for objects that don't already exist
         """
-        _logger.debug( f"objids={objids}" )
+        # _logger.debug( f"objids={objids}" )
         preexisting = cls.objects.filter( diaobject_id__in=objids )
         preexistingids = [ o.diaobject_id for o in preexisting ]
         newobjs = [ ( objids[i], ras[i], decs[i] )
@@ -675,7 +679,7 @@ class DiaObjectOfTarget(models.Model):
         # the database queries more efficient.  However, that would bypass
         # any hooks that tom_targets has added to its save() method,
         # which scares me.
-        _logger.debug( f'newobjs = {newobjs}' )
+        # _logger.debug( f'newobjs = {newobjs}' )
         newtargs = []
         newobjids = []
         for newobj in newobjs:
@@ -941,7 +945,7 @@ class BrokerMessage(models.Model):
             cursor.execute( "CREATE TEMP TABLE new_srcs ( LIKE elasticc2_diasource )" )
             newsrcfields = ','.join( DiaSource._create_kws )
             ppdbsrcfields = ','.join( [ f"s.{i}" for i in PPDBDiaSource._create_kws ] )
-            _logger.debug( f'ppdbsrcfields = {ppdbsrcfields}' )
+            # _logger.debug( f'ppdbsrcfields = {ppdbsrcfields}' )
             cursor.execute( f"INSERT INTO new_srcs({newsrcfields}) "
                             f" SELECT {ppdbsrcfields} FROM elasticc2_ppdbdiasource s "
                             f" INNER JOIN allsourceids a ON s.ppdbdiasource_id=a.id "
@@ -954,48 +958,53 @@ class BrokerMessage(models.Model):
             # ****
             cursor.execute( f"INSERT INTO elasticc2_diasource SELECT * FROM new_srcs" )
 
-            cursor.execute( "CREATE TEMP TABLE allforcedids( id bigint )" )
-            cursor.execute( "INSERT INTO allforcedids "
-                            "  SELECT s.ppdbdiaforcedsource_id FROM elasticc2_ppdbdiaforcedsource s "
-                            "  INNER JOIN all_objids a ON s.ppdbdiaobject_id=a.id "
-                            "  WHERE s.midpointtai <= a.latesttai" )
-            cursor.execute( "CREATE INDEX ON allforcedids(id)" )
-            # ****
-            # cursor.execute( "SELECT COUNT(*) AS count FROM allforcedids" )
-            # row = cursor.fetchone()
-            # _logger.debug( f'allforcedids has {row["count"]} rows' )
-            # ****
-            cursor.execute( "CREATE TEMP TABLE existingforcedids( id bigint )" )
-            cursor.execute( "INSERT INTO existingforcedids "
-                            "  SELECT a.id FROM allforcedids a "
-                            "  INNER JOIN elasticc2_diaforcedsource s ON s.diaforcedsource_id=a.id" )
-            # ****
-            # cursor.execute( "SELECT COUNT(*) AS count FROM existingforcedids" )
-            # row = cursor.fetchone()
-            # _logger.debug( f'existingforcedids {row["count"]} rows' )
-            # ****
-            cursor.execute( "CREATE TEMP TABLE new_forced ( LIKE elasticc2_diaforcedsource )" )
-            newforcedfields = ','.join( DiaForcedSource._create_kws )
-            ppdbforcedfields = ','.join( [ f"s.{i}" for i in PPDBDiaForcedSource._create_kws ] )
-            cursor.execute( f"INSERT INTO new_forced({newforcedfields}) "
-                            f" SELECT {ppdbforcedfields} FROM elasticc2_ppdbdiaforcedsource s "
-                            f" INNER JOIN allforcedids a ON s.ppdbdiaforcedsource_id=a.id "
-                            f" WHERE s.ppdbdiaforcedsource_id NOT IN "
-                            f"   ( SELECT id FROM existingforcedids )" )
-            # ****
-            # cursor.execute( "SELECT COUNT(*) AS count FROM new_forced" )
-            # row = cursor.fetchone()
-            # _logger.debug( f'new_forced {row["count"]} rows' )
-            # ****
-            cursor.execute( f"INSERT INTO elasticc2_diaforcedsource SELECT * FROM new_forced" )
+            # The ppdbdiaforcedsource table is too big (600 million rows), making
+            #  this a very slow step.  Rather than doing this constantly with
+            #  object insertion, I'll do a once-daily massive update of the
+            #  forced source table in a cronjob of a management command
+            
+            # cursor.execute( "CREATE TEMP TABLE allforcedids( id bigint )" )
+            # cursor.execute( "INSERT INTO allforcedids "
+            #                 "  SELECT s.ppdbdiaforcedsource_id FROM elasticc2_ppdbdiaforcedsource s "
+            #                 "  INNER JOIN all_objids a ON s.ppdbdiaobject_id=a.id "
+            #                 "  WHERE s.midpointtai <= a.latesttai" )
+            # cursor.execute( "CREATE INDEX ON allforcedids(id)" )
+            # # ****
+            # # cursor.execute( "SELECT COUNT(*) AS count FROM allforcedids" )
+            # # row = cursor.fetchone()
+            # # _logger.debug( f'allforcedids has {row["count"]} rows' )
+            # # ****
+            # cursor.execute( "CREATE TEMP TABLE existingforcedids( id bigint )" )
+            # cursor.execute( "INSERT INTO existingforcedids "
+            #                 "  SELECT a.id FROM allforcedids a "
+            #                 "  INNER JOIN elasticc2_diaforcedsource s ON s.diaforcedsource_id=a.id" )
+            # # ****
+            # # cursor.execute( "SELECT COUNT(*) AS count FROM existingforcedids" )
+            # # row = cursor.fetchone()
+            # # _logger.debug( f'existingforcedids {row["count"]} rows' )
+            # # ****
+            # cursor.execute( "CREATE TEMP TABLE new_forced ( LIKE elasticc2_diaforcedsource )" )
+            # newforcedfields = ','.join( DiaForcedSource._create_kws )
+            # ppdbforcedfields = ','.join( [ f"s.{i}" for i in PPDBDiaForcedSource._create_kws ] )
+            # cursor.execute( f"INSERT INTO new_forced({newforcedfields}) "
+            #                 f" SELECT {ppdbforcedfields} FROM elasticc2_ppdbdiaforcedsource s "
+            #                 f" INNER JOIN allforcedids a ON s.ppdbdiaforcedsource_id=a.id "
+            #                 f" WHERE s.ppdbdiaforcedsource_id NOT IN "
+            #                 f"   ( SELECT id FROM existingforcedids )" )
+            # # ****
+            # # cursor.execute( "SELECT COUNT(*) AS count FROM new_forced" )
+            # # row = cursor.fetchone()
+            # # _logger.debug( f'new_forced {row["count"]} rows' )
+            # # ****
+            # cursor.execute( f"INSERT INTO elasticc2_diaforcedsource SELECT * FROM new_forced" )
             
             cursor.execute( f"SELECT diaobject_id,ra,decl FROM new_objs" )
             newobjs = cursor.fetchall()
 
             # Turns out that temp tables aren't dropped at the end of a transaction
-            cursor.execute( "DROP TABLE new_forced" )
-            cursor.execute( "DROP TABLE existingforcedids" )
-            cursor.execute( "DROP TABLE allforcedids" )
+            # cursor.execute( "DROP TABLE new_forced" )
+            # cursor.execute( "DROP TABLE existingforcedids" )
+            # cursor.execute( "DROP TABLE allforcedids" )
             cursor.execute( "DROP TABLE new_srcs" )
             cursor.execute( "DROP TABLE existingsourceids" )
             cursor.execute( "DROP TABLE allsourceids" )
