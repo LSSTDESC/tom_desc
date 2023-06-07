@@ -186,7 +186,7 @@ class BaseDiaSource(Createable):
     _dict_kws = _create_kws
     
 class BaseDiaForcedSource(Createable):
-    forcedsource_id = models.BigIntegerField( primary_key=True, unique=True, db_index=True )
+    diaforcedsource_id = models.BigIntegerField( primary_key=True, unique=True, db_index=True )
 
     # IMPORTANT : subclasses need a freigh key into the right object table
     # diaobject = models.ForeignKey( BaseDiaObject, db_column='diaobject_id', on_delete=models.CASCADE )
@@ -332,7 +332,6 @@ class BaseObjectTruth(Createable):
     ra = models.FloatField( )
     dec = models.FloatField( )
     mwebv = models.FloatField( )
-    galnmatch = models.IntegerField( )
     galid = models.BigIntegerField( null=True )
     galzphot = models.FloatField( null=True )
     galzphoterr = models.FloatField( null=True )
@@ -363,7 +362,7 @@ class BaseObjectTruth(Createable):
     
     _pk = 'diaobject_id'
     _create_kws = [ 'diaobject_id', 'libid', 'sim_searcheff_mask', 'gentype', 'sim_template_index',
-                    'zcmb', 'zhelio', 'zcmb_smear', 'ra', 'dec', 'mwebv', 'galnmatch', 'galid', 'galzphot',
+                    'zcmb', 'zhelio', 'zcmb_smear', 'ra', 'dec', 'mwebv', 'galid', 'galzphot',
                     'galzphoterr', 'galsnsep', 'galsnddlr', 'rv', 'av', 'mu', 'lensdmu', 'peakmjd',
                     'mjd_detect_first', 'mjd_detect_last', 'dtseason_peak', 'peakmag_u', 'peakmag_g',
                     'peakmag_r', 'peakmag_i', 'peakmag_z', 'peakmag_y', 'snrmax', 'snrmax2', 'snrmax3',
@@ -381,8 +380,8 @@ class BaseObjectTruth(Createable):
     @classmethod
     def bulk_load_or_create( cls, data, kwmap=None ):
         """Pass an array of dicts."""
-        pks = [ i['ppdbdiaobject_id'] for i in data ]
-        diaobjs = list( self._objectclass.objects.filter( pk__in=pks ) )
+        pks = [ i['diaobject_id'] for i in data ]
+        diaobjs = list( cls._objectclass.objects.filter( pk__in=pks ) )
         objids = set( [ i.diaobject_id for i in diaobjs ] )
         datatoload = [ i for i in data if i['diaobject_id'] in objids ]
         if len(datatoload) > 0:
@@ -454,6 +453,8 @@ class PPDBAlert(BaseAlert):
 class DiaObjectTruth(BaseObjectTruth):
     diaobject = models.OneToOneField( PPDBDiaObject, db_column='diaobject_id',
                                       on_delete=models.CASCADE, null=False, primary_key=True )
+
+    _objectclass = PPDBDiaObject
 
     class Meta(BaseObjectTruth.Meta):
         abstract = False

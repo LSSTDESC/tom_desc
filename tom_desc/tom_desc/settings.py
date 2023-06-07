@@ -64,11 +64,12 @@ INSTALLED_APPS = [
     'tom_catalogs',
     'tom_observations',
     'tom_dataproducts',
+    'stream.apps.StreamConfig',
+    'automatisation.apps.AutomatisationConfig',
     'db.apps.DbConfig',
     'elasticc.apps.ElasticcConfig',
     'elasticc2.apps.Elasticc2Config',
-    'stream.apps.StreamConfig',
-    'automatisation.apps.AutomatisationConfig',
+    'tests.apps.TestsConfig',
 ]
 
 SITE_ID = 1

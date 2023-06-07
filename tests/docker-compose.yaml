@@ -26,6 +26,15 @@ services:
       retries: 5
     entrypoint: [ "bin/kafka-server-start.sh", "config/server.properties" ]
 
+  fakebroker:
+    depends_on:
+      kafka-server:
+        condition: service_healthy
+    image: registry.services.nersc.gov/raknop/fakebroker
+    build:
+      context: .
+      dockerfile: Dockerfile.fakebroker
+    
   postgres:
     image: registry.services.nersc.gov/raknop/tom-postgres
     build:
@@ -55,7 +64,12 @@ services:
       DB_USER: postgres
       DB_PASS: fragile
       DB_PORT: 5432
-    entrypoint: [ "python", "tom_desc/manage.py", "migrate" ]
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        python tom_desc/manage.py migrate
+        python tom_desc/manage.py create_test_superuser
 
   tom:
     depends_on:
@@ -69,7 +83,7 @@ services:
       - ${PWD}/django_secret_key:/secrets/django_secret_key
       - type: bind
         source: ../tom_desc
-        target: /tom_desc/tom_desc
+        target: /tom_desc
     environment:
       DB_NAME: tom_desc
       DB_HOST: postgres
@@ -83,6 +97,8 @@ services:
         condition: service_healthy
       tom:
         condition: service_started
+      fakebroker:
+        condition: service_started
     image: registry.services.nersc.gov/raknop/tom_desc_extcode
     build:
       context: ../
@@ -91,7 +107,13 @@ services:
       - ${PWD}/django_secret_key:/secrets/django_secret_key
       - type: bind
         source: ../tom_desc
-        target: /tom_desc/tom_desc
+        target: /tom_desc
+      - type: bind
+        source: .
+        target: /tests
+      - type: bind
+        source: ${ELASTICC2_TEST_DATA}
+        target: /elasticc2data
     environment:
       DB_NAME: tom_desc
       DB_HOST: postgres
@@ -99,3 +121,28 @@ services:
       DB_PASS: fragile
       DB_PORT: 5432
     entrypoint: [ "tail", "-f", "/etc/issue" ]
+
+
+  # runtests:
+  #   depends_on:
+  #     tom:
+  #       condition: service_started
+  #     kafka-server:
+  #       condition: service_healthy
+  #   image: registry.services.nersc.gov/raknop/tom_desc_extcode
+  #   build:
+  #     context: ../
+  #     dockerfile: docker_server_extcode/Dockerfile
+  #   volumes:
+  #     - ${PWD}/django_secret_key:/secrets/django_secret_key
+  #     - type: bind
+  #       source: ../tom_desc
+  #       target: /tom_desc
+  #     - type: bind
+  #       source: .
+  #       target: /tests
+  #     - type: bind
+  #       source: ${ELASTICC2_TEST_DATA}
+  #       target: /elasticc2data
+  #   working_dir: /tests
+  #   entrypoint: [ "pytest", "-v", "test_hello.py" ]

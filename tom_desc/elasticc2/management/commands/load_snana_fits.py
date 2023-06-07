@@ -10,10 +10,9 @@ import astropy.io
 # _rundir = pathlib.Path( __file__ ).parent
 
 from django.core.management.base import BaseCommand, CommandError
-from elasticc2.models import PPDBDiaObject, PPDBDiaForcedSource, PPDBDiaSource, PPDBAlert, DiaObjectTruth
 
 class Command(BaseCommand):
-    help = "Load SNANA FITS file into PPDB tables"
+    help = "Load SNANA FITS file into DiaObject/Source/ForcedSoruce/Truth tables"
 
     def __init__( self, *args, **kwargs ):
         super().__init__( *args, **kwargs )
@@ -45,6 +44,10 @@ class Command(BaseCommand):
                              help="Zeropoint to move all photometry to" )
         parser.add_argument( '-a', '--alert-zeropoint', default=31.4, type=float,
                              help="Zeropoint to use for alerts (and to store in the source table)" )
+        parser.add_argument( '--ppdb', action='store_true', default=False,
+                             help="Load the PPDB* tables" )
+        parser.add_argument( '--train', action='store_true', default=False,
+                             help='Load the Train* tables' )
         parser.add_argument( '--do', action='store_true', default=False,
                              help="Actually do it (otherwise, slowly reads FITS files but doesn't affect db" )
         
@@ -71,8 +74,8 @@ class Command(BaseCommand):
 
     @classmethod
     def diaobject_map_columns( cls, tab ):
-        """Map from the HEAD.FITS.gz files to the elasticc2_ppdbdiaobject table"""
-        mapper = { 'SNID': 'ppdbdiaobject_id',
+        """Map from the HEAD.FITS.gz files to the diaobject table"""
+        mapper = { 'SNID': 'diaobject_id',
                    'DEC': 'decl',
                    'REDSHIFT_FINAL': 'z_final',
                    'REDSHIFT_FINAL_ERR': 'z_final_err',
@@ -100,19 +103,22 @@ class Command(BaseCommand):
     @classmethod
     def diaobjecttruth_map_columns( cls, tab ):
         """Map from the DUMP file to the elasticc2_diaobjecttruth table"""
-        mapper = { 'CID': 'ppdbdiaobject_id',
+        mapper = { 'CID': 'diaobject_id',
                    'NON1A_INDEX': 'sim_template_index'
                   }
-        lcs = { 'LIBID', 'SIM_SEARCHEFF_MASK', 'GENTYPE', 'ZCMB', 'ZHELIO', 'ZCMB_SMEAR',
-                'RA', 'DEC', 'MWEBV', 'GALNMATCH', 'GALID', 'GALZPHOT', 'GALZPHOTERR',
-                'RV', 'AV', 'MU', 'LENSDMU', 'PEAKMJD', 'MJD_DETECT_FIRST', 'MJD_DETECT_LAST',
-                'DTSEASON_PEAK', 'PEAKMAG_u', 'PEAKMAG_g', 'PEAKMAG_r', 'PEAKMAG_i', 'PEAKMAG_z', 'PEAKMAG_Y',
-                'SNRMAX', 'SNRMAX2', 'SNRMAX3', 'NOBS', 'NOBS_SATURATE' }
+        lcs = { 'LIBID', 'SIM_SEARCHEFF_MASK', 'GENTYPE', 'ZCMB',
+                'ZHELIO', 'ZCMB_SMEAR', 'RA', 'DEC', 'MWEBV', 'GALID',
+                'GALZPHOT', 'GALZPHOTERR', 'GALSNSEP', 'GALSNDDLR',
+                'RV', 'AV', 'MU', 'LENSDMU', 'PEAKMJD',
+                'MJD_DETECT_FIRST', 'MJD_DETECT_LAST', 'DTSEASON_PEAK',
+                'PEAKMAG_u', 'PEAKMAG_g', 'PEAKMAG_r', 'PEAKMAG_i',
+                'PEAKMAG_z', 'PEAKMAG_Y', 'SNRMAX', 'SNRMAX2',
+                'SNRMAX3', 'NOBS', 'NOBS_SATURATE' }
         cls._map_columns( tab, mapper, lcs )
 
     @classmethod
     def diasource_map_columns( cls, tab ):
-        """Map from the PHOT.FITS.gz files to the elasticc2_ppdbdiasource table"""
+        """Map from the PHOT.FITS.gz files to the diasource table"""
         mapper = { 'MJD': 'midpointtai',
                    'BAND': 'filtername',
                    'FLUXCAL': 'psflux',
@@ -126,6 +132,26 @@ class Command(BaseCommand):
     def handle( self, *args, **options ):
         if options['verbose']:
             self.logger.setLevel( logging.DEBUG )
+
+        if not ( options['ppdb'] or options['train'] ):
+            raise RuntimeError( "Must give one of --ppdb or --train" )
+        if options['ppdb'] and options['train']:
+            raise RuntimeError( "Must give only one of --pdb or --train" )
+
+        if options['ppdb']:
+            from elasticc2.models import PPDBDiaObject as DiaObject
+            from elasticc2.models import PPDBDiaForcedSource as DiaForcedSource
+            from elasticc2.models import PPDBDiaSource as DiaSource
+            from elasticc2.models import PPDBAlert as Alert
+            from elasticc2.models import DiaObjectTruth as Truth
+        elif options['train']:
+            from elasticc2.models import TrainDiaObject as DiaObject
+            from elasticc2.models import TrainDiaForcedSource as DiaForcedSource
+            from elasticc2.models import TrainDiaSource as DiaSource
+            from elasticc2.models import TrainAlert as Alert
+            from elasticc2.models import TrainDiaObjectTruth as Truth
+        else:
+            raise RuntimeError( "This should never happen." )
 
         self.simversion = options['simversion']
 
@@ -172,6 +198,10 @@ class Command(BaseCommand):
             # SNID was written as a string, we need it to be a bigint
             orig_head['SNID'] = orig_head['SNID'].astype( numpy.int64 )
             head = Table( orig_head )
+
+            if len(head) == 0:
+                continue
+            
             phot = Table.read( photfile )
 
             # Load the PPDBDiaObject table
@@ -180,7 +210,7 @@ class Command(BaseCommand):
             head.add_column( options['simversion'], name='simversion' )
             
             if options['do']:
-                n = PPDBDiaObject.bulk_insert_onlynew( dict( head ) )
+                n = DiaObject.bulk_insert_onlynew( dict( head ) )
                 self.logger.info( f"Loaded {n} objects from {headfile.name}" )
             else:
                 self.logger.info( f"Would try to load {len(head)} objects" )
@@ -191,60 +221,60 @@ class Command(BaseCommand):
             phot['FLUXCALERR'] *= 10 ** ( ( options['alert_zeropoint'] - options['snana_zeropoint'] ) / 2.5 )
             
             self.diasource_map_columns( phot )
-            phot.add_column( numpy.int64(-1), name='ppdbdiaobject_id' )
-            phot.add_column( numpy.int64(-1), name='ppdbdiaforcedsource_id' )
+            phot.add_column( numpy.int64(-1), name='diaobject_id' )
+            phot.add_column( numpy.int64(-1), name='diaforcedsource_id' )
             phot['snr'] = phot['psflux'] / phot['psfluxerr']
             phot['filtername'] = [ i.strip() for i in phot['filtername'] ]
             phot.add_column( -999., name='ra' )
             phot.add_column( -999., name='decl' )
             
-            # Load the PPDBDiaForcedSource table
+            # Load the DiaForcedSource table
 
             for obj in orig_head:
                 # All the -1 is because the files are 1-indexed, but astropy is 0-indexed
                 pmin = obj['PTROBS_MIN'] -1
                 pmax = obj['PTROBS_MAX'] -1
-                phot['ppdbdiaobject_id'][pmin:pmax+1] = obj['SNID']
-                phot['ppdbdiaforcedsource_id'][pmin:pmax+1] = ( obj['SNID'] * options['max_sources_per_object']
-                                                                + numpy.arange( pmax - pmin + 1 ) )
+                phot['diaobject_id'][pmin:pmax+1] = obj['SNID']
+                phot['diaforcedsource_id'][pmin:pmax+1] = ( obj['SNID'] * options['max_sources_per_object']
+                                                            + numpy.arange( pmax - pmin + 1 ) )
                 phot['ra'][pmin:pmax+1] = obj['RA']
                 phot['decl'][pmin:pmax+1] = obj['DEC']
 
             # The phot table has separators, so there will still be some junk data in there I need to purge
-            phot = phot[ phot['ppdbdiaobject_id'] >= 0 ]
+            phot = phot[ phot['diaobject_id'] >= 0 ]
                 
             if options['do']:
-                n = PPDBDiaForcedSource.bulk_insert_onlynew( phot )
+                n = DiaForcedSource.bulk_insert_onlynew( phot )
                 self.logger.info( f"Loaded {n} forced photometry points from {photfile.name}" )
             else:
                 self.logger.info( f"Would try to load {len(phot)} forced photometry points" )
             
-            # Load the PPDBDiaSource table
+            # Load the DiaSource table
 
-            phot.rename_column( 'ppdbdiaforcedsource_id', 'ppdbdiasource_id' )
+            phot.rename_column( 'diaforcedsource_id', 'diasource_id' )
             phot = phot[ ( phot['photflag'] & options['photflag_detect'] ) !=0 ]
 
             if options['do']:
-                n = PPDBDiaSource.bulk_insert_onlynew( phot )
+                n = DiaSource.bulk_insert_onlynew( phot )
                 self.logger.info( f"Loaded {n} sources from {photfile.name}" )
             else:
                 self.logger.info( f"Would try to load {len(phot)} sources" )
 
             # Load the alert table based on this
 
-            alerts = { 'ppdbalert_id': phot[ 'ppdbdiasource_id' ],
-                       'ppdbdiasource_id': phot[ 'ppdbdiasource_id' ],
-                       'ppdbdiaobject_id': phot[ 'ppdbdiaobject_id' ] }
+            alerts = { 'alert_id': phot[ 'diasource_id' ],
+                       'diasource_id': phot[ 'diasource_id' ],
+                       'diaobject_id': phot[ 'diaobject_id' ] }
             if options['do']:
-                n = PPDBAlert.bulk_insert_onlynew( alerts )
+                n = Alert.bulk_insert_onlynew( alerts )
                 self.logger.info( f"Loaded {n} alerts" )
             else:
-                self.logger.info( f"Would try to load {len(alerts['ppdbalert_id'])} alerts" )
+                self.logger.info( f"Would try to load {len(alerts['alert_id'])} alerts" )
                 
         # Load the object truth table
             
         self.diaobjecttruth_map_columns( dump )
         self.logger.info( f"Trying to load {len(dump)} rows to object truth table" )
         if options['do']:
-            truthobjs = DiaObjectTruth.bulk_load_or_create( dump )
+            truthobjs = Truth.bulk_load_or_create( dump )
             self.logger.info( f"Loaded between 0 and {len(truthobjs)} rows to object truth table" )

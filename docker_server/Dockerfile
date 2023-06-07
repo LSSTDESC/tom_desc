@@ -13,7 +13,9 @@ RUN DEBIAN_FRONTEND="noninteractive" \
 
 RUN DEBIAN_FRONTEND="noninteractive" \
    apt-get update && \
-   apt-get install -y gdal-bin python3 python3-pip librdkafka-dev tmux libpq-dev postgresql-client && \
+   apt-get install -y gdal-bin python3 python3-pip librdkafka-dev \
+     libpq-dev postgresql-client \
+     tmux netcat bind9-dnsutils && \
    apt-get clean && \
    rm -rf /var/lib/apt/lists/*
 
