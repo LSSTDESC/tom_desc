@@ -28,8 +28,8 @@ RUN pip install \
 	--requirement pip-packages.txt && \
     rm -rf /.cache/pip
 
-RUN mkdir tom_desc
-COPY tom_desc/ ./tom_desc/
+# Will mount /tom_desc from a host directory
+# COPY ..tom_desc tom_desc
 
 EXPOSE 8080
 ENTRYPOINT [ "/usr/local/bin/gunicorn", "tom_desc.wsgi", "-b", "0.0.0.0:8080", "--access-logfile", "-", "--error-logfile", "-", "-k", "gevent", "--timeout", "300", "--workers", "2"]

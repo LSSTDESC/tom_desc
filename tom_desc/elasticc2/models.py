@@ -442,7 +442,7 @@ class PPDBAlert(BaseAlert):
     diaobject = models.ForeignKey( PPDBDiaObject, db_column='diaobject_id',
                                    on_delete=models.CASCADE, null=True )
 
-    class Meta(BaseAlert.Meta)
+    class Meta(BaseAlert.Meta):
         abstract = False
 
     _objectclass = PPDBDiaObject
@@ -456,7 +456,7 @@ class DiaObjectTruth(BaseObjectTruth):
                                       on_delete=models.CASCADE, null=False, primary_key=True )
 
     class Meta(BaseObjectTruth.Meta):
-        abstract = false
+        abstract = False
     
 
 # ======================================================================
@@ -521,7 +521,7 @@ class DiaSource(BaseDiaSource):
     class Meta(BaseDiaSource.Meta):
         abstract = False
 
-class DiaForcedSource(BaseDiaforcedSource):
+class DiaForcedSource(BaseDiaForcedSource):
     diaobject = models.ForeignKey( DiaObject, db_column='diaobject_id', on_delete=models.CASCADE )
 
     class Meta(BaseDiaForcedSource.Meta):

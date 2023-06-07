@@ -40,24 +40,36 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    image: registry.services.nersc.gov/rknop/tom_desc
+    image: registry.services.nersc.gov/raknop/tom_desc_extcode
     build:
-      context: ../docker_server
+      context: ../
+      dockerfile: docker_server_extcode/Dockerfile
+    volumes:
+      - ${PWD}/django_secret_key:/secrets/django_secret_key
+      - type: bind
+        source: ../tom_desc
+        target: /tom_desc/tom_desc
     environment:
       DB_NAME: tom_desc
-      db_host: postgres
+      DB_HOST: postgres
       DB_USER: postgres
       DB_PASS: fragile
       DB_PORT: 5432
-    entrypoint: [ "python", "manage.py", "migrate" ]
+    entrypoint: [ "python", "tom_desc/manage.py", "migrate" ]
 
   tom:
     depends_on:
       createdb:
         condition: service_completed_successfully
-    image: registry.services.nersc.gov/rknop/tom_desc
+    image: registry.services.nersc.gov/raknop/tom_desc_extcode
     build:
-      context: ../docker_server
+      context: ../
+      dockerfile: docker_server_extcode/Dockerfile
+    volumes:
+      - ${PWD}/django_secret_key:/secrets/django_secret_key
+      - type: bind
+        source: ../tom_desc
+        target: /tom_desc/tom_desc
     environment:
       DB_NAME: tom_desc
       DB_HOST: postgres
@@ -67,10 +79,19 @@ services:
 
   shellhost:
     depends_on:
+      postgres:
+        condition: service_healthy
       tom:
         condition: service_started
-      build:
-        context: ../docker_server
+    image: registry.services.nersc.gov/raknop/tom_desc_extcode
+    build:
+      context: ../
+      dockerfile: docker_server_extcode/Dockerfile
+    volumes:
+      - ${PWD}/django_secret_key:/secrets/django_secret_key
+      - type: bind
+        source: ../tom_desc
+        target: /tom_desc/tom_desc
     environment:
       DB_NAME: tom_desc
       DB_HOST: postgres
