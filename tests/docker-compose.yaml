@@ -1,0 +1,80 @@
+version: "3.3"
+
+services:
+  kafka-zookeeper:
+    image: registry.services.nersc.gov/raknop/kafka
+    build:
+      context: ../docker_kafka
+    healthcheck:
+      test: netcat -w 1 localhost 2181 || exit 1
+      interval: 5s
+      timeout: 10s
+      retries: 5
+    entrypoint: [ "bin/zookeeper-server-start.sh", "config/zookeeper.properties" ]
+
+  kafka-server:
+    depends_on:
+       kafka-zookeeper:
+         condition: service_healthy
+    image: registry.services.nersc.gov/raknop/kafka
+    build:
+      context: ../docker_kafka
+    healthcheck:
+      test: netcat -w 1 localhost 9092 || exit 1
+      interval: 5s
+      timeout: 10s
+      retries: 5
+    entrypoint: [ "bin/kafka-server-start.sh", "config/server.properties" ]
+
+  postgres:
+    image: registry.services.nersc.gov/raknop/tom-postgres
+    build:
+      context: ../docker_postgres
+    healthcheck:
+      test: netcat -w 1 localhost 5432 || exit 1
+      interval: 5s
+      timeout: 10s
+      retries: 5
+
+  createdb:
+    depends_on:
+      postgres:
+        condition: service_healthy
+    image: registry.services.nersc.gov/rknop/tom_desc
+    build:
+      context: ../docker_server
+    environment:
+      DB_NAME: tom_desc
+      db_host: postgres
+      DB_USER: postgres
+      DB_PASS: fragile
+      DB_PORT: 5432
+    entrypoint: [ "python", "manage.py", "migrate" ]
+
+  tom:
+    depends_on:
+      createdb:
+        condition: service_completed_successfully
+    image: registry.services.nersc.gov/rknop/tom_desc
+    build:
+      context: ../docker_server
+    environment:
+      DB_NAME: tom_desc
+      DB_HOST: postgres
+      DB_USER: postgres
+      DB_PASS: fragile
+      DB_PORT: 5432
+
+  shellhost:
+    depends_on:
+      tom:
+        condition: service_started
+      build:
+        context: ../docker_server
+    environment:
+      DB_NAME: tom_desc
+      DB_HOST: postgres
+      DB_USER: postgres
+      DB_PASS: fragile
+      DB_PORT: 5432
+    entrypoint: [ "tail", "-f", "/etc/issue" ]
