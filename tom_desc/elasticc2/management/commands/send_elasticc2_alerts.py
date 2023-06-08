@@ -82,8 +82,12 @@ class Command(BaseCommand):
 
             self.logger.info( "Figuring out starting day" )
                 
-            if ( options['through_day'] is None ) != ( options['added_days'] ) is None:
-                raise RuntimeError( "Must give exactly one of -d or -a" )
+            if ( ( ( options['through_day'] is None ) == ( options['added_days'] is None ) )
+                 or
+                 ( ( options['through_day'] is None ) and ( options['added_days'] is None ) ) ):
+                raise RuntimeError( f"Must give exactly one of -d or -a: "
+                                    f"-d was {options['through_day']} (type {type(options['through_day'])}) "
+                                    f"and -a was {options['added_days']} (type {type(options['added_days'])}) " )
 
             # import pdb; pdb.set_trace()
             if options['through_day'] is not None:
@@ -91,16 +95,16 @@ class Command(BaseCommand):
             else:
                 lastalertquery = ( PPDBAlert.objects
                                    .filter( alertsenttimestamp__isnull=False )
-                                   .order_by( '-ppdbdiasource__midpointtai' ) )
+                                   .order_by( '-diasource__midpointtai' ) )
                 try:
                     lastalert = lastalertquery[0]
-                    t = lastalert.ppdbdiasource.midpointtai
+                    t = lastalert.diasource.midpointtai
                     self.logger.info( f"Last alert sent had midpointtai {t}" )
                 except IndexError as ex:
                     # No alerts have been sent yet, so find the first one
                     self.logger.info( "No alerts have been sent yet, figuring out the time of the first one." )
-                    firstalertquery = PPDBAlert.objects.order_by( 'ppdbdiasource__midpointtai' )
-                    t = firstalertquery[0].ppdbdiasource.midpointtai - 1
+                    firstalertquery = PPDBAlert.objects.order_by( 'diasource__midpointtai' )
+                    t = firstalertquery[0].diasource.midpointtai - 1
                     self.logger.info( "First alert is at MJD {t+1}" )
                 through_day = math.floor( t + 0.5 ) + options['added_days'] + 0.5
             
@@ -110,8 +114,8 @@ class Command(BaseCommand):
 
             alerts = ( PPDBAlert.objects
                        .filter( alertsenttimestamp__isnull=True,
-                                ppdbdiasource__midpointtai__lte=through_day )
-                       .order_by( 'ppdbdiasource__midpointtai' ) )
+                                diasource__midpointtai__lte=through_day )
+                       .order_by( 'diasource__midpointtai' ) )
             self.logger.info( f"{len(alerts)} alerts to stream" )
 
             if len(alerts) == 0:
@@ -153,7 +157,7 @@ class Command(BaseCommand):
                 fastavro.write.schemaless_writer( msgio, schema, alert.reconstruct() )
                 if options['do']:
                     producer.produce( options['kafka_topic'], msgio.getvalue() )
-                    ids_produced.append( alert.ppdbalert_id )
+                    ids_produced.append( alert.alert_id )
 
                 if len(ids_produced) >= options['flush_every']:
                     if options['do']:

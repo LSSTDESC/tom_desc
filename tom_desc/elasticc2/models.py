@@ -497,8 +497,10 @@ class ClassIdOfGentype(models.Model):
     id = models.AutoField( primary_key=True )
     gentype = models.IntegerField( db_index=True )
     classid = models.IntegerField( db_index=True )
-    exactmatch = models.BooleanField()
-    categorymatch = models.BooleanField()
+    exactmatch = models.BooleanField( default=False )
+    categorymatch = models.BooleanField( default=False )
+    generalmatch = models.BooleanField( default=False )
+    broadmatch = models.BooleanField( default=False )
     description = models.TextField()
     
     

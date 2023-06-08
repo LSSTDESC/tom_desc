@@ -112,7 +112,7 @@ services:
         source: .
         target: /tests
       - type: bind
-        source: ${ELASTICC2_TEST_DATA}
+        source: ${ELASTICC2_TEST_DATA:-/dev/null}
         target: /elasticc2data
     environment:
       DB_NAME: tom_desc
@@ -142,7 +142,13 @@ services:
   #       source: .
   #       target: /tests
   #     - type: bind
-  #       source: ${ELASTICC2_TEST_DATA}
+  #       source: ${ELASTICC2_TEST_DATA:-/dev/null}
   #       target: /elasticc2data
   #   working_dir: /tests
+  #   environment:
+  #     DB_NAME: tom_desc
+  #     DB_HOST: postgres
+  #     DB_USER: postgres
+  #     DB_PASS: fragile
+  #     DB_PORT: 5432
   #   entrypoint: [ "pytest", "-v", "test_hello.py" ]

@@ -5,7 +5,7 @@ MAINTAINER Rob Knop <raknop@lbl.gov>
 SHELL ["/bin/bash", "-c"]
 RUN apt-get -y update \
    && apt-get -y upgrade \
-   && apt-get -y install openjdk-11-jre curl \
+   && apt-get -y install openjdk-11-jre curl netcat \
    && apt-get clean \
    && rm -rf /var/lib/apt/lists/*
 
@@ -22,4 +22,4 @@ RUN curl -L https://dlcdn.apache.org/kafka/${KAFKA_CODEVERSION}/kafka_${KAFKA_VE
 COPY server.properties kafka_${KAFKA_VERSION}-${KAFKA_CODEVERSION}/config/
 COPY zookeeper.properties kafka_${KAFKA_VERSION}-${KAFKA_CODEVERSION}/config/
 
-WORKDIR /kafka/kafka_{KAFKA_VERSION}-{KAFKA_CODEVERSION}
+WORKDIR /kafka/kafka_${KAFKA_VERSION}-${KAFKA_CODEVERSION}
