@@ -4,6 +4,7 @@ import math
 import pathlib
 import logging
 import argparse
+import time
 import datetime
 import random
 import confluent_kafka
@@ -136,8 +137,23 @@ def main():
                                    alertschema=alertschema, brokermessageschema=brokermsgschema )
                    ]
     
-    consumer = MsgConsumer( args.source, args.group_id, args.source_topic, args.alert_schema, logger=_logger,
-                            consume_nmsgs=100 )
+    # Wait for the topic to exist, and only then subscribe
+    
+    done = False
+    consumer = None
+    while not done:
+        if consumer is not None:
+            consumer.close()
+        consumer = MsgConsumer( args.source, args.group_id, [], args.alert_schema, logger=_logger,
+                                consume_nmsgs=100 )
+        topics = consumer.topic_list()
+        if args.source_topic in topics:
+            consumer.subscribe( [ args.source_topic ] )
+            done = True
+        else:
+            _logger.warning( f"Topic {args.source_topic} doesn't exist, sleeping 10s and trying again." )
+            time.sleep(10)
+
     if args.reset:
         consumer.reset_to_start( args.source_topic )
 
@@ -145,7 +161,7 @@ def main():
         for cfer in classifiers:
             cfer.classify_alerts( msgs )
         
-    consumer.poll_loop( handler = handle_message_batch )
+    consumer.poll_loop( handler = handle_message_batch, stopafter=datetime.timedelta(days=3650) )
     
 # ======================================================================
 

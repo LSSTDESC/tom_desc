@@ -147,7 +147,13 @@ If you want to test the TOM out, you can deploy it on your local machine.  If yo
 
 This will set up the database schema, and create root user.  At this point, you should be able to connect to your running TOM at `localhost:8080`.
 
-Next, you need to create the "Public" group.  You need to do this before adding any users.  If all is well, any users added thereafter will automatically be added to this group.  Some of the DESC specific code will break if this group does not exist.  (The TOM documentation seems to imply that this group should have been created automatically, but that doesn't seem to be the case.)  To do this: ``` python manage.py shell >>> from django.contrib.auth.models import Group >>> g = Group( name='Public' ) >>> g.save() >>> exit() ```
+Next, you need to create the "Public" group.  You need to do this before adding any users.  If all is well, any users added thereafter will automatically be added to this group.  Some of the DESC specific code will break if this group does not exist.  (The TOM documentation seems to imply that this group should have been created automatically, but that doesn't seem to be the case.)  To do this:
+``` python manage.py shell
+>>> from django.contrib.auth.models import Group
+>>> g = Group( name='Public' )
+>>> g.save()
+>>> exit()
+```
 
 If you ever run a server that exposes its interface to the outside web, you probably want to edit your local version of the file `secrets/django_secret_key`.  Don't commit anything sensitive to git, and especially don't upload it to github!  (There *are* postgres passwords in the github archive, which would seem to voilate this warning.  The reason we're not worried about that is that both in the docker-compose file, and as the server is deployed in production, the postgres server is not directly accessible from outside, but only from within the docker environment (or, for production, the Spin namespace). Of course, it would be better to add the additional layer of security of obfuscating those passwords, but, whatever.)
 
@@ -331,11 +337,15 @@ In the `LSSTDESC/elasticc` archive, under the `stream-to-zads` directory, there 
 
 ## Testing
 
-The `tests` subdirectory has tests.  The tests are designed to run inside the framework described by the `docker-compose.yaml` file.  Tests of the functionality require several different services running:
+The `tests` subdirectory has tests.  They don't test the basic TOM functionality; they test the DESC stuff that we've added on top of the TOM.  (The hope is that the TOM passes its own tests internally.)  Currently, tests are still being written, so much of the functionality doesn't have any tests.
+
+The tests are designed to run inside the framework described by the `docker-compose.yaml` file.  Tests of the functionality require several different services running:
 
   * two kafka services (zookeeper and server)
   * a backend postgres service
   * the TOM web server
+  * a fake broker (to ingest alerts and produce broker classifications for testing purposes)
+  * a process polling the fake broker for classifications to stick into the tom
   * a client machine on which to run the tests
 
 The `docker-compose.yaml` file has an additional service `createdb` that creates the database tables once the postgres server is up; subsequent services don't start until that service is finished.  It starts up one or two different client services, based on how you run it; either one to automatedly run all the tests (which can potentially take a very long time), or one to provice a shell host where you can manually run individual tests or poke about.
@@ -353,7 +363,7 @@ To get an environment in which to run the tests manually, run
 ```
 ELASTICC2_TEST_DATA=<dir> docker compose up -d shellhost
 ```
-Where `<dir>` is a directory that has the 1% ELAsTiCC2 test set that the tests are designed to run with; on brahms (Rob's) desktop, this would be:
+where `<dir>` is a directory that has the 1% ELAsTiCC2 test set that the tests are designed to run with; on brahms (Rob's) desktop, this would be:
 ```
 ELASTICC2_TEST_DATA=/data/raknop/elasticc2_train_1pct docker compose up -d shellhost
 ```
@@ -366,4 +376,14 @@ docker compose down
 
 ### Automatically running all the tests
 
-TBW
+In the `tests` directory (on your machine, _not_ inside a container), after having built the framework, do:
+```
+ELASTICC2_TEST_DATA=<dir> docker compose run runtests
+```
+where `<dir>` is a directory with the 1% ELAsTiCC2 test set (just as with running a shell host, above).
+
+After the tests complete (which could take a long time), do
+```
+docker compose down
+```
+to clean up.  (If you don't do this, the next time you try to run the tests, it won't have a clean slate and the startup will fail.)

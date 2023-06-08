@@ -61,7 +61,7 @@ def elasticc_ppdb( tomclient ):
 def alerts_10days( elasticc_ppdb ):
     result = subprocess.run( [ "python", "manage.py", "send_elasticc2_alerts", "-d", "60280",
                                "-k", "kafka-server:9092", "-t", f"alerts",
-                               "-s", "schema/elasticc.v0_9_1.alert.avsc",
+                               "-s", "/tests/schema/elasticc.v0_9_1.alert.avsc",
                                "-r", "sending_alerts_runningfile", "--do" ],
                                cwd="/tom_desc", capture_output=True )
     assert result.returncode == 0
@@ -73,6 +73,21 @@ def alerts_10days( elasticc_ppdb ):
     # me to run something *on* the kafka server, so I'm just not going
     # to do that, and that's a mess.
 
-    # this does mean that if you run tests more than once, subsequent
-    # tests may fail because the number of things in the topic will be
-    # too high, as alerts will be issued again on subsequent tests.
+    # This does mean that if you run tests more than once in the same
+    # run of docker compose up, subsequent tests may fail because the
+    # number of things in the topic will be too high, as alerts will be
+    # issued again on subsequent tests.
+
+@pytest.fixture( scope="session" )
+def alerts_1daymore( alerts_10days ):
+    # https://www.youtube.com/watch?v=wNNBrg4u9d0
+    result = subprocess.run( [ "python", "manage.py", "send_elasticc2_alerts", "-a", "1",
+                               "-k", "kafka-server:9092", "-t", f"alerts",
+                               "-s", "/tests/schema/elasticc.v0_9_1.alert.avsc",
+                               "-r", "sending_alerts_runningfile", "--do" ],
+                               cwd="/tom_desc", capture_output=True )
+    assert result.returncode == 0
+
+    yield True
+
+    # Same issue as alerts_10days about not cleaning up

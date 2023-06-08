@@ -104,11 +104,15 @@ class MsgConsumer(object):
             partlist.append( curpart )
         self.logger.info( f'Committing partition offsets.' )
         self.consumer.commit( offsets=partlist, asynchronous=False )
-            
-    def print_topics( self ):
+
+    def topic_list( self ):
         cluster_meta = self.consumer.list_topics()
         topics = [ n for n in cluster_meta.topics ]
         topics.sort()
+        return topics
+        
+    def print_topics( self ):
+        topics = self.topic_list()
         topicstxt = '\n  '.join(topics)
         self.logger.info( f"\nTopics:\n   {topicstxt}" )
 

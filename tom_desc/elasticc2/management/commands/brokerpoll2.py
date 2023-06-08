@@ -202,6 +202,7 @@ class BrokerConsumer:
             self.create_connection()
 
 # ======================================================================
+# I should replace this and the next one with a generic noauth consumer
 
 class BrahmsConsumer(BrokerConsumer):
     def __init__( self, grouptag=None, brahms_topic=None, loggername="BRAHMS", **kwargs ):
@@ -212,6 +213,18 @@ class BrahmsConsumer(BrokerConsumer):
         topics = [ brahms_topic ]
         super().__init__( server, groupid, topics=topics, loggername=loggername, **kwargs )
         self.logger.info( f"Brahms group id is {groupid}, topic is {brahms_topic}" )
+
+# ======================================================================
+
+class TestConsumer(BrokerConsumer):
+    def __init__( self, grouptag=None, test_topic=None, loggername="TEST", **kwargs ):
+        if test_topic is None:
+            raise RuntimeError( "Must specify test topic" )
+        server = "kafka-server:9092"
+        groupid = "testing" + ("" if grouptag is None else "-" + grouptag )
+        topics = [ test_topic ]
+        super().__init__( server, groupid, topics=topics, loggername=loggername, **kwargs )
+        self.logger.info( f"Test group id is {groupid}, topic is {test_topic}" )
 
 # ======================================================================
 
@@ -304,6 +317,16 @@ class Command(BaseCommand):
 
     def __init__( self, *args, **kwargs ):
         super().__init__( *args, **kwargs )
+
+        # Make sure the log directory exists
+
+        logdir = _rundir.parent.parent.parent / "logs"
+        if logdir.exists():
+            if not logdir.is_dir():
+                raise RuntimeError( "{logdir} exists but is not a directory!" )
+        else:
+            logdir.mkdir( parents=True )
+
         self.logger = logging.getLogger( "brokerpoll_baselogger" )
         self.logger.propagate = False
         logout = logging.FileHandler( _rundir.parent.parent.parent / f"logs/brokerpoll.log" )
@@ -321,7 +344,10 @@ class Command(BaseCommand):
                              help="Poll from Rob's test kafka server" )
         parser.add_argument( '--brahms-topic', default=None,
                              help="Topic to poll on brahms (required if --do-brahms is True)" )
-        
+        parser.add_argument( '--do-test', action='store_true', default=False,
+                             help="Poll from kafka-server:9092 (for testing purposes)" )
+        parser.add_argument( '---test-topic', default='classifications',
+                             help="Topic to poll from on kafka-server:9092" )
         parser.add_argument( '-g', '--grouptag', default=None, help="Tag to add to end of kafka group ids" )
         parser.add_argument( '-r', '--reset', default=False, action='store_true',
                              help='Reset all stream pointers' )
@@ -357,6 +383,8 @@ class Command(BaseCommand):
             brokerstodo['fink'] = FinkConsumer
         if options['do_brahms']:
             brokerstodo['brahms'] = BrahmsConsumer
+        if options['do_test']:
+            brokerstodo['test'] = TestConsumer
         if len( brokerstodo ) == 0:
             self.logger.error( "Must give at least one broker to listen to." )
             raise RuntimeError( "No brokers given to listen to." )

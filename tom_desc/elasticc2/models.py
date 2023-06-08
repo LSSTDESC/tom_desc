@@ -812,7 +812,7 @@ class BrokerMessage(models.Model):
 
             cursor.execute( "CREATE TEMP TABLE allsourceids( id bigint )" )
             cursor.execute( "INSERT INTO allsourceids "
-                            "  SELECT s.ppdbdiasource_id FROM elasticc2_ppdbdiasource s "
+                            "  SELECT s.diasource_id FROM elasticc2_ppdbdiasource s "
                             "  INNER JOIN all_objids a ON s.diaobject_id=a.id "
                             "  WHERE s.midpointtai <= a.latesttai" )
             cursor.execute( "CREATE INDEX ON allsourceids(id)" )
