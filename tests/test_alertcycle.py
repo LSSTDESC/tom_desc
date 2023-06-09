@@ -11,7 +11,7 @@ from msgconsumer import MsgConsumer
 
 class TestAlertCycle:
 
-    def test_ppdb_loaded( self, elasticc_ppdb ):
+    def test_ppdb_loaded( self, elasticc2_ppdb ):
         # I should probably have some better tests than just object counts....
         assert elasticc2.models.PPDBDiaObject.objects.count() == 14579
         assert elasticc2.models.PPDBDiaSource.objects.count() == 365300

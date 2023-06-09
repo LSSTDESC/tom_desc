@@ -12,7 +12,7 @@ import elasticc2.models as m
 
 class TestPPDBLoaded:
 
-    def test_ppdb_loaded( self, elasticc_ppdb ):
+    def test_ppdb_loaded( self, elasticc2_ppdb ):
         # I should probably have some better tests than just object counts....
         assert m.PPDBDiaObject.objects.count() == 14579
         assert m.PPDBDiaSource.objects.count() == 365300

@@ -145,11 +145,11 @@ class Command(BaseCommand):
             from elasticc2.models import PPDBAlert as Alert
             from elasticc2.models import DiaObjectTruth as Truth
         elif options['train']:
-            from elasticc2.models import TrainDiaObject as DiaObject
-            from elasticc2.models import TrainDiaForcedSource as DiaForcedSource
-            from elasticc2.models import TrainDiaSource as DiaSource
-            from elasticc2.models import TrainAlert as Alert
-            from elasticc2.models import TrainDiaObjectTruth as Truth
+            from elasticc2.models import TrainingDiaObject as DiaObject
+            from elasticc2.models import TrainingDiaForcedSource as DiaForcedSource
+            from elasticc2.models import TrainingDiaSource as DiaSource
+            from elasticc2.models import TrainingAlert as Alert
+            from elasticc2.models import TrainingDiaObjectTruth as Truth
         else:
             raise RuntimeError( "This should never happen." )
 
@@ -204,7 +204,7 @@ class Command(BaseCommand):
             
             phot = Table.read( photfile )
 
-            # Load the PPDBDiaObject table
+            # Load the DiaObject table
 
             self.diaobject_map_columns( head )
             head.add_column( options['simversion'], name='simversion' )

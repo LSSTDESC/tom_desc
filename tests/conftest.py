@@ -17,7 +17,7 @@ def tomclient():
     return TomClient( "http://tom:8080", username="root", password="testing" )
 
 @pytest.fixture( scope="session" )
-def elasticc_ppdb( tomclient ):
+def elasticc2_ppdb( tomclient ):
     basedir = pathlib.Path( "/elasticc2data" )
     dirs = []
     for subdir in basedir.glob( '*' ):
@@ -58,7 +58,7 @@ def elasticc_ppdb( tomclient ):
 #         return topictag
     
 @pytest.fixture( scope="session" )
-def alerts_10days( elasticc_ppdb ):
+def alerts_10days( elasticc2_ppdb ):
     result = subprocess.run( [ "python", "manage.py", "send_elasticc2_alerts", "-d", "60280",
                                "-k", "kafka-server:9092", "-t", f"alerts",
                                "-s", "/tests/schema/elasticc.v0_9_1.alert.avsc",

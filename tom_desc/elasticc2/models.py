@@ -463,6 +463,51 @@ class DiaObjectTruth(BaseObjectTruth):
 # ======================================================================
 # ======================================================================
 # ======================================================================
+# Training set tables
+
+class TrainingDiaObject(BaseDiaObject):
+    class Meta(BaseDiaObject.Meta):
+        abstract = False
+
+class TrainingDiaSource(BaseDiaSource):
+    diaobject = models.ForeignKey( TrainingDiaObject, db_column='diaobject_id',
+                                   on_delete=models.CASCADE, null=True )
+
+    class Meta(BaseDiaSource.Meta):
+        abstract = False
+    
+class TrainingDiaForcedSource(BaseDiaForcedSource):
+    diaobject = models.ForeignKey( TrainingDiaObject, db_column='diaobject_id', on_delete=models.CASCADE )
+
+    class Meta(BaseDiaForcedSource.Meta):
+        abstract = False
+
+class TrainingAlert(BaseAlert):
+    diasource = models.ForeignKey( TrainingDiaSource, db_column='diasource_id',
+                                   on_delete=models.CASCADE, null=True )
+    diaobject = models.ForeignKey( TrainingDiaObject, db_column='diaobject_id',
+                                   on_delete=models.CASCADE, null=True )
+
+    class Meta(BaseAlert.Meta):
+        abstract = False
+
+    _objectclass = TrainingDiaObject
+    _sourceclass = TrainingDiaSource
+    _forcedsourceclass = TrainingDiaForcedSource
+    
+
+class TrainingDiaObjectTruth(BaseObjectTruth):
+    diaobject = models.OneToOneField( TrainingDiaObject, db_column='diaobject_id',
+                                      on_delete=models.CASCADE, null=False, primary_key=True )
+
+    _objectclass = TrainingDiaObject
+
+    class Meta(BaseObjectTruth.Meta):
+        abstract = False
+
+# ======================================================================
+# ======================================================================
+# ======================================================================
 # Classification translation between our taxonomy and the
 # truth tables.  gentype is what shows up in the object
 # truth table, and classId is what brokers tell us.  It's not a 1:1
