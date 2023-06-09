@@ -80,7 +80,6 @@ class TestAlertCycle:
         cfer = elasticc2.models.BrokerClassifier
         cify = elasticc2.models.BrokerClassification
 
-        import pdb; pdb.set_trace()
         assert msg.objects.count() == 2392
         assert cfer.objects.count() == 2
         # 1196 from NugentClassifier plus 7*990 for RandomSNType
