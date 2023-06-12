@@ -13,7 +13,8 @@ import fastavro
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
-from elasticc2.models import TrainingAlert, ClassIdOfGentype, TrainingDiaObjectTruth
+from elasticc2.models import TrainingAlert, TrainingDiaObject, TrainingDiaSource, TrainingDiaForcedSource
+from elasticc2.models import ClassIdOfGentype, TrainingDiaObjectTruth
 
 _rundir = pathlib.Path(__file__).parent
 
@@ -40,7 +41,7 @@ class Command(BaseCommand):
                              help='File with AVRO schema' )
         parser.add_argument( '-f', '--flush-every', default=1000, type=int,
                              help="Flush the kafka producer every this man alerts" )
-        parser.add_argument( '-l', '--log-every', default=10000, type=int,
+        parser.add_argument( '-l', '--log-every', default=2000, type=int,
                              help="Log alerts sent at this interval; 0=don't log" )
         parser.add_argument( '-d', '--tardir', default=None,
                              help="Directory to write tar files; if not given, not tar files are written" )
@@ -61,6 +62,20 @@ class Command(BaseCommand):
             sa.save()
         
     def handle( self, *args, **options ):
+
+        getclass_time = 0
+        getsources_time = 0
+        getforced_time = 0
+        getalert_time = 0
+        reconstruct_time = 0
+        avrowrite_time = 0
+        produce_time = 0
+        taradd_time = 0
+        flush_time = 0
+        update_alertsent_time = 0
+
+        t0 = time.perf_counter()
+        
         # Get classid ← gentype match
         matches = ClassIdOfGentype.objects.filter( exactmatch=True ).all()
         gentypes = {}
@@ -75,14 +90,8 @@ class Command(BaseCommand):
         self.logger.info( f"Streaming training alerts to {options['kafka_server']} "
                           f"with topic base {options['kafka_topic_base']}" )
 
-        alerts = TrainingAlert.objects
-        if options[ 'unsent_only' ]:
-            alerts = alerts.filter( alertsenttimestamp__isnull=True )
-        alerts = alerts.order_by( 'diasource__midpointtai' )
-        self.logger.info( f"{len(alerts)} alerts to stream" )
-
-        if len(alerts) == 0:
-            return
+        diaobjects = TrainingDiaObject.objects.order_by("diaobject_id")
+        self.logger.info( f"{diaobjects.count()} objects to stream" )
 
         # import pdb; pdb.set_trace()
         schema = fastavro.schema.load_schema( options['alert_schema'] )
@@ -110,51 +119,113 @@ class Command(BaseCommand):
                             raise RuntimeError( f"{path} is not a tarfile!" )
                     tarfiles[classid] = tarfile.open( path, 'a' )
 
+        self.logger.info( f"Startup time: {time.perf_counter()-t0}" )
 
-        objectclassids = {}
         ids_produced = []
         totflushed = 0
         nextlog = 0
         tot = 0
-        for i, alert in enumerate( alerts ):
+        i = 0
+        # I don't use enumerate here because I think it was subverting the
+        #   lazy loading of the django diaobjects iterator.  Dunno.
+        #   Django is a mystery.
+        for diaobject in diaobjects:
             if ( options['stop_after'] is not None ) and ( tot >= options['stop_after'] ):
                 break
-            
-            if alert.diaobject_id not in objectclassids:
-                objtruth = TrainingDiaObjectTruth.objects.filter( diaobject_id=alert.diaobject_id ).first()
-                classid = gentypes[ objtruth.gentype ]
-                objectclassids[ alert.diaobject_id ] = classid
-            else:
-                classid = objectclassids[ alert.diaobject_id ]
 
             if ( options['log_every'] > 0 ) and ( i >= nextlog ):
-                self.logger.info( f"Have processed {i} of {len(alerts)} alerts, {totflushed} flushed." )
+                self.logger.info( f"Have processed {i} of {diaobjects.count()} objects; "
+                                  f"{tot} alerts, {totflushed} flushed." )
+                self.logger.info( f"Timings:\n"
+                                  f"          getclass_time = {getclass_time:9.2f}\n"
+                                  f"        getsources_time = {getsources_time:9.2f}\n"
+                                  f"         getforced_time = {getforced_time:9.2f}\n"
+                                  f"          getalert_time = {getalert_time:9.2f}\n"
+                                  f"       reconstruct_time = {reconstruct_time:9.2f}\n"
+                                  f"                             source = {TrainingAlert._sourcetime:9.2f}\n"
+                                  f"                             object = {TrainingAlert._objecttime:9.2f}\n"
+                                  f"                               ovrh = {TrainingAlert._objectoverheadtime:9.2f}\n"
+                                  f"                             prvsrc = {TrainingAlert._prvsourcetime:9.2f}\n"
+                                  f"                             prvfrc = {TrainingAlert._prvforcedsourcetime:9.2f}\n"
+                                  f"         avrowrite_time = {avrowrite_time:9.2f}\n"
+                                  f"           produce_time = {produce_time:9.2f}\n"
+                                  f"            taradd_time = {taradd_time:9.2f}\n"
+                                  f"             flush_time = {flush_time:9.2f}\n"
+                                  f"  update_alertsent_time = {update_alertsent_time:9.2f}" )
                 nextlog += options['log_every']
 
-            msgio = io.BytesIO()
-            fastavro.write.schemaless_writer( msgio, schema, alert.reconstruct() )
-            if options['do']:
-                producer.produce( f"{options['kafka_topic_base']}{classid}", msgio.getvalue() )
-                ids_produced.append( alert.alert_id )
+            t0 = time.perf_counter()
+            objtruth = TrainingDiaObjectTruth.objects.filter( diaobject_id=diaobject.diaobject_id ).first()
+            classid = gentypes[ objtruth.gentype ]
+            getclass_time += time.perf_counter() - t0
 
-                if options['tardir']:
-                    msgio.seek(0)
-                    tarfiles[classid].addfile( tarfile.TarInfo( f'{alert.alert_id}.avro' ), msgio )
+            t0 = time.perf_counter()
+            objsources = list( TrainingDiaSource.objects
+                               .filter( diaobject_id=diaobject.diaobject_id )
+                               .order_by( 'midpointtai' )
+                               .values() )
+            getsources_time += time.perf_counter() - t0
 
-            if len(ids_produced) >= options['flush_every']:
+            t0 = time.perf_counter()
+            objforced = list( TrainingDiaForcedSource.objects
+                              .filter( diaobject_id=diaobject.diaobject_id )
+                              .order_by( 'midpointtai' )
+                              .values() )
+            getforced_time += time.perf_counter() - t0
+
+            t0 = time.perf_counter()
+            objalerts = list( TrainingAlert.objects
+                              .filter( diaobject_id=diaobject.diaobject_id ) )
+            getalert_time += time.perf_counter() - t0
+
+            for alert in objalerts:
+                t0 = time.perf_counter()
+                reconstructed = alert.reconstruct( objsources=objsources, objforced=objforced )
+                reconstruct_time += time.perf_counter() - t0
+
+                t0 = time.perf_counter()
+                msgio = io.BytesIO()
+                fastavro.write.schemaless_writer( msgio, schema, reconstructed )
+                avrowrite_time += time.perf_counter() - t0
                 if options['do']:
-                    producer.flush()
-                    totflushed += len( ids_produced )
-                    self.update_alertsent( ids_produced )
-                ids_produced = []
+                    t0 = time.perf_counter()
+                    producer.produce( f"{options['kafka_topic_base']}{classid}", msgio.getvalue() )
+                    ids_produced.append( alert.alert_id )
+                    avrowrite_time += time.perf_counter() - t0
 
-            tot += 1 
+                    t0 = time.perf_counter()
+                    if options['tardir']:
+                        msgio.seek(0)
+                        tarinfo = tarfile.TarInfo( f'{alert.alert_id}.avro' )
+                        tarinfo.size = msgio.getbuffer().nbytes
+                        tarinfo.mtime = datetime.datetime.now().timestamp()
+                        tarfiles[classid].addfile( tarinfo, msgio )
+                        taradd_time += time.perf_counter() - t0
+
+                if len(ids_produced) >= options['flush_every']:
+                    if options['do']:
+                        t0 = time.perf_counter()
+                        producer.flush()
+                        totflushed += len( ids_produced )
+                        flush_time += time.perf_counter() - t0
+                        t0 = time.perf_counter()
+                        self.update_alertsent( ids_produced )
+                        update_alertsent_time += time.perf_counter() - t0
+                    ids_produced = []
+
+                tot += 1
+
+            i += 1
 
         if len(ids_produced) > 0:
             if options['do']:
+                t0 = time.perf_counter()
                 producer.flush()
                 totflushed += len( ids_produced )
+                flush_time += time.perf_counter() - t0
+                t0 = time.perf_counter()
                 self.update_alertsent( ids_produced )
+                update_alertsent_time += time.perf_counter() - t0
             ids_produced = []
 
         #CLose tar files

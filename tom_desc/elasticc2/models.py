@@ -239,13 +239,35 @@ class BaseAlert(Createable):
     # _objectclass = BaseDiaObject
     # _sourceclass = BaseDiaSource
     # _forcedsourceclass = BaseDiaForcedSource
-    
-    def reconstruct( self ):
+
+    _sourcetime = 0
+    _objecttime = 0
+    _objectoverheadtime = 0
+    _prvsourcetime = 0
+    _prvforcedsourcetime = 0
+
+    _hackqueryshown = 0
+
+    def __init__( self, *args, **kwargs ):
+        super().__init__( *args, **kwargs )
+        self._objectfields = None
+        self._objectfieldmap = None
+        
+    def reconstruct( self, objsources=None, objforced=None ):
         """Reconstruct the dictionary that represents this alert.
         
         It's not just a matter of dumping fields, as it also has to decide if the alert
         should include previous photometry and previous forced photometry, and then
         has to pull all that from the database.
+        
+        For efficiency, some data can be passed in:
+
+        objsources : a list of dictionaries with the fields from the ..DiaSource objects, sorted by midpointtai
+        objforced : same thing, but ...DiaForcedSource
+
+        both objsources and objforced are expected to have *all* sources for the object, not just
+        ones that would be in this alert.  They'll be filtered here.
+        
         """
         alert = { "alertId": self.alert_id,
                   "diaSource": {},
@@ -254,6 +276,11 @@ class BaseAlert(Createable):
                   "diaObject": {},
                  }
 
+        gratuitous = django.db.connection.cursor()
+        conn = gratuitous.connection
+        cursor = conn.cursor( cursor_factory=psycopg2.extras.RealDictCursor )
+        
+        t0 = time.perf_counter()
         sourcefields = [ "diaSourceId", "diaObjectId", "midPointTai",
                          "filterName", "ra", "decl", "psFlux", "psFluxErr", "snr" ]
         sourcefieldmap = { i: i.lower() for i in sourcefields }
@@ -261,55 +288,80 @@ class BaseAlert(Createable):
         sourcefieldmap["diaObjectId"] = 'diaobject_id'
         for field in sourcefields:
             alert["diaSource"][field] = getattr( self.diasource, sourcefieldmap[ field ] )
+        self.__class__._sourcetime += time.perf_counter() - t0
 
-        objectfields = [ "diaObjectId", "simVersion", "ra", "decl", "mwebv", "mwebv_err",
-                         "z_final", "z_final_err" ]
-        for suffix in [ "", "2" ]:
-            for hgfield in [ "ellipticity", "sqradius", "zspec", "zspec_err", "zphot", "zphot_err",
-                             "zphot_q000", "zphot_q010", "zphot_q020", "zphot_q030", "zphot_q040",
-                             "zphot_q050", "zphot_q060", "zphot_q070", "zphot_q080", "zphot_q090", "zphot_q100",
-                             "mag_u", "mag_g", "mag_r", "mag_i", "mag_z", "mag_Y",
-                             "ra", "dec", "snsep",
-                             "magerr_u", "magerr_g", "magerr_r", "magerr_i", "magerr_z", "magerr_Y" ]:
-                objectfields.append( f"hostgal{suffix}_{hgfield}" )
-        objectfieldmap = { i: i.lower() for i in objectfields }
-        objectfieldmap["diaObjectId"] = "diaobject_id"
+        t0 = time.perf_counter()
+        if self._objectfields is None:
+            self._objectfields = [ "diaObjectId", "simVersion", "ra", "decl", "mwebv", "mwebv_err",
+                                   "z_final", "z_final_err" ]
+            for suffix in [ "", "2" ]:
+                for hgfield in [ "ellipticity", "sqradius", "zspec", "zspec_err", "zphot", "zphot_err",
+                                 "zphot_q000", "zphot_q010", "zphot_q020", "zphot_q030", "zphot_q040",
+                                 "zphot_q050", "zphot_q060", "zphot_q070", "zphot_q080", "zphot_q090", "zphot_q100",
+                                 "mag_u", "mag_g", "mag_r", "mag_i", "mag_z", "mag_Y",
+                                 "ra", "dec", "snsep",
+                                 "magerr_u", "magerr_g", "magerr_r", "magerr_i", "magerr_z", "magerr_Y" ]:
+                    self._objectfields.append( f"hostgal{suffix}_{hgfield}" )
+            self._objectfieldmap = { i: i.lower() for i in self._objectfields }
+            self._objectfieldmap["diaObjectId"] = "diaobject_id"
+        self.__class__._objectoverheadtime += time.perf_counter() - t0
                 
-        for field in objectfields:
-            alert["diaObject"][field] = getattr( self.diaobject, objectfieldmap[ field ] )
-        
-        objsources = ( self._sourceclass.objects
-                       .filter( diaobject_id=self.diasource.diaobject_id )
-                       .order_by( "midpointtai" ) )
+        for field in self._objectfields:
+            alert["diaObject"][field] = getattr( self.diaobject, self._objectfieldmap[ field ] )
+        self.__class__._objecttime += time.perf_counter() - t0
+            
+        t0 = time.perf_counter()
+        if objsources is None:
+            objsources = ( self._sourceclass.objects
+                           .filter( diaobject_id=self.diasource.diaobject_id )
+                           .order_by( "midpointtai" )
+                           .values() )
         for prevsource in objsources:
-            if prevsource.diasource_id == self.diasource.diasource_id: break
+            if prevsource['diasource_id'] == self.diasource.diasource_id: break
             newprevsource = {}
             for field in sourcefields:
-                newprevsource[field] = getattr( prevsource, sourcefieldmap[ field ] )
+                newprevsource[field] = prevsource[ sourcefieldmap[ field ] ]
+                                    #= getattr( prevsource, sourcefieldmap[ field ] )
             alert["prvDiaSources"].append( newprevsource )
-
+        self.__class__._prvsourcetime += time.perf_counter() - t0 
+            
         # If this source is the same night as the original detection, then
         # there will be no forced source information
 
+        t0 = time.perf_counter()
         forcedsourcefields = [ "diaForcedSourceId", "diaObjectId", "midPointTai",
                                "filterName", "psFlux", "psFluxErr" ]
         forcedsourcefieldmap = { i: i.lower() for i in forcedsourcefields }
         forcedsourcefieldmap[ "diaForcedSourceId" ] = "diaforcedsource_id"
         forcedsourcefieldmap[ "diaObjectId" ] = "diaobject_id"
         
-        if self.diasource.midpointtai - objsources[0].midpointtai > 0.5:
-            objforced = self._forcedsourceclass.objects.filter( diaobject_id=self.diasource.diaobject_id,
-                                                                midpointtai__gte=objsources[0].midpointtai-30.,
-                                                                midpointtai__lt=self.diasource.midpointtai )
+        if self.diasource.midpointtai - objsources[0]['midpointtai'] > 0.5:
+            if objforced is None:
+                objforced = ( self._forcedsourceclass.objects
+                              .filter( diaobject_id=self.diasource.diaobject_id )
+                              .order_by( 'midpointtai' )
+                              .values() )
+                if self.__class__._hackqueryshown < 10:
+                    _logger.info( f"alert reconstruct forced source query: {objforced.query}" )
+                    self.__class__._hackqueryshown += 1
+            # objforced = [ i for i in objforced if
+            #               i['midpointtai'] >= objsources[0]['midpointtai']-30
+            #              and i['midpointtai'] <= self.diasource.midpointtai ]
             # _logger.warn( f"Found {len(objforced)} previous" )
             for forced in objforced:
+                if forced['midpointtai'] < objsources[0]['midpointtai'] - 30:
+                    continue
+                if forced['midpointtai'] >= self.diasource.midpointtai:
+                    break
                 newforced = {}
                 for field in forcedsourcefields:
-                    newforced[field] = getattr( forced, forcedsourcefieldmap[ field ] )
+                    newforced[field] = forced[ forcedsourcefieldmap[ field ] ]
+                                    #=getattr( forced, forcedsourcefieldmap[ field ] )
                 alert["prvDiaForcedSources"].append( newforced )
         # else:
         #     _logger.warn( "Not adding previous" )
-
+        self.__class__._prvforcedsourcetime += time.perf_counter() - t0
+        
         return alert
                   
     

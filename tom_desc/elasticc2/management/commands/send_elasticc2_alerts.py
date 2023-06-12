@@ -116,9 +116,9 @@ class Command(BaseCommand):
                        .filter( alertsenttimestamp__isnull=True,
                                 diasource__midpointtai__lte=through_day )
                        .order_by( 'diasource__midpointtai' ) )
-            self.logger.info( f"{len(alerts)} alerts to stream" )
+            self.logger.info( f"{alerts.count()} alerts to stream" )
 
-            if len(alerts) == 0:
+            if alerts.count() == 0:
                 return
 
             # import pdb; pdb.set_trace()
