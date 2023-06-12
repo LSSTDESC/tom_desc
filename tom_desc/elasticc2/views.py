@@ -88,7 +88,7 @@ class Elasticc2AdminSummary( PermissionRequiredMixin, django.views.View ):
         with connection.cursor() as cursor:
             cursor.execute( 'SELECT COUNT(o.diaobject_id),t.gentype,m.classid,m.description '
                             'FROM elasticc2_diaobject o '
-                            'LEFT JOIN elasticc2_diaobjecttruth t ON t.ppdbdiaobject_id=o.diaobject_id '
+                            'LEFT JOIN elasticc2_diaobjecttruth t ON t.diaobject_id=o.diaobject_id '
                             'LEFT JOIN elasticc2_gentypeofclassid m ON m.gentype=t.gentype '
                             'GROUP BY t.gentype,m.classid,m.description '
                             'ORDER BY m."classid"' )
@@ -158,16 +158,16 @@ class PPDBDiaObjectSourcesViewSet( rest_framework.viewsets.ReadOnlyModelViewSet 
         obj = get_object_or_404( self.queryset, pk=pk )
         objserializer = PPDBDiaObjectSerializer( obj )
         objdict = dict( objserializer.data )
-        srcs = PPDBDiaSource.objects.filter( ppdbdiaobject_id=pk )
-        objdict[ 'ppdbdiasources' ] = []
+        srcs = PPDBDiaSource.objects.filter( diaobject_id=pk )
+        objdict[ 'diasources' ] = []
         for src in srcs:
             ser = PPDBDiaSourceSerializer( src )
-            objdict[ 'ppdbdiasources' ].append( ser.data )
-        objdict[ 'ppdbdiaforcedsources' ] = []
-        frcsrcs = PPDBDiaForcedSource.objects.filter( ppdbdiaobject_id=pk )
+            objdict[ 'diasources' ].append( ser.data )
+        objdict[ 'diaforcedsources' ] = []
+        frcsrcs = PPDBDiaForcedSource.objects.filter( diaobject_id=pk )
         for src in frcsrcs:
             ser = PPDBDiaForcedSourceSerializer( src )
-            objdict[ 'ppdbdiaforcedsources' ].append( ser.data )
+            objdict[ 'diaforcedsources' ].append( ser.data )
         return rest_framework.response.Response( objdict )
 
 class PPDBDiaObjectAndPrevSourcesForSourceViewSet( rest_framework.viewsets.ReadOnlyModelViewSet ):
@@ -182,24 +182,24 @@ class PPDBDiaObjectAndPrevSourcesForSourceViewSet( rest_framework.viewsets.ReadO
     def retrieve( self, request, pk=None ):
         sys.stderr.write( f"Trying to get source {pk}" )
         src = get_object_or_404( PPDBDiaSource.objects.all(), pk=pk )
-        sys.stderr.write( f"Trying to get object {src.ppdbdiaobject_id}" )
-        obj = get_object_or_404( PPDBDiaObject.objects.all(), pk=src.ppdbdiaobject_id )
+        sys.stderr.write( f"Trying to get object {src.diaobject_id}" )
+        obj = get_object_or_404( PPDBDiaObject.objects.all(), pk=src.diaobject_id )
         objserializer = PPDBDiaObjectSerializer( obj )
         objdict = dict( objserializer.data )
-        objdict[ 'ppdbdiasources' ] = []
-        objdict[ 'ppdbdiaforcedsources' ] = []
+        objdict[ 'diasources' ] = []
+        objdict[ 'diaforcedsources' ] = []
         srcs = ( PPDBDiaSource.objects
-                 .filter( ppdbdiaobject_id=src.ppdbdiaobject_id )
+                 .filter( diaobject_id=src.diaobject_id )
                  .filter( midpointtai__lte=src.midpointtai ) )
         frcsrcs = ( PPDBDiaForcedSource.objects
-                    .filter( ppdbdiaobject_id=src.ppdbdiaobject_id )
+                    .filter( diaobject_id=src.diaobject_id )
                     .filter( midpointtai__lte=src.midpointtai ) )
         for src in srcs:
             ser = PPDBDiaSourceSerializer( src )
-            objdict[ 'ppdbdiasources' ].append( ser.data )
+            objdict[ 'diasources' ].append( ser.data )
         for src in frcsrcs:
             ser = PPDBDiaForcedSourceSerializer( src )
-            objdict[ 'ppdbdiaforcedsources' ].append( ser.data )
+            objdict[ 'diaforcedsources' ].append( ser.data )
         return rest_framework.response.Response( objdict )
     
 # ======================================================================
