@@ -64,11 +64,12 @@ INSTALLED_APPS = [
     'tom_catalogs',
     'tom_observations',
     'tom_dataproducts',
+    'stream.apps.StreamConfig',
+    'automatisation.apps.AutomatisationConfig',
     'db.apps.DbConfig',
     'elasticc.apps.ElasticcConfig',
     'elasticc2.apps.Elasticc2Config',
-    'stream.apps.StreamConfig',
-    'automatisation.apps.AutomatisationConfig',
+    'tests.apps.TestsConfig',
 ]
 
 SITE_ID = 1
@@ -345,8 +346,8 @@ TOM_ALERT_CLASSES = [
     'tom_antares.antares.ANTARESBroker',
     'tom_alerts.brokers.gaia.GaiaBroker',
     'tom_alerts.brokers.lasair.LasairBroker',
-    'tom_alerts.brokers.mars.MARSBroker',
-    'tom_alerts.brokers.scimma.SCIMMABroker',
+#    'tom_alerts.brokers.mars.MARSBroker',
+#    'tom_alerts.brokers.scimma.SCIMMABroker',
     'tom_alerts.brokers.scout.ScoutBroker',
     'tom_alerts.brokers.tns.TNSBroker',
     'tom_fink.fink.FinkBroker',

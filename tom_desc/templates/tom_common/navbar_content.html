@@ -10,6 +10,9 @@ For customization instructions, see tom_common/base.html
 <li class="nav-item {% if request.resolver_match.url_name == 'elasticc' %}active{% endif %}">
   <a class="nav-link" href="/elasticc">ELAsTiCC <span class="sr-only">(current)</span></a>
 </li>
+<li class="nav-item {% if request.resolver_match.url_name == 'elasticc2' %}active{% endif %}">
+  <a class="nav-link" href="/elasticc2">ELAsTiCC2 <span class="sr-only">(current)</span></a>
+</li>
 <li class="nav-item dropdown">
     <a class="nav-link dropdown-toggle {% if request.resolver_match.namespace == 'targets' %}active{% endif %}" data-toggle="dropdown">Targets</a>
     <div class="dropdown-menu">

@@ -3,8 +3,8 @@ MAINTAINER Rob Knop <raknop@lbl.gov>
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-RUN mkdir /secrets
-RUN echo "replace_this" >> /secrets/postgres_password
+# RUN mkdir /secrets
+# RUN echo "replace_this" >> /secrets/postgres_password
 
 RUN mkdir /build
 WORKDIR /build
@@ -16,7 +16,7 @@ WORKDIR /build
 RUN apt-get update && apt-get -y upgrade && \
   apt-get -y install \
     make git gcc postgresql-13 postgresql-client-13 postgresql-13-postgis \
-    postgresql-server-dev-13 pgtop libssl-dev libreadline-dev zlib1g-dev tmux && \
+    postgresql-server-dev-13 pgtop libssl-dev libreadline-dev zlib1g-dev tmux netcat && \
   git clone https://github.com/segasai/q3c.git && \
   cd q3c && \
   make && \

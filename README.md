@@ -4,27 +4,33 @@ Based on the [Tom Toolkit](https://lco.global/tomtoolkit/)
 
 # Using the TOM
 
-The "production" server at nersc is `https://desc-tom.lbl.gov` ; ask Rob
-(raknop@lbl.gov or Rob Knop on the LSST Slack) if you need a user account.
+The "production" server at nersc is `https://desc-tom.lbl.gov` ; ask Rob (raknop@lbl.gov or Rob Knop on the LSST Slack) if you need a user account.
 
-At the moment, the TOM is only holding the alerts and broker messages
-for the ELAsTiCC challenge.  It will evolve from here (using at least
-ELAsTiCC as a test data set) into something that will prioritize and
-schedule follow-up observations; it may also evolve into the FAST
-database.
+At the moment, the TOM is only holding the alerts and broker messages for the ELAsTiCC challenge.  It will evolve from here (using at least ELAsTiCC as a test data set) into something that will prioritize and schedule follow-up observations.
 
-There are a few ways to use it:
+Being a Django server, the TOM is divided into different "applications".  The most relevant ones right now are:
 
-* Interactively with a browser.  There's not much there yet.
-* There are a few REST-like interfaces for ELAsTiCC you can use to pull down information
-* You can access the database directly by passing SQL to a thin http
-interface; see `sql_query_tom_db.py` or (similar code as a Jupyter
-notebook) `sql_query_tom_db.ipynb`; see [Database Schema and Notes](#database-schema-and-notes) for more information.
+* [ELAsTiCC](#elasticc)
+* [ELAsTiCC2](#elasticc2) (Under construction!)
+
+## Accessing the TOM
+
+### Interactively with a browser
+
+Just go.  Look at (for example) the ELAsTiCC, ELAsTiCC2, and Targets links in the header navigation bar.
+
+### Via SQL
+
+You can access the database directly by passing SQL to a thin http interface; see `sql_query_tom_db.py` or (similar code as a Jupyter notebook) `sql_query_tom_db.ipynb`; see [Database Schema and Notes](#database-schema-and-notes) for more information.  Both of these (IF THEY'RE UP TO DATE) use `tomclient.py`, which defines a class `TomClient` that is really just a very simple front-end to python `requests` that handles some annoying django login details..  The docstring for the class in that file describes how to use it.
+
+# <a name="elasticc"></a>The ELAsTiCC application
+
+You can get to its web interface by clicking on the "ELAsTiCC" link in the navbar at the top of the TOM web page, or by going straight to [https://desc-tom.lbl.gov/elasticc]
 
 ## Example REST interface usage
 
-To use these, you need to have an account on the TOM, and you need to
-log into it with the client you're using.  Here's an example:
+To use these, you need to have an account on the TOM, and you need to log into it with the client you're using.
+Here's an example (ROB UPDATE THIS):
 
 ```
 import requests
@@ -75,108 +81,44 @@ Currently defined are:
 * `https://desc-tom.lbl.gov/elasticc/diaalert/`
 * (and some other things I should still document)
 
-Note that as the elasticc database has grown, many of these endpoints will
-time out before they're able to pull and send all of their informaiton.
+Note that as the elasticc database has grown, many of these endpoints will time out before they're able to pull and
+send all of their informaiton.
 
-
-Called by themselves, they return a JSON dict as in the example above,
-with `count` giving the total number of objects (or sources or truth
-table entries), and `results` having an array of dictionaries for the
-first hundred objects.  `next` and `previous` have URLs for getting the
-next or previous 100 from the list.  (This will be fraught if records
-are actively being addded to the database at the same time as when
-you're running your queries.)  As in the example above, you can append a
-single number (with a trailing slash after it) to pull down the
-information for that one object or source; that number is (respectively)
-diaObjectId or diaSourceId.  (For the Truth table, pass the relevant
-diaSourceId.)
+Called by themselves, they return a JSON dict as in the example above, with `count` giving the total number of objects (or sources or truth table entries), and `results` having an array of dictionaries for the first hundred objects.  `next` and `previous` have URLs for getting the next or previous 100 from the list.  (This will be fraught if records are actively being addded to the database at the same time as when you're running your queries.)  As in the example above, you can append a single number (with a trailing slash after it) to pull down the information for that one object or source; that number is (respectively) diaObjectId or diaSourceId.  (For the Truth table, pass the relevant diaSourceId.)
 
 ## Database Schema and Notes
 
-The schema for the elasticc tables in the database can be found in the
-comments at the end of `sql_query_tom_db.py`.  Everybody can read the
-`elasticc_broker*` tables; only people in the `elasticc_admin` group can
-read the other `elasticc_*` tables.
+The schema for the elasticc tables in the database can be found in the comments at the end of `sql_query_tom_db.py`.  Everybody can read the `elasticc_broker*` tables; only people in the `elasticc_admin` group can read the other `elasticc_*` tables.
 
 ### classId and gentype
 
-Broker Messages include a classification in the field `classId`; these
-ids use the [ELAsTiCC
-taxonomy](https://github.com/LSSTDESC/elasticc/blob/main/taxonomy/taxonomy.ipynb).
-This is a hierarchical classification.  Classifications in the range 0-9
-correspond to a broad class.  Classifications in the range 10-99
-correspond to a more specific category.  Classifications in the range
-100-999 correspond to an "exact" classification (or, as exact as the
-taxonomy gets).  The first digit of a classification tells you its broad
-class, the second digit tells you the specific category within the
-broad class, and the third digit tells you the exact classification
-within the specific category.  (Go look at the taxonomy; there's a
-map there that will make it clearer than this description.)
+Broker Messages include a classification in the field `classId`; these ids use the [ELAsTiCC taxonomy](https://github.com/LSSTDESC/elasticc/blob/main/taxonomy/taxonomy.ipynb).  This is a hierarchical classification.  Classifications in the range 0-9 correspond to a broad class.  Classifications in the range 10-99 correspond to a more specific category.  Classifications in the range 100-999 correspond to an "exact" classification (or, as exact as the taxonomy gets).  The first digit of a classification tells you its broad class, the second digit tells you the specific category within the broad class, and the third digit tells you the exact classification within the specific category.  (Go look at the taxonomy; there's a map there that will make it clearer than this description.)
 
-The true model type used to create the original alerts are in the field
-`gentype` in the table `elasticc_diaobjecttruth`; this field is an
-internal SNANA index.  The mapping between `classId` and `gentype` is
-complicated for a few reasons.  First, SNANA (of course) uses individual
-models to generate lightcurves, so there will be no `gentype`s
-corresponding to the broad class or specific categories of the
-taxonomy.  Second, in some cases (e.g. core-collapse supernovae), there
-are multipel different SNANA models (and thus multiple different
-`gentype` values) that correspond to the same `classId`.
+The true model type used to create the original alerts are in the field `gentype` in the table `elasticc_diaobjecttruth`; this field is an internal SNANA index.  The mapping between `classId` and `gentype` is complicated for a few reasons.  First, SNANA (of course) uses individual models to generate lightcurves, so there will be no `gentype`s corresponding to the broad class or specific categories of the taxonomy.  Second, in some cases (e.g. core-collapse supernovae), there are multipel different SNANA models (and thus multiple different `gentype` values) that correspond to the same `classId`.
 
-There are two database tables to help matching broker classifications to
-truth, but additional logic beyond just looking up lines in this table
-will be needed for the reasons desribed above.
+There are two database tables to help matching broker classifications to truth, but additional logic beyond just looking up lines in this table will be needed for the reasons desribed above.
 
-`elasticc_gentypeofclassid` gives a mapping of `classId` to all
-associated `gentype` values.  This table has one entry for each gentype,
-but it also has a number of entries where `gentype` is null.  These
-latter entries are the cases where there is no `gentype` (i.e. SNANA
-model) that corresponds to a given `classId` (e.g. in the case of
-categories).  There are multiple entries for several `classId` values
-(e.g. `classId` 113, for a SNII, has six different SNANA models, and
-thus six different `gentype` values, associated with it).  This is the
-table you would want to join to the truth table in order to figure out
-which `classId` a broker _should_ have given to an event if it
-classified it exactly right.
+`elasticc_gentypeofclassid` gives a mapping of `classId` to all associated `gentype` values.  This table has one entry for each gentype, but it also has a number of entries where `gentype` is null.  These latter entries are the cases where there is no `gentype` (i.e. SNANA model) that corresponds to a given `classId` (e.g. in the case of categories).  There are multiple entries for several `classId` values (e.g. `classId` 113, for a SNII, has six different SNANA models, and thus six different `gentype` values, associated with it).  This is the table you would want to join to the truth table in order to figure out which `classId` a broker _should_ have given to an event if it classified it exactly right.
 
-`elasticc_classidofgentype` is useful if you want to figure out if the
-broker got the general category right.  There are multiple entries for
-each `classId`, and multiple entries for each `gentype`.  None of the
-entries in this table have a null value for either `classId` or
-`gentype`.  If the `classId` is a three-digit identification (i.e. an
-exact time), then the fields `categorymatch` and `exactmatch` will both
-be `true`, and the information is redundant with whats in the
-`elasticc_gentypeofclassid` table.  If the `classId` is a two-digit
-identification, then the `exactmatch` will be `false` and the
-`categorymatch` will be true.  There will be an entry for _every_
-`gentype` that corresponds to something in this category.  (So, for
-`classId` 11, "SN-like", there will be entries in this table for the
-`gentype`s of all SNANA supernova models of all types.)  If the
-`classId` is a one-digit identification, i.e. a broad class, then
-both `categorymatch` and `exactmatch` will be false, and there be a
-large number of lines in this table, one for each SNANA model that
-corresponds to anything in the broad class.
+`elasticc_classidofgentype` is useful if you want to figure out if the broker got the general category right.  There are multiple entries for each `classId`, and multiple entries for each `gentype`.  None of the entries in this table have a null value for either `classId` or `gentype`.  If the `classId` is a three-digit identification (i.e. an exact time), then the fields `categorymatch` and `exactmatch` will both be `true`, and the information is redundant with whats in the `elasticc_gentypeofclassid` table.  If the `classId` is a two-digit identification, then the `exactmatch` will be `false` and the `categorymatch` will be true.  There will be an entry for _every_ `gentype` that corresponds to something in this category.  (So, for `classId` 11, "SN-like", there will be entries in this table for the `gentype`s of all SNANA supernova models of all types.)  If the `classId` is a one-digit identification, i.e. a broad class, then both `categorymatch` and `exactmatch` will be false, and there be a large number of lines in this table, one for each SNANA model that corresponds to anything in the broad class.
 
 
 ---
 
 # Internal Documentation
 
-The rest of this is only interesting if you want to develop it or deploy
-a private version for hacking.
+The rest of this is only interesting if you want to develop it or deploy a private version for hacking.
 
 ## Branch Management
 
 The branch `main` has the current production code.
 
-Make a branch `/u/{yourname}/{name}` to do dev work, which (if
-appropriate) may later be merged into `main`.
+Make a branch `/u/{yourname}/{name}` to do dev work, which (if appropriate) may later be merged into `main`.
 
 
 ## Deployment with Docker
 
-If you want to test the TOM out, you can deploy it on your local
-machine.  If you're lucky, all you need to do is:
+If you want to test the TOM out, you can deploy it on your local machine.  If you're lucky, all you need to do is:
 
 <ul>
 
@@ -204,27 +146,21 @@ machine.  If you're lucky, all you need to do is:
   </ul></li>
 </ul>
 
-This will set up the database schema, and create root user.  At this
-point, you should be able to connect to your running TOM at
-`localhost:8080`.
+This will set up the database schema, and create root user.  At this point, you should be able to connect to your running TOM at `localhost:8080`.
 
-If you ever run a server that exposes its interface to the outside web,
-you probably want to edit your local version of the file
-`secrets/django_secret_key`.  Don't commit anything sensitive to git,
-and especially don't upload it to github!  (There *are* postgres
-passwords in the github archive, which would seem to voilate this
-warning.  The reason we're not worried about that is that both in the
-docker-compose file, and as the server is deployed in production, the
-postgres server is not directly accessible from outside, but only from
-within the docker environment (or, for production, the Spin
-namespace). Of course, it would be better to add the additional layer of
-security of obfuscating those passwords, but, whatever.)
+Next, you need to create the "Public" group.  You need to do this before adding any users.  If all is well, any users added thereafter will automatically be added to this group.  Some of the DESC specific code will break if this group does not exist.  (The TOM documentation seems to imply that this group should have been created automatically, but that doesn't seem to be the case.)  To do this:
+``` python manage.py shell
+>>> from django.contrib.auth.models import Group
+>>> g = Group( name='Public' )
+>>> g.save()
+>>> exit()
+```
+
+If you ever run a server that exposes its interface to the outside web, you probably want to edit your local version of the file `secrets/django_secret_key`.  Don't commit anything sensitive to git, and especially don't upload it to github!  (There *are* postgres passwords in the github archive, which would seem to voilate this warning.  The reason we're not worried about that is that both in the docker-compose file, and as the server is deployed in production, the postgres server is not directly accessible from outside, but only from within the docker environment (or, for production, the Spin namespace). Of course, it would be better to add the additional layer of security of obfuscating those passwords, but, whatever.)
 
 ### Populating the database
 
-<a href="https://portal.nersc.gov/cfs/lsst/DESC_TD_PUBLIC/users/raknop/elasticc_subset.sql">Here
-is a small subset</a> of the tables from September 2022-January 2203
-ELAsTiCC campaign.  It includes:
+<a href="https://portal.nersc.gov/cfs/lsst/DESC_TD_PUBLIC/users/raknop/elasticc_subset.sql">Here is a small subset</a> of the tables from September 2022-January 2203 ELAsTiCC campaign.  It includes:
 
 * 1,000 objects selected randomly
 * 10,145 sources (and thus alerts) for those objects
@@ -233,40 +169,19 @@ ELAsTiCC campaign.  It includes:
 * 60,586 broker messages for those alerts
 * 1,306,702 broker classifications from those broker messages
 
-*Note*: this SQL dump is compatible with the schema in the database as
-of 2022-03-23.  If the schema evolve, then this SQL dump will
-(probably) no longer be able to be loaded into the database.
+*Note*: this SQL dump is compatible with the schema in the database as of 2022-03-23.  If the schema evolve, then this SQL dump will (probably) no longer be able to be loaded into the database.
 
-To populate the `elasticc` tables of the database with this subset, copy
-this file to the `tom_desc` subdirectory of your checkout.  (That is, if
-your checkout is in `tom_desc`, copy this file to the `tom_desc/tom_desc/`
-directory.)  Get a shell on your running tom_desc_tom container (using a
-command something like `docker exec -it tom_desc_tom_1 /bin/bash`).
-Once there, run the command:
+To populate the `elasticc` tables of the database with this subset, copy this file to the `tom_desc` subdirectory of your checkout.  (That is, if your checkout is in `tom_desc`, copy this file to the `tom_desc/tom_desc/` directory.)  Get a shell on your running tom_desc_tom container (using a command something like `docker exec -it tom_desc_tom_1 /bin/bash`).  Once there, run the command:
 
 `psql -h postgres -U postgres tom_desc < elasticc_subset.sql`
 
-You will be prompted for the postgres password, which is "fragile".
-(This postgres instance should not be accessible outside of your docker
-container environment, which is why it doesn't have a secure password.)
-If all goes well, you'll get a bunch of numbers telling you how many
-rows were put into various tables, and you will get no error messages.
-After that, your database should be populated.  Verify this by going
-to the link `http://localhost:8080/elasticc/summary` and verify
-that the numbers match what's listed above.  (You will need to be logged
-into your instance of the TOM for that page to load.)
+You will be prompted for the postgres password, which is "fragile".  (This postgres instance should not be accessible outside of your docker container environment, which is why it doesn't have a secure password.)  If all goes well, you'll get a bunch of numbers telling you how many rows were put into various tables, and you will get no error messages.  After that, your database should be populated.  Verify this by going to the link `http://localhost:8080/elasticc/summary` and verify that the numbers match what's listed above.  (You will need to be logged into your instance of the TOM for that page to load.)
 
 ### Development and database migrations
 
-Note that the web software itself doesn't live in the docker image, but
-is volume mounted from the "tom_desc" subdirectory.  For development,
-you can just edit the software directly there.  To get the server to
-pull in your changes, you need to run a shell on the server's container
-and run `kill -HUP 1`.  That restarts the gunicorn webserver, which
-forces it to reread all of the python code that define the web ap.
+Note that the web software itself doesn't live in the docker image, but is volume mounted from the "tom_desc" subdirectory.  For development, you can just edit the software directly there.  To get the server to pull in your changes, you need to run a shell on the server's container and run `kill -HUP 1`.  That restarts the gunicorn webserver, which forces it to reread all of the python code that define the web ap.
 
-If you change any database schema, you have to get a shell on the
-server's container and:
+If you change any database schema, you have to get a shell on the server's container and:
 * `python manage.py pgmakemigrations` (**NOTE**: Do NOT run makemigrations, which is what django and tom documentation will tell you to do, as the models use some postgres extentions (in particular, partitioned tables) that makemigrations will not succesfully pick up.)
 * Check to make sure the migrations created look right, and do any
   manual intervention that's needed.  (Ideally, manual intervention will
@@ -275,38 +190,13 @@ server's container and:
 * Deal with the situation if the migration didn't apply cleanly.
 * `kill -HUP 1` to get the running webserver synced with the current code.
 
-BE CAREFUL ABOUT DATABASE MIGRATIONS.  For throw-away development
-environments, it's fine.  But, the nature of database migrations is such
-that forks in database schema history are potentially a lot more painful
-to deal with than forks in source code (where git and text merge can
-usually handle it without _too_ much pain).  If you're going to make
-migrations that you want to have pulled into the main branch, coordinate
-with the other people working on the DESC Tom.  (As of this writing,
-that's me, Rob Knop.)
+BE CAREFUL ABOUT DATABASE MIGRATIONS.  For throw-away development environments, it's fine.  But, the nature of database migrations is such that forks in database schema history are potentially a lot more painful to deal with than forks in source code (where git and text merge can usually handle it without _too_ much pain).  If you're going to make migrations that you want to have pulled into the main branch, coordinate with the other people working on the DESC Tom.  (As of this writing, that's me, Rob Knop.)
 
 ## Deployment at NERSC
 
-The server runs on NERSC Spin, in the `desc-tom` namespace of production
-m1727.  It reads its container image from
-`registry.services.nersc.gov/raknop/tom-desc-production`; that container
-image is built the Dockerfile in the "docker" subdirectory of this
-repository.  (I also run another instance on the development Spin
-server, for, of course, development.)
+The server runs on NERSC Spin, in the `desc-tom` namespace of production m1727.  It reads its container image from `registry.services.nersc.gov/raknop/tom-desc-production`; that container image is built the Dockerfile in the "docker" subdirectory of this repository.  (I also run another instance on the development Spin server, for, of course, development.)
 
-The actual web ap software is *not* read from the docker image (although
-a version of the software is packaged in the image).  Rather, the
-directory `/tom_desc` inside the container is mounted from the NERSC csf
-file system.  This allows us to update the software without having to
-rebuild and redploy the image; the image only needs to be redeployed if
-we have to add prerequisite packages, or if we want to update the OS
-software for security patches and the like.  The actual TOM software is
-deployed at
-`/global/cfs/cdirs/desc-td/SOFTWARE/tom_deployment/production/tom_desc`
-(with the root volume for the web server in the `tom_desc` subdirectory
-below that).  Right now, that deployment is just handled as a git
-checkout.  After it's updated, things need to happen *on* the Spin
-server (migrations, telling the server to reload the software).  My
-(Rob's) notes on this are in `rob_notes.txt`.
+The actual web ap software is *not* read from the docker image (although a version of the software is packaged in the image).  Rather, the directory `/tom_desc` inside the container is mounted from the NERSC csf file system.  This allows us to update the software without having to rebuild and redploy the image; the image only needs to be redeployed if we have to add prerequisite packages, or if we want to update the OS software for security patches and the like.  The actual TOM software is deployed at `/global/cfs/cdirs/desc-td/SOFTWARE/tom_deployment/production/tom_desc` (with the root volume for the web server in the `tom_desc` subdirectory below that).  Right now, that deployment is just handled as a git checkout.  After it's updated, things need to happen *on* the Spin server (migrations, telling the server to reload the software).  My (Rob's) notes on this are in `rob_notes.txt`.
 
 ### Steps for deployment
 
@@ -342,6 +232,16 @@ Do `module load spin` on perlmutter.  Do `rancher context switch` to get in the 
 - Once everything is set up, you still have to actually create the database; to do this, get a shell on the app server with `rancher kubectl exec --stdin --tty --namespace=<namespace> <podname> -- /bin/bash` and run
   - `python manage.py migrate`
   - `python manage.py createsuperuser`
+
+- Create the `Public` Group.   (The TOM documentation seems to imply that this group should have been
+  created automatically, but that doesn't seem to be the case.)
+  ```
+   python manage.py shell
+   >>> from django.contrib.auth.models import Group
+   >>> g = Group( name='Public' )
+   >>> g.save()
+   >>> exit()
+   ```
 
 - You then probably want to do things to copy users and populate databases and things....
 
@@ -398,11 +298,7 @@ For the passwords obscured below, look at the `0022_ro_users.py` migration file 
          recommendations *only* add the NET_BIND_SERVICE capability
    - Create a ingress under "Load Balancing".  (More information needed.)
 
-When you first create the database and the TOM, the tom won't work,
-because the database tables aren't set up. Run a shell on the TOM's
-workload, and then do `python manage.py migrate` to set up those
-database tables.  When done, do `kill -HUP 1` to restart the web
-server.  This is only necessary when you start the first time.
+When you first create the database and the TOM, the tom won't work, because the database tables aren't set up. Run a shell on the TOM's workload, and then do `python manage.py migrate` to set up those database tables.  When done, do `kill -HUP 1` to restart the web server.  This is only necessary when you start the first time.
 
 ### Copying users
 
@@ -426,10 +322,7 @@ This is in the `LSSTDESC/elasticc` archive, under the `stream-to-zads` directory
 
 ### Pulling from brokers
 
-The django management command
-`elasticc/management/commands/brokerpoll.py` handled the broker polling.
-It ran in its own Spin container with the same Docker image as the main
-tom web server (but did not open a webserver port to the outside world).
+The django management command `elasticc/management/commands/brokerpoll.py` handled the broker polling.  It ran in its own Spin container with the same Docker image as the main tom web server (but did not open a webserver port to the outside world).
 
 
 ## ELASTICC2
@@ -441,3 +334,57 @@ The django management command `elasticc/management/commands/send_elasticc_alerts
 ### Fake broker
 
 In the `LSSTDESC/elasticc` archive, under the `stream-to-zads` directory, there is a script `fakebroker.py`.  This is able to read ELaSTiCC alerts from one kafka server, construct broker messages (which are the right structure, but have no real thought behind the classifications), and send those broker messages on to another kafka server.
+
+
+## Testing
+
+The `tests` subdirectory has tests.  They don't test the basic TOM functionality; they test the DESC stuff that we've added on top of the TOM.  (The hope is that the TOM passes its own tests internally.)  Currently, tests are still being written, so much of the functionality doesn't have any tests.
+
+The tests are designed to run inside the framework described by the `docker-compose.yaml` file.  Tests of the functionality require several different services running:
+
+  * two kafka services (zookeeper and server)
+  * a backend postgres service
+  * the TOM web server
+  * a fake broker (to ingest alerts and produce broker classifications for testing purposes)
+  * a process polling the fake broker for classifications to stick into the tom
+  * a client machine on which to run the tests
+
+The `docker-compose.yaml` file has an additional service `createdb` that creates the database tables once the postgres server is up; subsequent services don't start until that service is finished.  It starts up one or two different client services, based on how you run it; either one to automatedly run all the tests (which can potentially take a very long time), or one to provice a shell host where you can manually run individual tests or poke about.
+
+### Building the framework
+
+Make sure all of the necessary images are built on your system by moving into the `tests` subdirectory and running:
+```
+docker compose build
+```
+
+### Running a shell in the framework
+```
+To get an environment in which to run the tests manually, run
+```
+ELASTICC2_TEST_DATA=<dir> docker compose up -d shellhost
+```
+where `<dir>` is a directory that has the 1% ELAsTiCC2 test set that the tests are designed to run with; on brahms (Rob's) desktop, this would be:
+```
+ELASTICC2_TEST_DATA=/data/raknop/elasticc2_train_1pct docker compose up -d shellhost
+```
+If you're not going to use these, you can omit the variable.  You can then connect to that shell host with `docker exec -it <container> /bin/bash`, giving it the name of the container started by docker compose (probably `tests-shellhost-1`).  The postgres server will on the host named `postgres` (so you can `psql -h postgres -U postgres tom_desc` to poke at the database— the password is "fragile", which you can see in the `docker-compose.yaml` file).  The web server will be on the host named `tom`, listening on port 8080 without SSL  (so, you could do `netcat tom 8080`, or write a python script that uses requests to connect to `http://tom:8080`... or, for that matter, use the `tom_client.py` file included in the `tests` directory).
+
+When you're done with everything, do
+```
+docker compose down
+```
+
+### Automatically running all the tests
+
+In the `tests` directory (on your machine, _not_ inside a container), after having built the framework, do:
+```
+ELASTICC2_TEST_DATA=<dir> docker compose run runtests
+```
+where `<dir>` is a directory with the 1% ELAsTiCC2 test set (just as with running a shell host, above).
+
+After the tests complete (which could take a long time), do
+```
+docker compose down
+```
+to clean up.  (If you don't do this, the next time you try to run the tests, it won't have a clean slate and the startup will fail.)

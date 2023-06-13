@@ -54,7 +54,7 @@ class BrokerConsumer:
         self.countlogger.setLevel( logging.INFO )
 
         if schemafile is None:
-            schemafile = _rundir / "elasticc.v0_9.brokerClassification.avsc"
+            schemafile = _rundir / "elasticc.v0_9_1.brokerClassification.avsc"
 
         self.countlogger.info( f"************ Starting Brokerconsumer for {loggername} ****************" )
 
@@ -75,7 +75,6 @@ class BrokerConsumer:
 
         self.nmessagesconsumed = 0
 
-        self.create_connection()
 
     @property
     def reset( self ):
@@ -111,6 +110,8 @@ class BrokerConsumer:
         if self._reset and ( self.topics is not None ):
             self.countlogger.info( f"*************** Resetting to start of broker kafka stream ***************" )
             self.reset_to_start()
+            # Only want to reset the first time the connection is opened!
+            self._reset = False
 
         self.countlogger.info( f"**************** Consumer connection opened *****************" )
 
@@ -154,13 +155,14 @@ class BrokerConsumer:
                                f"{added['addedclassifications']} classifications. " )
 
     def poll( self, restart_time=datetime.timedelta(minutes=30) ):
+        self.create_connection()
         while True:
             if self._updatetopics:
                 self.update_topics()
             strio = io.StringIO("")
             if len(self.consumer.topics) == 0:
-                self.logger.info( "No topics, will wait 1m and reconnect." )
-                time.sleep(60)
+                self.logger.info( "No topics, will wait 10s and reconnect." )
+                time.sleep(10)
             else:
                 self.logger.info( f"Subscribed to topics: {self.consumer.topics}; starting poll loop." )
                 self.countlogger.info( f"Subscribed to topics: {self.consumer.topics}; starting poll loop." )
@@ -184,6 +186,13 @@ class BrokerConsumer:
                     self.logger.warning( otherstrio.getvalue() )
                     strio.write( f"Exception polling: {str(e)}. " )
 
+            if self.pipe.poll():
+                msg = self.pipe.recv()
+                if ( 'command' in msg ) and ( msg['command'] == 'die' ):
+                    self.logger.info( "No topics, but also exiting broker poll due to die command." )
+                    self.countlogger.info( "No topics, but also existing broker poll due to die command." )
+                    self.close_connection()
+                    return
             strio.write( "Reconnecting.\n" )
             self.logger.info( strio.getvalue() )
             self.countlogger.info( strio.getvalue() )
@@ -193,6 +202,7 @@ class BrokerConsumer:
             self.create_connection()
 
 # ======================================================================
+# I should replace this and the next one with a generic noauth consumer
 
 class BrahmsConsumer(BrokerConsumer):
     def __init__( self, grouptag=None, brahms_topic=None, loggername="BRAHMS", **kwargs ):
@@ -203,6 +213,18 @@ class BrahmsConsumer(BrokerConsumer):
         topics = [ brahms_topic ]
         super().__init__( server, groupid, topics=topics, loggername=loggername, **kwargs )
         self.logger.info( f"Brahms group id is {groupid}, topic is {brahms_topic}" )
+
+# ======================================================================
+
+class TestConsumer(BrokerConsumer):
+    def __init__( self, grouptag=None, test_topic=None, loggername="TEST", **kwargs ):
+        if test_topic is None:
+            raise RuntimeError( "Must specify test topic" )
+        server = "kafka-server:9092"
+        groupid = "testing" + ("" if grouptag is None else "-" + grouptag )
+        topics = [ test_topic ]
+        super().__init__( server, groupid, topics=topics, loggername=loggername, **kwargs )
+        self.logger.info( f"Test group id is {groupid}, topic is {test_topic}" )
 
 # ======================================================================
 
@@ -286,6 +308,8 @@ class AlerceConsumer(BrokerConsumer):
         self.consumer.subscribe( self.topics )
 
 # =====================================================================
+# To make this die cleanly, send the USR1 signal to it
+# (SIGTERM doesn't work because django captures that, sadly.)
 
 class Command(BaseCommand):
     help = 'Poll ELAsTiCC Brokers'
@@ -293,6 +317,16 @@ class Command(BaseCommand):
 
     def __init__( self, *args, **kwargs ):
         super().__init__( *args, **kwargs )
+
+        # Make sure the log directory exists
+
+        logdir = _rundir.parent.parent.parent / "logs"
+        if logdir.exists():
+            if not logdir.is_dir():
+                raise RuntimeError( "{logdir} exists but is not a directory!" )
+        else:
+            logdir.mkdir( parents=True )
+
         self.logger = logging.getLogger( "brokerpoll_baselogger" )
         self.logger.propagate = False
         logout = logging.FileHandler( _rundir.parent.parent.parent / f"logs/brokerpoll.log" )
@@ -310,7 +344,10 @@ class Command(BaseCommand):
                              help="Poll from Rob's test kafka server" )
         parser.add_argument( '--brahms-topic', default=None,
                              help="Topic to poll on brahms (required if --do-brahms is True)" )
-        
+        parser.add_argument( '--do-test', action='store_true', default=False,
+                             help="Poll from kafka-server:9092 (for testing purposes)" )
+        parser.add_argument( '---test-topic', default='classifications',
+                             help="Topic to poll from on kafka-server:9092" )
         parser.add_argument( '-g', '--grouptag', default=None, help="Tag to add to end of kafka group ids" )
         parser.add_argument( '-r', '--reset', default=False, action='store_true',
                              help='Reset all stream pointers' )
@@ -324,6 +361,8 @@ class Command(BaseCommand):
                        lambda sig, stack: self.logger.warning( f"{brokerclass.__name__} ignoring SIGINT" ) )
         signal.signal( signal.SIGTERM,
                        lambda sig, stack: self.logger.warning( f"{brokerclass.__name__} ignoring SIGTERM" ) )
+        signal.signal( signal.SIGUSR1,
+                       lambda sig, stack: self.logger.warning( f"{brokerclass.__name__} ignoring SIGUSR1" ) )
         consumer = brokerclass( pipe=pipe, **options )
         consumer.poll()
 
@@ -333,6 +372,7 @@ class Command(BaseCommand):
         self.mustdie = False
         signal.signal( signal.SIGTERM, lambda sig, stack: self.sigterm( "TERM" ) )
         signal.signal( signal.SIGINT, lambda sig, stack: self.sigterm( "INT" ) )
+        signal.signal( signal.SIGUSR1, lambda sig, stack: self.sigterm( "USR1" ) )
 
         brokerstodo = {}
         if options['do_alerce']:
@@ -343,6 +383,8 @@ class Command(BaseCommand):
             brokerstodo['fink'] = FinkConsumer
         if options['do_brahms']:
             brokerstodo['brahms'] = BrahmsConsumer
+        if options['do_test']:
+            brokerstodo['test'] = TestConsumer
         if len( brokerstodo ) == 0:
             self.logger.error( "Must give at least one broker to listen to." )
             raise RuntimeError( "No brokers given to listen to." )
