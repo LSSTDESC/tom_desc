@@ -319,9 +319,8 @@ class PittGoogleBroker(BrokerConsumer):
         batch_maxn: int = 1000,  # max number of messages in a batch
         batch_maxwait: int = 5,  # max seconds to wait between messages before processing a batch
         loggername: str = "PITTGOOGLE",
-        schemafile: pathlib.Path = None,
     ):
-        logger = logging.getLogger(loggername)
+        super().__init__(server=None, groupid=None, loggername=loggername)
 
         if schemafile is None:
             schemafile = _rundir / "elasticc.v0_9_1.brokerClassification.avsc"
@@ -339,9 +338,9 @@ class PittGoogleBroker(BrokerConsumer):
                 max_workers=max_workers,
                 initializer=self.worker_init,
                 initargs=(
-                    fastavro.schema.load_schema(schemafile),
+                    self.schema,
                     subscription.topic.name,
-                    logger,
+                    self.logger,
                 ),
             ),
         )
