@@ -314,18 +314,19 @@ class AlerceConsumer(BrokerConsumer):
 class PittGoogleBroker(BrokerConsumer):
     def __init__(
         self,
-        subscription_name: str,
-        max_workers: int = 8,  # max number of ThreadPoolExecutor threads
+        topic_name: str,
+        topic_project: str,
+        max_workers: int = 8,  # max number of ThreadPoolExecutor workers
         batch_maxn: int = 1000,  # max number of messages in a batch
         batch_maxwait: int = 5,  # max seconds to wait between messages before processing a batch
         loggername: str = "PITTGOOGLE",
     ):
         super().__init__(server=None, groupid=None, loggername=loggername)
 
-        if schemafile is None:
-            schemafile = _rundir / "elasticc.v0_9_1.brokerClassification.avsc"
-
-        subscription = pittgoogle.pubsub.Subscription(name=subscription_name)
+        topic = pittgoogle.pubsub.Topic(topic_name, topic_project)
+        subscription = pittgoogle.pubsub.Subscription(name=f"{topic_name}-desc", topic=topic)
+        # if the subscription doesn't already exist, this will create one in the
+        # project given by the env var GOOGLE_CLOUD_PROJECT
         subscription.touch()
 
         self.consumer = pittgoogle.pubsub.Consumer(
