@@ -12,7 +12,7 @@ import multiprocessing
 import fastavro
 import confluent_kafka
 import pittgoogle
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor  # for pittgoogle
 from django.core.management.base import BaseCommand, CommandError
 from elasticc2.models import BrokerMessage
 
@@ -348,6 +348,7 @@ class PittGoogleBroker(BrokerConsumer):
 
     @staticmethod
     def worker_init(classification_schema: dict, pubsub_topic: str, broker_logger: logging.Logger):
+        """Initializer for the ThreadPoolExecutor."""
         global logger
         global schema
         global topic
@@ -358,6 +359,7 @@ class PittGoogleBroker(BrokerConsumer):
 
     @staticmethod
     def handle_message(alert: pittgoogle.pubsub.Alert) -> pittgoogle.pubsub.Response:
+        """Callback that will process a single message. This will run in a background thread."""
         global schema
         global topic
 
@@ -376,6 +378,7 @@ class PittGoogleBroker(BrokerConsumer):
 
     @staticmethod
     def handle_message_batch(messagebatch: list) -> None:
+        """Callback that will process a batch of messages. This will run in the main thread."""
         global logger
 
         added = BrokerMessage.load_batch(messagebatch, logger=logger)
