@@ -79,6 +79,22 @@ def alerts_10days( elasticc2_ppdb ):
     # issued again on subsequent tests.
 
 @pytest.fixture( scope="session" )
+def update_diasource_10days( alerts_10days ):
+    result = subprocess.run( [ "python", "manage.py", "update_elasticc2_sources" ],
+                             cwd="/tom_desc", capture_output=True )
+    assert result.returncode == 0
+
+    yield True
+
+    # Cleaning up... not going to bother.  Yeah, yeah, I'm bad.  But,
+    # cleaning up would mean figuring out exactly what sources were
+    # added by that manage command, and that's more complicated than
+    # it's worth, given that I know this is going to be used only in
+    # test_alertcycle.  Also, I didn't clean up the last fixture,
+    # so... it's a mess!  Embrace it!
+
+
+@pytest.fixture( scope="session" )
 def alerts_1daymore( alerts_10days ):
     # https://www.youtube.com/watch?v=wNNBrg4u9d0
     result = subprocess.run( [ "python", "manage.py", "send_elasticc2_alerts", "-a", "1",
@@ -91,3 +107,13 @@ def alerts_1daymore( alerts_10days ):
     yield True
 
     # Same issue as alerts_10days about not cleaning up
+
+@pytest.fixture( scope="session" )
+def update_diasource_1daymore( alerts_1daymore ):
+    result = subprocess.run( [ "python", "manage.py", "update_elasticc2_sources" ],
+                             cwd="/tom_desc", capture_output=True )
+    assert result.returncode == 0
+
+    yield True
+
+    # Same issue...

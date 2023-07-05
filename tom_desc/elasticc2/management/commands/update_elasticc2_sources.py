@@ -8,8 +8,8 @@ import psycopg2
 import psycopg2.extras
 import django.db
 from django.core.management.base import BaseCommand, CommandError
-from elasticc2.models import PPDBDiaObject, PPDBDiaSource, DiaObject, DiaSource
-from 
+from elasticc2.models import PPDBDiaObject, PPDBDiaSource, PPDBDiaForcedSource
+from elasticc2.models import DiaObject, DiaSource, DiaForcedSource, BrokerSourceIds, DiaObjectOfTarget
 
 _rundir = pathlib.Path(__file__).parent
 
@@ -63,10 +63,10 @@ class Command(BaseCommand):
             # Make sure that one of these commands isn't already running.  It would
             # probably be a mess if multiple were running it once.  (It might
             # actually be OK, but it would be gratuitous load on the database.)
-            _logger.info( "Setting importppdbrunning to true" )
+            _logger.info( "Setting elasticc2_importppdbrunning to true" )
             cursor = conn.cursor( cursor_factory=psycopg2.extras.RealDictCursor )
-            cursor.execute( "LOCK TABLE importppdbrunning" )
-            cursor.execute( "SELECT running FROM importppdbrunning" )
+            cursor.execute( "LOCK TABLE elasticc2_importppdbrunning" )
+            cursor.execute( "SELECT running FROM elasticc2_importppdbrunning" )
             rows = cursor.fetchall()
             if ( len(rows) == 0 ) or ( len(rows) > 1 ):
                 _logger.error( f"There are {len(rows)} rows in the importppdbrunning table; should only be 1" )
@@ -74,7 +74,7 @@ class Command(BaseCommand):
             if rows[0]['running']:
                 _logger.error( "importppdbrunning table indicates this command is already running" )
                 raise RuntimeError( "update_elasticc2_sources already running" )
-            cursor.execute( "UPDATE importppdbrunning SET running=1" )
+            cursor.execute( "UPDATE elasticc2_importppdbrunning SET running=true" )
             setrunningflag = True
             conn.commit()
             
@@ -88,12 +88,12 @@ class Command(BaseCommand):
             brokersourceidsize = BrokerSourceIds.objects.count()
             _logger.info( f"There are {brokersourceidsize} objects in the brokersourceids table" )
             
-            tmpsourcetable = f'brokersourceids_tmp_{random.choices("0123456789abdef", k=8)}'
-            _logger.info( f"Copying brokersourceids to {tmpsourcetable}" )
+            tmpsourcetable = f'brokersourceids_tmp_{"".join(random.choices("0123456789abdef", k=8))}'
+            _logger.info( f"Copying elasticc2_brokersourceids to {tmpsourcetable}" )
             cursor = conn.cursor()
-            cursor.execute( "LOCK TABLE brokersourceids" )
-            cursor.execute( f"CREATE TABLE {tmpsourcetable} AS TABLE brokersourceids" )
-            cursor.execute( "TRUNCATE TABLE brokersourceids" )
+            cursor.execute( "LOCK TABLE elasticc2_brokersourceids" )
+            cursor.execute( f"CREATE TABLE {tmpsourcetable} AS TABLE elasticc2_brokersourceids" )
+            cursor.execute( "TRUNCATE TABLE elasticc2_brokersourceids" )
             conn.commit()
 
             # Now for the long transaction
@@ -103,14 +103,14 @@ class Command(BaseCommand):
             # Get a list of all objects assocated with these sources
             # I'm not sure which of the following two ways of selecting out
             # things from tmpsourcetable is faster; I should investigate
-            #  f"    WHERE diasource_id IN ( SELECT diasource_id FROM {tmpsourcetable} ) subq "
+            #  f"    WHERE diasource_id IN ( SELECT diasource_id FROM {tmpsourcetable} ) "
             #  f"    INNER JOIN {tmpsourcetable} t ON s.diaobject_id=t.dia_object_id "
 
             _logger.info( "Making all_objids temp table" )
             cursor.execute( "CREATE TEMP TABLE all_objids( id bigint, latesttai double precision )" )
             cursor.execute( f"INSERT INTO all_objids "
                             f"  SELECT diaobject_id, MAX(midpointtai) FROM elasticc2_ppdbdiasource s "
-                            f"    WHERE diasource_id IN ( SELECT diasource_id FROM {tmpsourcetable} ) subq "
+                            f"    WHERE diasource_id IN ( SELECT diasource_id FROM {tmpsourcetable} ) "
                             f"GROUP BY diaobject_id" )
             cursor.execute( "CREATE INDEX ON all_objids(id)" );
             # ****
@@ -146,8 +146,8 @@ class Command(BaseCommand):
             cursor.execute( "INSERT INTO elasticc2_diaobject SELECT * FROM new_objs" )
 
             _logger.info( "Getting list of new object ids for tom targets later" )
-            cursor.execute( "SELECT diaobject_id FROM new_objs" )
-            newobjs = [ row['diaobject_id'] for row in cursor.fetchall() ]
+            cursor.execute( "SELECT diaobject_id,ra,decl FROM new_objs" )
+            newobjs = cursor.fetchall()
             
             # WARNING : I'm doing this slightly wrong.  Really, we shouldn't
             # add forced sources until this detection is at least a day
@@ -228,7 +228,7 @@ class Command(BaseCommand):
                             f" SELECT {ppdbforcedfields} FROM elasticc2_ppdbdiaforcedsource s "
                             f" INNER JOIN allforcedids a ON s.diaforcedsource_id=a.diaforcedsource_id "
                             f" WHERE s.diaforcedsource_id NOT IN "
-                            f"   ( SELECT id FROM existingforcedids )" )
+                            f"   ( SELECT diaforcedsource_id FROM existingforcedids )" )
             # ****
             # cursor.execute( "SELECT COUNT(*) AS count FROM new_forced" )
             # row = cursor.fetchone()
@@ -259,7 +259,7 @@ class Command(BaseCommand):
                 if tmpsourcetable is not None:
                     _logger.warning( f"Restoring brokersourceids from {tmpsourcetable}" )
                     cursor = conn.cursor()
-                    cursor.exeucte( f"INSERT INTO brokersourceids "
+                    cursor.execute( f"INSERT INTO elasticc2_brokersourceids "
                                     f"SELECT * FROM {tmpsourcetable} "
                                     f"ON CONFLICT DO NOTHING" )
                     conn.commit()
@@ -272,14 +272,15 @@ class Command(BaseCommand):
                 gratuitous.close()
                 gratuitous = None
             if tmpsourcetable is not None:
-                _logger.info( "Dropping table {tmpsourcetable}" )
+                _logger.info( f"Dropping table {tmpsourcetable}" )
                 cursor = conn.cursor()
                 cursor.execute( f"DROP TABLE {tmpsourcetable}" )
                 conn.commit()
             if setrunningflag:
-                _logger.info( "Setting importppdbrunning to false" )
+                _logger.info( "Setting elasticc2_importppdbrunning to false" )
                 cursor = conn.cursor()
-                cursor.execute( "UPDATE importppdbrunning SET running=0" )
+                # Not bothering to lock the table here, since we don't read-then-write
+                cursor.execute( "UPDATE elasticc2_importppdbrunning SET running=false" )
                 conn.commit()
             if origautocommit is not None and conn is not None:
                 conn.autocommit = origautocommit

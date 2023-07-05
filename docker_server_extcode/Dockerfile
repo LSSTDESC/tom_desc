@@ -30,6 +30,9 @@ RUN pip install \
 	--requirement pip-packages.txt && \
     rm -rf /.cache/pip
 
+# Convenient for tests
+RUN pip install --no-cache --disable-pip-version-check pytest-timestamper
+
 # Will mount /tom_desc/tom_desc from a host directory
 # COPY tom_desc/ ./tom_desc/
 

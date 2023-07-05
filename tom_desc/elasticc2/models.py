@@ -821,7 +821,7 @@ class BrokerMessage(models.Model):
             else:
                 logger.error( f'Key {keymess} showed up more than once in a message batch!' )
         logger.debug( f'Adding {len(sourceids)} sourceids to the brokersourceids table' )
-        BrokerSorurceIds.add_batch( sourceids )
+        BrokerSourceIds.add_batch( sourceids )
         logger.debug( f'Bulk creating {len(kwargses)} messages.' )
         if len(kwargses) > 0:
             # This is byzantine, but I'm copying django documentation here

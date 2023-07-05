@@ -6,6 +6,7 @@ import time
 sys.path.insert( 0, "/tom_desc" )
 
 import elasticc2.models
+import tom_targets.models
 
 from msgconsumer import MsgConsumer
 
@@ -64,14 +65,31 @@ class TestAlertCycle:
         msg  = elasticc2.models.BrokerMessage
         cfer = elasticc2.models.BrokerClassifier
         cify = elasticc2.models.BrokerClassification
-
+        bsid = elasticc2.models.BrokerSourceIds
+        
         assert msg.objects.count() == 1980
         assert cfer.objects.count() == 2
+        assert bsid.objects.count() == 990
         # 990 from NugentClassifier plus 7*990 for RandomSNType
         assert cify.objects.count() == 7920
 
         assert ( set( [ i.classifiername for i in cfer.objects.all() ] )
                  == set( [ "NugentClassifier", "RandomSNType" ] ) )
+
+    def test_sources_updated( self, update_diasource_10days ):
+        obj = elasticc2.models.DiaObject
+        src = elasticc2.models.DiaSource
+        frced = elasticc2.models.DiaForcedSource
+        targ = tom_targets.models.Target
+        ooft = elasticc2.models.DiaObjectOfTarget
+        bsid = elasticc2.models.BrokerSourceIds
+
+        assert bsid.objects.count() == 0
+        assert obj.objects.count() == 414
+        assert ooft.objects.count() == obj.objects.count()
+        assert targ.objects.count() == obj.objects.count()
+        assert src.objects.count() == 990
+        assert frced.objects.count() == 1301
         
     def test_1moreday_classifications_ingested( self, alerts_1daymore ):
         time.sleep( 20 )
@@ -88,3 +106,18 @@ class TestAlertCycle:
         assert ( set( [ i.classifiername for i in cfer.objects.all() ] )
                  == set( [ "NugentClassifier", "RandomSNType" ] ) )
         
+
+    def test_1moreday_sources_updated( self, update_diasource_1daymore ):
+        obj = elasticc2.models.DiaObject
+        src = elasticc2.models.DiaSource
+        frced = elasticc2.models.DiaForcedSource
+        targ = tom_targets.models.Target
+        ooft = elasticc2.models.DiaObjectOfTarget
+        bsid = elasticc2.models.BrokerSourceIds
+
+        assert bsid.objects.count() == 0
+        assert obj.objects.count() == 469
+        assert ooft.objects.count() == obj.objects.count()
+        assert targ.objects.count() == obj.objects.count()
+        assert src.objects.count() == 1196
+        assert frced.objects.count() == 1545
