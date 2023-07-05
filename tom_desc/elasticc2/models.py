@@ -820,6 +820,8 @@ class BrokerMessage(models.Model):
                 sourceids.add( msg['msg']['diaSourceId'] )
             else:
                 logger.error( f'Key {keymess} showed up more than once in a message batch!' )
+        logger.debug( f'Adding {len(sourceids)} sourceids to the brokersourceids table' )
+        BrokerSorurceIds.add_batch( sourceids )
         logger.debug( f'Bulk creating {len(kwargses)} messages.' )
         if len(kwargses) > 0:
             # This is byzantine, but I'm copying django documentation here
@@ -834,195 +836,6 @@ class BrokerMessage(models.Model):
         else:
             addedmsgs = []
 
-
-        # _logger.debug( f"After adding messages, len(sourceids)={len(sourceids)}" )
-            
-        # Add any new objects (and associated TOM targets) and any new
-        # sources that we just found out about in this message.  For
-        # real LSST, this will involve querying the PPDB, and we
-        # probably want to batch those and run those queries in another
-        # thread than the message ingestion thread.  For now, though,
-        # it's just copying from another table, so do it inline here.
-
-        # Do much of this in SQL, because there's a lot of data that
-        # doesn't need to be transferred from the postgres server to
-        # this server (which will happen using ORM constructs), and
-        # because we can use temp tables to make it more efficient.
-        # Doing this with the ORM constructs would be many fewer lines
-        # of code, but that's not the most important efficiency here.
-
-        conn = None
-        origautocommit = None
-        gratuitous = None
-        cursor = None
-        newobjs = []
-        try:
-            # Have to jump through some hoops to get the actual psycopg2
-            # connection from django; we need this to turn off autocommit
-            # so we can use a temp table
-            gratuitous = django.db.connection.cursor()
-            conn = gratuitous.connection
-            origautocommit = conn.autocommit
-            conn.autocommit = False
-            cursor = conn.cursor( cursor_factory=psycopg2.extras.RealDictCursor )
-            cursor.execute( "CREATE TEMP TABLE all_objids( id bigint, latesttai double precision )" )
-            cursor.execute( "INSERT INTO all_objids "
-                            "  SELECT diaobject_id, MAX(midpointtai) FROM elasticc2_ppdbdiasource "
-                            "    WHERE diasource_id IN %(sourceids)s GROUP BY diaobject_id",
-                            { 'sourceids': tuple( sourceids ) } )
-            cursor.execute( "CREATE INDEX ON all_objids(id)" );
-            # ****
-            # cursor.execute( "SELECT COUNT(*) AS count FROM all_objids" )
-            # row = cursor.fetchone()
-            # _logger.debug( f'all_objids has {row["count"]} rows' )
-            # ****
-            cursor.execute( "CREATE TEMP TABLE existing_objids( id bigint, latesttai double precision  )" )
-            cursor.execute( "INSERT INTO existing_objids "
-                            "  SELECT a.id, a.latesttai FROM all_objids a "
-                            "  INNER JOIN elasticc2_diaobject o ON o.diaobject_id=a.id" )
-            # ****
-            # cursor.execute( "SELECT COUNT(*) AS count FROM existing_objids" )
-            # row = cursor.fetchone()
-            # _logger.debug( f'existing_objids has {row["count"]} rows' )
-            # ****
-            cursor.execute( "CREATE TEMP TABLE new_objs ( LIKE elasticc2_diaobject )" )
-            newobjsfields = ','.join( DiaObject._create_kws )
-            ppdbobjsfields = ','.join( [ f"o.{i}" for i in PPDBDiaObject._create_kws ] )
-            cursor.execute( f"INSERT INTO new_objs({newobjsfields}) "
-                            f" SELECT {ppdbobjsfields} FROM elasticc2_ppdbdiaobject o "
-                            f" INNER JOIN all_objids a ON o.diaobject_id=a.id "
-                            f" WHERE o.diaobject_id NOT IN "
-                            f"   ( SELECT id FROM existing_objids )" )
-            # ****
-            # cursor.execute( "SELECT COUNT(*) AS count FROM new_objs" )
-            # row = cursor.fetchone()
-            # _logger.debug( f'new_objs has {row["count"]} rows' )
-            # ****
-            cursor.execute( f"INSERT INTO elasticc2_diaobject SELECT * FROM new_objs" )
-
-            # WARNING : I'm doing this slightly wrong.  Really, we shouldn't
-            # add forced sources until this detection is at least a day
-            # later than the first detection, because forced sources won't exist yet.
-            # However, we know that *eventually* we're going to get all the forced sources
-            # for any candidate, so just grab them all now and accept that when we first get them,
-            # we're getting them "too soon".
-
-            cursor.execute( "CREATE TEMP TABLE allsourceids( id bigint )" )
-            cursor.execute( "INSERT INTO allsourceids "
-                            "  SELECT s.diasource_id FROM elasticc2_ppdbdiasource s "
-                            "  INNER JOIN all_objids a ON s.diaobject_id=a.id "
-                            "  WHERE s.midpointtai <= a.latesttai" )
-            cursor.execute( "CREATE INDEX ON allsourceids(id)" )
-            # ****
-            # cursor.execute( "SELECT COUNT(*) AS count FROM allsourceids" )
-            # row = cursor.fetchone()
-            # _logger.debug( f'allsourceids has {row["count"]} rows' )
-            # ****
-            cursor.execute( "CREATE TEMP TABLE existingsourceids( id bigint )" )
-            cursor.execute( "INSERT INTO existingsourceids "
-                            "  SELECT a.id FROM allsourceids a "
-                            "  INNER JOIN elasticc2_diasource s ON s.diasource_id=a.id" )
-            # ****
-            # cursor.execute( "SELECT COUNT(*) AS count FROM existingsourceids" )
-            # row = cursor.fetchone()
-            # _logger.debug( f'existingsourceids has {row["count"]} rows' )
-            # ****
-            cursor.execute( "CREATE TEMP TABLE new_srcs ( LIKE elasticc2_diasource )" )
-            newsrcfields = ','.join( DiaSource._create_kws )
-            ppdbsrcfields = ','.join( [ f"s.{i}" for i in PPDBDiaSource._create_kws ] )
-            # _logger.debug( f'ppdbsrcfields = {ppdbsrcfields}' )
-            cursor.execute( f"INSERT INTO new_srcs({newsrcfields}) "
-                            f" SELECT {ppdbsrcfields} FROM elasticc2_ppdbdiasource s "
-                            f" INNER JOIN allsourceids a ON s.diasource_id=a.id "
-                            f" WHERE s.diasource_id NOT IN "
-                            f"   ( SELECT id FROM existingsourceids )" )
-            # ****
-            # cursor.execute( "SELECT COUNT(*) AS count FROM new_srcs" )
-            # row = cursor.fetchone()
-            # _logger.debug( f'new_srcs has {row["count"]} rows' )
-            # ****
-            cursor.execute( f"INSERT INTO elasticc2_diasource SELECT * FROM new_srcs" )
-
-            # The ppdbdiaforcedsource table is too big (600 million rows), making
-            #  this a very slow step.  Rather than doing this constantly with
-            #  object insertion, I'll do a once-daily massive update of the
-            #  forced source table in a cronjob of a management command
-
-            # ROB -- some of the column names in the comments below are wrong
-            # cursor.execute( "CREATE TEMP TABLE allforcedids( id bigint )" )
-            # cursor.execute( "INSERT INTO allforcedids "
-            #                 "  SELECT s.ppdbdiaforcedsource_id FROM elasticc2_ppdbdiaforcedsource s "
-            #                 "  INNER JOIN all_objids a ON s.ppdbdiaobject_id=a.id "
-            #                 "  WHERE s.midpointtai <= a.latesttai" )
-            # cursor.execute( "CREATE INDEX ON allforcedids(id)" )
-            # # ****
-            # # cursor.execute( "SELECT COUNT(*) AS count FROM allforcedids" )
-            # # row = cursor.fetchone()
-            # # _logger.debug( f'allforcedids has {row["count"]} rows' )
-            # # ****
-            # cursor.execute( "CREATE TEMP TABLE existingforcedids( id bigint )" )
-            # cursor.execute( "INSERT INTO existingforcedids "
-            #                 "  SELECT a.id FROM allforcedids a "
-            #                 "  INNER JOIN elasticc2_diaforcedsource s ON s.diaforcedsource_id=a.id" )
-            # # ****
-            # # cursor.execute( "SELECT COUNT(*) AS count FROM existingforcedids" )
-            # # row = cursor.fetchone()
-            # # _logger.debug( f'existingforcedids {row["count"]} rows' )
-            # # ****
-            # cursor.execute( "CREATE TEMP TABLE new_forced ( LIKE elasticc2_diaforcedsource )" )
-            # newforcedfields = ','.join( DiaForcedSource._create_kws )
-            # ppdbforcedfields = ','.join( [ f"s.{i}" for i in PPDBDiaForcedSource._create_kws ] )
-            # cursor.execute( f"INSERT INTO new_forced({newforcedfields}) "
-            #                 f" SELECT {ppdbforcedfields} FROM elasticc2_ppdbdiaforcedsource s "
-            #                 f" INNER JOIN allforcedids a ON s.ppdbdiaforcedsource_id=a.id "
-            #                 f" WHERE s.ppdbdiaforcedsource_id NOT IN "
-            #                 f"   ( SELECT id FROM existingforcedids )" )
-            # # ****
-            # # cursor.execute( "SELECT COUNT(*) AS count FROM new_forced" )
-            # # row = cursor.fetchone()
-            # # _logger.debug( f'new_forced {row["count"]} rows' )
-            # # ****
-            # cursor.execute( f"INSERT INTO elasticc2_diaforcedsource SELECT * FROM new_forced" )
-            
-            cursor.execute( f"SELECT diaobject_id,ra,decl FROM new_objs" )
-            newobjs = cursor.fetchall()
-
-            # Turns out that temp tables aren't dropped at the end of a transaction
-            # cursor.execute( "DROP TABLE new_forced" )
-            # cursor.execute( "DROP TABLE existingforcedids" )
-            # cursor.execute( "DROP TABLE allforcedids" )
-            cursor.execute( "DROP TABLE new_srcs" )
-            cursor.execute( "DROP TABLE existingsourceids" )
-            cursor.execute( "DROP TABLE allsourceids" )
-            cursor.execute( "DROP TABLE new_objs" )
-            cursor.execute( "DROP TABLE existing_objids" )
-            cursor.execute( "DROP TABLE all_objids" )
-            
-            conn.commit()
-        except Exception as e:
-            _logger.exception( e )
-            if conn is not None:
-                conn.rollback()
-                raise e
-        finally:
-            if cursor is not None:
-                cursor.close()
-                cursor = None
-            if gratuitous is not None:
-                gratuitous.close()
-                gratuitous = None
-            if origautocommit is not None and conn is not None:
-                conn.autocommit = origautocommit
-                origautocommit = None
-                conn = None
-        
-        # Create TOM targets if necessary
-
-        if len(newobjs) > 0:
-            targobjids = [ row['diaobject_id'] for row in newobjs ]
-            targobjras = [ row['ra'] for row in newobjs ]
-            targobjdecs = [ row['decl'] for row in newobjs ]
-            DiaObjectOfTarget.maybe_new_elasticc_targets( targobjids, targobjras, targobjdecs )
 
         # Figure out which classifiers already exist.
         # I need to figure out if there's a way to tell Django
@@ -1080,6 +893,7 @@ class BrokerMessage(models.Model):
                 #                f'brokerVersion: {curcfer.brokerVersion}; classifierName: {curcfer.ClassifierName}; '
                 #                f'classifierParams: {curcfer.classifierParams}' )
 
+
         # Add the new classifications
         #
         # ROB TODO : think about duplication!  Right now I'm just
@@ -1110,6 +924,8 @@ class BrokerMessage(models.Model):
                  "addedclassifications": len(newcfications),
                  "firstbrokermessage_id": None if len(addedmsgs)==0 else addedmsgs[0].brokermessage_id }
         
+
+
 class BrokerClassifier(models.Model):
     """Model for a classifier producing an ELAsTiCC broker classification."""
 
@@ -1173,3 +989,28 @@ class BrokerClassification(psqlextra.models.PostgresPartitionedModel):
     # Don't need this, timestamps are all in the brokermessage table
     # And, this table will have many rows, so we want to keep it skinny
     # modified = models.DateTimeField(auto_now=True)
+
+
+# This table is intended to be wiped out all the time.  When broker
+# messages are added, the list of diaSourceId will be added to this
+# table.  The nightly job that copies sources and objects from PPDBDia*
+# to Dia* will look at this table to figure out what it needs to
+# consider, to avoid having to look at the brobdingnagnian
+# classification table.
+
+class BrokerSourceIds(models.Model):
+    """Temporary (not formally) table for keeping sources we heard about from brokers"""
+
+    diasource_id = models.BigIntegerField( primary_key=True, unique=True, db_index=True )
+
+    @classmethod
+    def add_batch( cls, sources ):
+        if len(sources) == 0:
+            return
+        objs = [ BrokerSourceIds( i ) for i in sources ]
+        addedsources = BrokerSourceIds.objects.bulk_create( objs, len(objs), ignore_conflicts=True )
+                      
+# This is a thing I use as a "don't run twice at once" lock
+
+class ImportPPDBRunning(models.Model):
+    running = models.BooleanField( default=False )
