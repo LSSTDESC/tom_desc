@@ -25,8 +25,8 @@ class Command(BaseCommand):
     outdir = _rundir / "../../static/elasticc2/alertstreamhists"
 
     def add_arguments( self, parser) :
-        parser.add_argument( '--start', default='2023-05-20',
-                             help='YYYY-MM-DD of first day to look at (default: 2023-05-20)' )
+        parser.add_argument( '--start', default='2023-07-05',
+                             help='YYYY-MM-DD of first day to look at (default: 2023-07-05)' )
         parser.add_argument( '--end', default=None,
                              help='YYYY-MM-DD of last day to look at (default: current day - 1)' )
         parser.add_argument( '--hour', default=0,
@@ -44,7 +44,7 @@ class Command(BaseCommand):
         start = datetime.date( int(match.group(1)), int(match.group(2)), int(match.group(3)) )
         if options['end'] is not None:
             match = datematch.search( options['end'] )
-            if match is none:
+            if match is None:
                 _logger.error( f"Failed to parse start date {options['end']} for yyyy-mm-dd" )
                 return
             end = datetime.date( int(match.group(1)), int(match.group(2)), int(match.group(3)) )

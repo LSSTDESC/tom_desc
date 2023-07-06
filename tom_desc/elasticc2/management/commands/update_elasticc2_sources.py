@@ -198,7 +198,7 @@ class Command(BaseCommand):
 
             # Forced source is going to be slower because that table is freaking huge
 
-            _logger.info( "Creating allforcedis temp table" )
+            _logger.info( "Creating allforcedids temp table" )
             cursor.execute( "CREATE TEMP TABLE allforcedids( diaforcedsource_id bigint )" )
             cursor.execute( "INSERT INTO allforcedids "
                             "  SELECT s.diaforcedsource_id FROM elasticc2_ppdbdiaforcedsource s "

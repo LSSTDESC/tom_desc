@@ -24,7 +24,7 @@ spec:
           - command: ['python']
             args: ['manage.py', 'send_elasticc2_alerts',
                '-a', '36',
-               '-k', 'public.alerts.ztf.uw.edu:9092', '-t', 'elasticc2-pre-test-2023may-i1',
+               '-k', 'public.alerts.ztf.uw.edu:9092', '-t', 'elasticc2-pre-test-2023july-i1',
                '--do']
             env:
             - name: DB_HOST
