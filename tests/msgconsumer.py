@@ -141,26 +141,33 @@ class MsgConsumer(object):
         self.logger.info( ofp.getvalue() )
         ofp.close()
 
-    def poll_loop( self, handler=None, timeout=None, stopafter=datetime.timedelta(hours=1) ):
+    def poll_loop( self, handler=None, timeout=None, stopafter=datetime.timedelta(hours=1),
+                   stopafternsleeps=None ):
         """Calls handler with batches of messages."""
         if timeout is None:
             timeout = self.consume_timeout
         t0 = datetime.datetime.now()
         done = False
+        nsleeps = 0
         while not done:
             self.logger.info( f"Trying to consume {self.consume_nmsgs} messages "
                               f"with timeout {timeout} sec...\n" )
             msgs = self.consumer.consume( self.consume_nmsgs, timeout=timeout )
             if len(msgs) == 0:
+                if ( stopafternsleeps is not None ) and ( nsleeps >= stopafternsleeps ):
+                    self.logger.info( f"Stopping after {nsleeps} consecutive sleeps." )
+                    done = True
                 self.logger.info( f"No messages, sleeping {self.nomsg_sleeptime} sec" )
                 time.sleep( self.nomsg_sleeptime )
+                nsleeps += 1
             else:
+                nsleeps = 0
                 if handler is not None:
                     handler( msgs )
                 else:
                     self.default_handle_message_batch( msgs )
-            if ( datetime.datetime.now() - t0 ) >= stopafter:
-                self.logger.info( f"Ending poll loop." )
+            if (not done) and ( datetime.datetime.now() - t0 ) >= stopafter:
+                self.logger.info( f"Ending poll loop after {stopafter} seconds of polling." )
                 done = True
 
     def consume_one_message( self, timeout=None, handler=None ):

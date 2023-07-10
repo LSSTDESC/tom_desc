@@ -17,6 +17,10 @@ def tomclient():
     return TomClient( "http://tom:8080", username="root", password="testing" )
 
 @pytest.fixture( scope="session" )
+def apibroker_client():
+    return TomClient( "http://tom:8080", username="apibroker", password="testing" )
+    
+@pytest.fixture( scope="session" )
 def elasticc2_ppdb( tomclient ):
     basedir = pathlib.Path( "/elasticc2data" )
     dirs = []
@@ -58,8 +62,8 @@ def elasticc2_ppdb( tomclient ):
 #         return topictag
     
 @pytest.fixture( scope="session" )
-def alerts_10days( elasticc2_ppdb ):
-    result = subprocess.run( [ "python", "manage.py", "send_elasticc2_alerts", "-d", "60280",
+def alerts_300days( elasticc2_ppdb ):
+    result = subprocess.run( [ "python", "manage.py", "send_elasticc2_alerts", "-d", "60578",
                                "-k", "kafka-server:9092", "-t", f"alerts",
                                "-s", "/tests/schema/elasticc.v0_9_1.alert.avsc",
                                "-r", "sending_alerts_runningfile", "--do" ],
@@ -79,7 +83,7 @@ def alerts_10days( elasticc2_ppdb ):
     # issued again on subsequent tests.
 
 @pytest.fixture( scope="session" )
-def update_diasource_10days( alerts_10days ):
+def update_diasource_300days( alerts_300days ):
     result = subprocess.run( [ "python", "manage.py", "update_elasticc2_sources" ],
                              cwd="/tom_desc", capture_output=True )
     assert result.returncode == 0
@@ -95,9 +99,8 @@ def update_diasource_10days( alerts_10days ):
 
 
 @pytest.fixture( scope="session" )
-def alerts_1daymore( alerts_10days ):
-    # https://www.youtube.com/watch?v=wNNBrg4u9d0
-    result = subprocess.run( [ "python", "manage.py", "send_elasticc2_alerts", "-a", "1",
+def alerts_100daysmore( alerts_300days ):
+    result = subprocess.run( [ "python", "manage.py", "send_elasticc2_alerts", "-a", "100",
                                "-k", "kafka-server:9092", "-t", f"alerts",
                                "-s", "/tests/schema/elasticc.v0_9_1.alert.avsc",
                                "-r", "sending_alerts_runningfile", "--do" ],
@@ -106,10 +109,10 @@ def alerts_1daymore( alerts_10days ):
 
     yield True
 
-    # Same issue as alerts_10days about not cleaning up
+    # Same issue as alerts_300days about not cleaning up
 
 @pytest.fixture( scope="session" )
-def update_diasource_1daymore( alerts_1daymore ):
+def update_diasource_100daysmore( alerts_100daysmore ):
     result = subprocess.run( [ "python", "manage.py", "update_elasticc2_sources" ],
                              cwd="/tom_desc", capture_output=True )
     assert result.returncode == 0
@@ -117,3 +120,15 @@ def update_diasource_1daymore( alerts_1daymore ):
     yield True
 
     # Same issue...
+
+@pytest.fixture( scope="session" )
+def api_classify_existing_alerts( alerts_100daysmore, apibroker_client ):
+    result = subprocess.run( [ "python", "apiclassifier.py", "--source", "kafka-server:9092", "-t", "alerts",
+                               "-g", "apibroker", "-u", "apibroker", "-p", "testing", "-s", "2",
+                               "-a", "/tests/schema/elasticc.v0_9_1.alert.avsc",
+                               "-b", "/tests/schema/elasticc.v0_9_1.brokerClassification.avsc"],
+                             cwd="/tests", capture_output=True )
+    assert result.returncode == 0
+
+    yield True
+    

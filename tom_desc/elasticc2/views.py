@@ -37,6 +37,8 @@ _logger.setLevel( logging.DEBUG )
 # ======================================================================
 
 class Elasticc2MainView( LoginRequiredMixin, django.views.View ):
+    """ELAsTiCC2 front page (HTML)."""
+    
     def get( self, request ):
         templ = loader.get_template( "elasticc2/elasticc2.html" )
         return HttpResponse( templ.render( {}, request ) )
@@ -44,6 +46,8 @@ class Elasticc2MainView( LoginRequiredMixin, django.views.View ):
 # ======================================================================
 
 class Elasticc2KnownClassifiers( LoginRequiredMixin, django.views.View ):
+    """Show a list of ELAsTiCC2 known classifiers (HTML)."""
+
     def get( self, request ):
         templ = loader.get_template( 'elasticc2/classifiers.html' )
 
@@ -62,6 +66,11 @@ class Elasticc2KnownClassifiers( LoginRequiredMixin, django.views.View ):
 # ======================================================================
 
 class Elasticc2AdminSummary( PermissionRequiredMixin, django.views.View ):
+    """An admin summary for ELAsTiCC2 (HTML).
+
+    Requires the elasticc.elasticc_admin permission.
+    """
+    
     permission_required = 'elasticc.elasticc_admin'
     raise_exception = True
 
@@ -100,6 +109,8 @@ class Elasticc2AdminSummary( PermissionRequiredMixin, django.views.View ):
 # ======================================================================    
 
 class Elasticc2AlertStreamHistograms( LoginRequiredMixin, django.views.View ):
+    """Show histograms of streaming rate sending out ELAsTiCC2 alerts."""
+    
     def get( self, request, info=None ):
         return self.post( request, info )
 
@@ -131,21 +142,43 @@ class Elasticc2AlertStreamHistograms( LoginRequiredMixin, django.views.View ):
 # DJango REST interfaces
 
 class PPDBDiaObjectViewSet( rest_framework.viewsets.ReadOnlyModelViewSet ):
+    """REST interface to show PPDBDiaSource (read only).
+
+    /ppdbdiaobject will return a paginated list of objects (json)
+    /ppdbdiaobject/<diaobjectid:int> will return a json dump of the info for one object
+
+    """
     permission_classes = [ rest_framework.permissions.IsAuthenticated ]
     queryset = PPDBDiaObject.objects.all()
     serializer_class = PPDBDiaObjectSerializer
 
 class PPDBDiaSourceViewSet( rest_framework.viewsets.ReadOnlyModelViewSet ):
+    """REST interface to show PPDBDiaSource (read only).
+
+    /ppdbdiasource will return a paginated list of sources (json)
+    /ppdbdiasource/<diaobjectid:int> will return a json dump of the info for one source
+
+    """
     permission_classes = [ rest_framework.permissions.IsAuthenticated ]
     queryset = PPDBDiaSource.objects.all()
     serializer_class = PPDBDiaSourceSerializer
 
 class PPDBDiaForcedSourceViewSet( rest_framework.viewsets.ReadOnlyModelViewSet ):
+    """REST interface to show PPDBDiaForcedSource (read only).
+
+    /ppdbdiasforcedource will return a paginated list of forced sources (json)
+    /ppdbdiaforcedsource/<diaobjectid:int> will return a json dump of the info for one forced source
+
+    """
     permission_classes = [ rest_framework.permissions.IsAuthenticated ]
     queryset = PPDBDiaForcedSource.objects.all()
     serializer_class = PPDBDiaForcedSourceSerializer
 
 class PPDBDiaObjectSourcesViewSet( rest_framework.viewsets.ReadOnlyModelViewSet ):
+    """REST interface to return one PPBDDiaObject and all associated sources (read only).
+
+    /ppdbdiaobjectwithsources/<diaobjectid:int> returns json
+    """
     permission_classes = [ rest_framework.permissions.IsAuthenticated ]
     queryset = PPDBDiaObject.objects.all()
     serializer_class = None
@@ -171,6 +204,13 @@ class PPDBDiaObjectSourcesViewSet( rest_framework.viewsets.ReadOnlyModelViewSet 
         return rest_framework.response.Response( objdict )
 
 class PPDBDiaObjectAndPrevSourcesForSourceViewSet( rest_framework.viewsets.ReadOnlyModelViewSet ):
+    """REST interface to return the PPDBDiaObject, plus all previous sources and forced sources, for a given source.
+
+    /ppdbdiaobjectofsource/<diasourceid:int> - returns JSON with the
+    PPDBDiaObject of the specified source, plus all sources and forced
+    sources that are earlier than the specified source.
+
+    """
     permission_classes = [ rest_framework.permissions.IsAuthenticated ]
     queryset = PPDBDiaSource.objects.all()
     serializer_class = None
@@ -210,6 +250,26 @@ class PPDBDiaObjectAndPrevSourcesForSourceViewSet( rest_framework.viewsets.ReadO
 
         
 class BrokerMessageView(PermissionRequiredMixin, django.views.View):
+    """A REST interface for getting and putting broker messages.
+    
+    Requires elasticc.elasticc_broker permission for PUT, just logged in for GET.
+
+    GET or POST : TBD
+
+    PUT : add a new batch of broker classifications.  The data in the
+    body is expected to be text in JSON format.  It must be either a
+    single dictionary, or a list of dictionaries.  EAch dictionary must
+    corresp to the brokerClassification schema version 0.9.1 (see
+    https://github.com/LSSTDESC/elasticc/tree/main/alert_schema),
+    ***with the additional field*** brokerPublishTimestamp that gives a
+    standard AVRO-style timestamp (big intger milliseconds since the
+    Epoch) for when the broker had completed the classification and was
+    about to post it to the API.  (This corresponds to the Kafka message
+    header timestamp for brokers that publish to a Kafka stream, which
+    the DESC TOM then pulls.)
+
+    """
+
     raise_exception = True
 
     def has_permission( self ):
@@ -315,6 +375,7 @@ class BrokerMessageView(PermissionRequiredMixin, django.views.View):
             data = [ data ]
         messageinfo = []
         # Reformulate the data array into what BrokerMessage.load_batch is expecting
+        _logger.debug( f"BrokerMessageView.put: len(data)={len(data)}" )
         for datum in data:
             datum['elasticcPublishTimestamp'] = datetime.datetime.fromtimestamp( datum['elasticcPublishTimestamp']
                                                                                  / 1000,
@@ -322,12 +383,19 @@ class BrokerMessageView(PermissionRequiredMixin, django.views.View):
             datum['brokerIngestTimestamp'] = datetime.datetime.fromtimestamp( datum['brokerIngestTimestamp']
                                                                               / 1000,
                                                                               tz=datetime.timezone.utc )
+            if 'brokerPublishTimestamp' in datum:
+                pubtime = datetime.datetime.fromtimestamp( datum['brokerPublishTimestamp'] / 1000,
+                                                           tz=datetime.timezone.utc )
+                del datum['brokerPublishTimestamp']
+            else:
+                pubtime = None
             messageinfo.append( { 'topic': 'REST_push',
-                                  'timestamp': datetime.datetime.now( tz=datetime.timezone.utc ),
+                                  'timestamp': pubtime,
                                   'msgoffset': -1,
                                   'msg': datum } )
             
 
+        _logger.debug( f"BrokerMessageView.put: load_batch of {len(messageinfo)} messages." )
         batchret = BrokerMessage.load_batch( messageinfo, logger=_logger )
         dex = -1 if batchret['firstbrokermessage_id'] is None else batchret['firstbrokermessage_id']
         resp = JsonResponse( { 'brokerMessageId': dex,
@@ -343,4 +411,3 @@ class BrokerMessageView(PermissionRequiredMixin, django.views.View):
         resp.headers['Location'] =  f'{loc}{dex}'
 
         return resp
-

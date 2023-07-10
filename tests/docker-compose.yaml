@@ -70,6 +70,7 @@ services:
       - |
         python tom_desc/manage.py migrate
         python tom_desc/manage.py create_test_superuser
+        python tom_desc/manage.py create_test_apibroker
 
   tom:
     depends_on:

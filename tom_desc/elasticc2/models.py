@@ -45,8 +45,8 @@ _formatter = logging.Formatter( f'[%(asctime)s - %(levelname)s] - %(message)s' )
 _logout.setFormatter( _formatter )
 _logger.propagate = False
 _logger.addHandler( _logout )
-# _logger.setLevel( logging.INFO )
-_logger.setLevel( logging.DEBUG )
+_logger.setLevel( logging.INFO )
+# _logger.setLevel( logging.DEBUG )
 
 # ======================================================================
 # ======================================================================
@@ -806,12 +806,11 @@ class BrokerMessage(models.Model):
                 continue
             keymess = ( f"{msg['msgoffset']}_{msg['topic']}_{msg['msg']['alertId']}" )
             if keymess not in messageobjects.keys():
-                msghdrtimestamp = timestamp
                 kwargs = { 'streammessage_id': msg['msgoffset'],
                            'topicname': msg['topic'],
                            'alert_id': msg['msg']['alertId'],
                            'diasource_id': msg['msg']['diaSourceId'],
-                           'msghdrtimestamp': msghdrtimestamp,
+                           'msghdrtimestamp': timestamp,
                            'descingesttimestamp': datetime.datetime.now(),
                            'elasticcpublishtimestamp': msg['msg']['elasticcPublishTimestamp'],
                            'brokeringesttimestamp': msg['msg']['brokerIngestTimestamp'],

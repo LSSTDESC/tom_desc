@@ -364,9 +364,9 @@ To get an environment in which to run the tests manually, run
 ```
 ELASTICC2_TEST_DATA=<dir> docker compose up -d shellhost
 ```
-where `<dir>` is a directory that has the 1% ELAsTiCC2 test set that the tests are designed to run with; on brahms (Rob's) desktop, this would be:
+where `<dir>` is a directory that has three models from the 1% ELAsTiCC2 test set that the tests are designed to run with; on brahms (Rob's) desktop, this would be:
 ```
-ELASTICC2_TEST_DATA=/data/raknop/elasticc2_train_1pct docker compose up -d shellhost
+ELASTICC2_TEST_DATA=/data/raknop/elasticc2_train_1pct_3models docker compose up -d shellhost
 ```
 If you're not going to use these, you can omit the variable.  You can then connect to that shell host with `docker exec -it <container> /bin/bash`, giving it the name of the container started by docker compose (probably `tests-shellhost-1`).  The postgres server will on the host named `postgres` (so you can `psql -h postgres -U postgres tom_desc` to poke at the database— the password is "fragile", which you can see in the `docker-compose.yaml` file).  The web server will be on the host named `tom`, listening on port 8080 without SSL  (so, you could do `netcat tom 8080`, or write a python script that uses requests to connect to `http://tom:8080`... or, for that matter, use the `tom_client.py` file included in the `tests` directory).
 
