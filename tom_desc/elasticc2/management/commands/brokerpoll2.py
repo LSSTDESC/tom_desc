@@ -11,6 +11,8 @@ import json
 import multiprocessing
 import fastavro
 import confluent_kafka
+import pittgoogle
+from concurrent.futures import ThreadPoolExecutor  # for pittgoogle
 from django.core.management.base import BaseCommand, CommandError
 from elasticc2.models import BrokerMessage
 
@@ -306,6 +308,91 @@ class AlerceConsumer(BrokerConsumer):
                 tosub.append( topic )
         self.topics = tosub
         self.consumer.subscribe( self.topics )
+
+# =====================================================================
+
+class PittGoogleBroker(BrokerConsumer):
+    def __init__(
+        self,
+        topic_name: str,
+        topic_project: str,
+        max_workers: int = 8,  # max number of ThreadPoolExecutor workers
+        batch_maxn: int = 1000,  # max number of messages in a batch
+        batch_maxwait: int = 5,  # max seconds to wait between messages before processing a batch
+        loggername: str = "PITTGOOGLE",
+    ):
+        super().__init__(server=None, groupid=None, loggername=loggername)
+
+        topic = pittgoogle.pubsub.Topic(topic_name, topic_project)
+        subscription = pittgoogle.pubsub.Subscription(name=f"{topic_name}-desc", topic=topic)
+        # if the subscription doesn't already exist, this will create one in the
+        # project given by the env var GOOGLE_CLOUD_PROJECT
+        subscription.touch()
+
+        self.consumer = pittgoogle.pubsub.Consumer(
+            subscription=subscription,
+            msg_callback=self.handle_message,
+            batch_callback=self.handle_message_batch,
+            batch_maxn=batch_maxn,
+            batch_maxwait=batch_maxwait,
+            executor=ThreadPoolExecutor(
+                max_workers=max_workers,
+                initializer=self.worker_init,
+                initargs=(
+                    self.schema,
+                    subscription.topic.name,
+                    self.logger,
+                ),
+            ),
+        )
+
+    @staticmethod
+    def worker_init(classification_schema: dict, pubsub_topic: str, broker_logger: logging.Logger):
+        """Initializer for the ThreadPoolExecutor."""
+        global logger
+        global schema
+        global topic
+
+        logger = broker_logger
+        schema = classification_schema
+        topic = pubsub_topic
+
+    @staticmethod
+    def handle_message(alert: pittgoogle.pubsub.Alert) -> pittgoogle.pubsub.Response:
+        """Callback that will process a single message. This will run in a background thread."""
+        global schema
+        global topic
+
+        message = {
+            "msg": fastavro.schemaless_reader(io.BytesIO(alert.bytes), schema),
+            "topic": topic,
+            # this is a DatetimeWithNanoseconds, a subclass of datetime.datetime
+            # https://googleapis.dev/python/google-api-core/latest/helpers.html
+            "timestamp": alert.metadata["publish_time"].astimezone(datetime.timezone.utc),
+            # there is no offset in pubsub
+            # if this cannot be null, perhaps the message id would work?
+            "msgoffset": alert.metadata["message_id"],
+        }
+
+        return pittgoogle.pubsub.Response(result=message, ack=True)
+
+    @staticmethod
+    def handle_message_batch(messagebatch: list) -> None:
+        """Callback that will process a batch of messages. This will run in the main thread."""
+        global logger
+
+        added = BrokerMessage.load_batch(messagebatch, logger=logger)
+        logger.info(
+            f"...added {added['addedmsgs']} messages, "
+            f"{added['addedclassifiers']} classifiers, "
+            f"{added['addedclassifications']} classifications. "
+        )
+
+    def poll(self):
+        # this blocks indefinitely or until a fatal error
+        # use Control-C to exit
+        self.consumer.stream()
+
 
 # =====================================================================
 # To make this die cleanly, send the USR1 signal to it
