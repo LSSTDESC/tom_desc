@@ -52,7 +52,7 @@ spec:
           value: /secrets/GCP_auth_key-pitt_broker_user_project.json
         - name: GOOGLE_CLOUD_PROJECT
           value: pitt-broker-user-project
-        image: rknop/tom-desc-production
+        image: rknop/tom-desc-dev
         imagePullPolicy: Always
         name: tom-2-app
         resources: {}

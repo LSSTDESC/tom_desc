@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    field.cattle.io/targetWorkloadIds: '["deployment:desc-tom:tom-desc-app"]'
+  name: tom-ingress-service
+  namespace: desc-tom
+  ownerReferences:
+  - apiVersion: v1beta1/extensions
+    controller: true
+    kind: Ingress
+    name: tom-desc-app
+    uid: b211fb5e-e4c4-4f2c-a4f0-de36a8b94620
+  selfLink: /api/v1/namespaces/desc-tom/services/tom-ingress-service
+spec:
+  ports:
+  - port: 8080
+    protocol: TCP
+    targetPort: 8080
+  selector:
+    workload.user.cattle.io/workloadselector: deployment-desc-tom-tom-desc-app
+  sessionAffinity: None
+  type: ClusterIP
+status:
+  loadBalancer: {}
