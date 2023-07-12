@@ -2,7 +2,7 @@ version: "3.3"
 
 services:
   kafka-zookeeper:
-    image: registry.services.nersc.gov/raknop/kafka
+    image: registry.nersc.gov/m1727/raknop/kafka
     build:
       context: ../docker_kafka
     healthcheck:
@@ -16,7 +16,7 @@ services:
     depends_on:
        kafka-zookeeper:
          condition: service_healthy
-    image: registry.services.nersc.gov/raknop/kafka
+    image: registry.nersc.gov/m1727/raknop/kafka
     build:
       context: ../docker_kafka
     healthcheck:
@@ -30,13 +30,13 @@ services:
     depends_on:
       kafka-server:
         condition: service_healthy
-    image: registry.services.nersc.gov/raknop/fakebroker
+    image: registry.nersc.gov/m1727/raknop/fakebroker
     build:
       context: .
       dockerfile: Dockerfile.fakebroker
       
   postgres:
-    image: registry.services.nersc.gov/raknop/tom-postgres
+    image: registry.nersc.gov/m1727/raknop/tom-postgres
     build:
       context: ../docker_postgres
     healthcheck:
@@ -49,10 +49,11 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    image: registry.services.nersc.gov/raknop/tom_desc_extcode
+    image: registry.nersc.gov/m1727/raknop/tom_desc_extcode
     build:
       context: ../
-      dockerfile: docker_server_extcode/Dockerfile
+      dockerfile: docker_server/Dockerfile
+      target: tom-server-extcode
     volumes:
       - ${PWD}/django_secret_key:/secrets/django_secret_key
       - type: bind
@@ -76,10 +77,11 @@ services:
     depends_on:
       createdb:
         condition: service_completed_successfully
-    image: registry.services.nersc.gov/raknop/tom_desc_extcode
+    image: registry.nersc.gov/m1727/raknop/tom_desc_extcode
     build:
       context: ../
-      dockerfile: docker_server_extcode/Dockerfile
+      dockerfile: docker_server/Dockerfile
+      target: tom-server-extcode
     volumes:
       - ${PWD}/django_secret_key:/secrets/django_secret_key
       - type: bind
@@ -100,10 +102,11 @@ services:
         condition: service_started
       fakebroker:
         condition: service_started
-    image: registry.services.nersc.gov/raknop/tom_desc_extcode
+    image: registry.nersc.gov/m1727/raknop/tom_desc_extcode
     build:
       context: ../
-      dockerfile: docker_server_extcode/Dockerfile
+      dockerfile: docker_server/Dockerfile
+      target: tom-server-extcode
     volumes:
       - ${PWD}/django_secret_key:/secrets/django_secret_key
       - type: bind
@@ -127,10 +130,11 @@ services:
         condition: service_started
       brokerpoll:
         condition: service_started
-    image: registry.services.nersc.gov/raknop/tom_desc_extcode
+    image: registry.nersc.gov/m1727/raknop/tom_desc_extcode
     build:
       context: ../
-      dockerfile: docker_server_extcode/Dockerfile
+      dockerfile: docker_server/Dockerfile
+      target: tom-server-extcode
     volumes:
       - ${PWD}/django_secret_key:/secrets/django_secret_key
       - type: bind
@@ -160,10 +164,11 @@ services:
         condition: service_started
       brokerpoll:
         condition: service_started
-    image: registry.services.nersc.gov/raknop/tom_desc_extcode
+    image: registry.nersc.gov/m1727/raknop/tom_desc_extcode
     build:
       context: ../
-      dockerfile: docker_server_extcode/Dockerfile
+      dockerfile: docker_server/Dockerfile
+      target: tom-server-extcode
     volumes:
       - ${PWD}/django_secret_key:/secrets/django_secret_key
       - type: bind

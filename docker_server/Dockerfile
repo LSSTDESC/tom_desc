@@ -1,7 +1,8 @@
 # Have to build this in context of parent directory, with dockerfile docker_server/Dockerfvile
 
-FROM rknop/devuan-chimaera-rknop
+FROM rknop/devuan-chimaera-rknop AS base
 
+RUN mkdir /tom_desc
 WORKDIR /tom_desc
 ENV HOME /
 
@@ -30,14 +31,31 @@ RUN pip install \
 	--requirement pip-packages.txt && \
     rm -rf /.cache/pip
 
-RUN mkdir tom_desc
+RUN mkdir -p /.astropy
+RUN chmod -R 777 /.astropy
+
+# ======================================================================
+
+FROM base AS tom-server-bindmount
+
+EXPOSE 8080
+ENTRYPOINT [ "/usr/local/bin/gunicorn", "tom_desc.wsgi", "-b", "0.0.0.0:8080", "--access-logfile", "-", "--error-logfile", "-", "-k", "gevent", "--timeout", "300", "--workers", "2"]
+
+# ======================================================================
+
+FROM base AS tom-server
+
 COPY tom_desc/ ./tom_desc/
 
 EXPOSE 8080
 ENTRYPOINT [ "/usr/local/bin/gunicorn", "tom_desc.wsgi", "-b", "0.0.0.0:8080", "--access-logfile", "-", "--error-logfile", "-", "-k", "gevent", "--timeout", "300", "--workers", "2"]
 
-RUN mkdir -p /.astropy
-RUN chmod -R 777 /.astropy
+# ======================================================================
 
-# RUN mkdir -p /.config/hop
-# RUN chmod -R 777 /.config/hop
+FROM base AS tom-server-extcode
+
+# Convenient for tests
+RUN pip install --no-cache --disable-pip-version-check pytest-timestamper
+
+EXPOSE 8080
+ENTRYPOINT [ "/usr/local/bin/gunicorn", "tom_desc.wsgi", "-b", "0.0.0.0:8080", "--access-logfile", "-", "--error-logfile", "-", "-k", "gevent", "--timeout", "300", "--workers", "2"]

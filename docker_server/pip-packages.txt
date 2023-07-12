@@ -26,13 +26,6 @@ recommonmark~=0.7
 sphinx<6,>=4
 factory-boy~=3.2.1
 
-# Seems to be needed by tom-pittgoogle
-
-google-api-core
-google-cloud-pubsub
-google-cloud-logging
-google-auth-oauthlib
-
 # 
 
 django-postgres-extra~=2.0.8
@@ -50,6 +43,7 @@ whitenoise~=5.2
 antares-client==1.1
 fink-client~=2.0
 hop-client==0.5.0
+pittgoogle-client>=0.2.0
 
 #
 # I'm including all of these as git submodules
@@ -59,5 +53,13 @@ hop-client==0.5.0
 # tomtoolkit>=2.6.5
 # tom-antares
 # tom-fink
-# tom-pittgoogle==0.1.11
 # tom-alerts-dash[scimma]>=0.1.2
+
+#
+# # Seems to be needed by tom-pittgoogle
+# 
+# tom-pittgoogle==0.1.11
+# google-api-core
+# google-cloud-pubsub
+# google-cloud-logging
+# google-auth-oauthlib
