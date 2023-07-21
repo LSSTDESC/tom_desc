@@ -32,7 +32,7 @@ class Command(BaseCommand):
     def add_arguments( self, parser) :
         parser.add_argument( '--start', default='2022-09-28',
                              help='YYYY-MM-DD of first day to look at (default: 2022-09-28)' )
-        parser.add_argument( '--end', default='2023-01-31,
+        parser.add_argument( '--end', default='2023-01-31',
                              help='YYYY-MM-DD of last day to look at (default: 2023-01-31)' )
 
     def handle( self, *args, **options ):

@@ -20,8 +20,10 @@ class RunSQLQuery(LoginRequiredMixin, django.views.View):
     raise_exception = True
 
     def post( self, request, *args, **kwargs ):
-        dbuser = "postgres_elasticc_admin_ro"
-        pwfile = "/secrets/postgres_elasticc_admin_ro_password"
+        dbuser = "postgres_ro"
+        pwfile = "/secrets/postgres_ro_password"
+        # dbuser = "postgres_elasticc_admin_ro"
+        # pwfile = "/secrets/postgres_elasticc_admin_ro_password"
         # if self.request.user.has_perm( "elasticc.elasticc_admin" ):
         #     dbuser = "postgres_elasticc_admin_ro"
         #     pwfile = "/secrets/postgres_elasticc_admin_ro_password"

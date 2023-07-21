@@ -29,10 +29,16 @@ class Command(BaseCommand):
     def add_arguments( self, parser ):
         parser.add_argument('--norm', default='true', choices=['true', 'pred', 'all'],
                             help='how to normalize confusion matrices')
-        parser.add_argument('--definition', default='last_best', choices=['last_best', 'best'],
-                            help=( 'definition of classification: '
-                                   '"best" means having the largest probability over all classifier messages, '
-                                   '"last_best" means having the largest probability for the most recent alert ' ) )
+        parser.add_argument('-c', '--classifiers', default=[], nargs='+', type=int,
+                            help='Integer IDs of classifiers (default: all)' )
+        parser.add_argument('--definition', default='last_best', choices=['last_best', 'best', 'nth'],
+                            help='''definition of classification:
+                            "best" means having the largest probability over all classifier messages,
+                            "last_best" means having the largest probability for the most recent alert,
+                            "nth" mean probability for the alert on the nth detect (use -n)
+                            ''')
+        parser.add_argument('-n', '--nth-detection', default=3, type=int,
+                            help='Which detection to use for --definition nth' )
         parser.add_argument('--outdir', default=None,
                             help='Output directory relative to script (default: ../../static/elasticc/confmatrics/' )
 
@@ -45,7 +51,7 @@ class Command(BaseCommand):
         client = ConfMatrixClient( conn, logger=_logger )
         _logger.info( "===== Classifiers =====" )
         for cid,c in client.classifiers.items():
-            _logger.info( f"Logger {cid}: {c}" )
+            _logger.info( f"Classifier {cid}: {c}" )
         _logger.info( "=======================" )
 
         if options['outdir'] is not None:
@@ -54,10 +60,13 @@ class Command(BaseCommand):
                 ofp.write( datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M UTC' ) )
         else:
             outdir = self.outdir
-        
-        for cid in client.classifiers.keys():
-            matrix = client.get_classifications( classifier_id=cid, definition=options['definition'] )
-            client.plot_matrix( matrix[cid], extension="svg", norm=options['norm'],
+
+        matrices = client.get_classifications( definition=options['definition'],
+                                               nth_detection=options['nth_detection'],
+                                               classifier_id=options['classifiers']
+                                              )
+        for cid, matrix in matrices.items():
+            client.plot_matrix( matrix, extension="svg", norm=options['norm'],
                                 plotdir=outdir, namebyid=True )
             
         
