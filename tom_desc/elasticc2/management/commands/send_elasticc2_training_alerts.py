@@ -34,7 +34,8 @@ class Command(BaseCommand):
         self.logger.setLevel( logging.INFO )
 
     def add_arguments( self, parser ):
-        parser.add_argument( '-k', '--kafka-server', default='brahms.lbl.gov:9092', help="Kafka server to stream to" )
+        parser.add_argument( '-k', '--kafka-server', default=None,
+                             help="Kafka server to stream to (default: don't stream)" )
         parser.add_argument( '-t', '--kafka-topic-base', default='elasticc2-training-1-',
                              help="Kafka topic base; -<classid> will be appended" )
         parser.add_argument( '-s', '--alert-schema', default=f'{_rundir}/elasticc.v0_9_1.alert.avsc',
@@ -86,21 +87,33 @@ class Command(BaseCommand):
             gentypes[row.gentype] = row.classid
             classids.add( row.classid )
 
-        self.logger.info( "**** streaming starting ****" )
-        self.logger.info( f"Streaming training alerts to {options['kafka_server']} "
-                          f"with topic base {options['kafka_topic_base']}" )
+        self.logger.info( "**** streaming starting/writing ****" )
+        if options['kafka_server'] is not None:
+            self.logger.info( f"Streaming training alerts to {options['kafka_server']} "
+                              f"with topic base {options['kafka_topic_base']}" )
+        else:
+            self.logger.info( "Not streaming." )
+        if options['tardir'] is not None:
+            self.logger.info( f"Writing tar files to directory {options['tardir']}" )
+        else:
+            self.logger.info( "Not writing tar files." )
+
+        if ( options['kafka_server'] is None ) and ( options['tardir'] is None ):
+            self.logger.warning( "No output produced, you gave neither a kafka server nor a tardir." )
+            return
 
         diaobjects = TrainingDiaObject.objects.order_by("diaobject_id")
-        self.logger.info( f"{diaobjects.count()} objects to stream" )
+        self.logger.info( f"{diaobjects.count()} objects to process" )
 
         # import pdb; pdb.set_trace()
         schema = fastavro.schema.load_schema( options['alert_schema'] )
 
         if options['do']:
-            producer = confluent_kafka.Producer( { 'bootstrap.servers': options[ 'kafka_server' ],
-                                                   'batch.size': 131072,
-                                                   'linger.ms': 50 } )
-            # Open tarfiles if necessary
+            if options['kafka_server'] is not None:
+                producer = confluent_kafka.Producer( { 'bootstrap.servers': options[ 'kafka_server' ],
+                                                       'batch.size': 131072,
+                                                       'linger.ms': 50 } )
+
             if options['tardir'] is not None:
                 tardir = pathlib.Path( options['tardir'] )
                 if not tardir.is_dir():
@@ -189,9 +202,10 @@ class Command(BaseCommand):
                 avrowrite_time += time.perf_counter() - t0
                 if options['do']:
                     t0 = time.perf_counter()
-                    producer.produce( f"{options['kafka_topic_base']}{classid}", msgio.getvalue() )
-                    ids_produced.append( alert.alert_id )
-                    avrowrite_time += time.perf_counter() - t0
+                    if options['kafka_server'] is not None:
+                        producer.produce( f"{options['kafka_topic_base']}{classid}", msgio.getvalue() )
+                        ids_produced.append( alert.alert_id )
+                        avrowrite_time += time.perf_counter() - t0
 
                     t0 = time.perf_counter()
                     if options['tardir']:
@@ -202,7 +216,7 @@ class Command(BaseCommand):
                         tarfiles[classid].addfile( tarinfo, msgio )
                         taradd_time += time.perf_counter() - t0
 
-                if len(ids_produced) >= options['flush_every']:
+                if ( options['kafka_server'] is not None ) and ( len(ids_produced) >= options['flush_every'] ):
                     if options['do']:
                         t0 = time.perf_counter()
                         producer.flush()
@@ -217,7 +231,7 @@ class Command(BaseCommand):
 
             i += 1
 
-        if len(ids_produced) > 0:
+        if ( options['kafka_server'] is not None ) and ( len(ids_produced) > 0 ):
             if options['do']:
                 t0 = time.perf_counter()
                 producer.flush()
@@ -233,4 +247,4 @@ class Command(BaseCommand):
             for classid, tar in tarfiles.items():
                 tar.close()
 
-        self.logger.info( f"**** Done sending {tot} alerts; {totflushed} flushed ****" )
+        self.logger.info( f"**** Done processing {tot} alerts; {totflushed} flushed ****" )

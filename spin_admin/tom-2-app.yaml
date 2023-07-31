@@ -49,10 +49,10 @@ spec:
         - name: FINK_USERNAME
           value: johann
         - name: GOOGLE_APPLICATION_CREDENTIALS
-          value: /secrets/GCP_auth_key-pitt_broker_user_project.json
+          value: /secrets/pitt_google_auth_key.json
         - name: GOOGLE_CLOUD_PROJECT
-          value: pitt-broker-user-project
-        image: rknop/tom-desc-dev
+          value: elasticc-challenge
+        image: rknop/tom_desc:tom2
         imagePullPolicy: Always
         name: tom-2-app
         resources: {}

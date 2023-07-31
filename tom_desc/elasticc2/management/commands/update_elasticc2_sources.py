@@ -296,4 +296,4 @@ class Command(BaseCommand):
             targobjdecs = [ row['decl'] for row in newobjs ]
             DiaObjectOfTarget.maybe_new_elasticc_targets( targobjids, targobjras, targobjdecs )
 
-
+        _logger.info( "Done." )

@@ -139,6 +139,81 @@ class Elasticc2AlertStreamHistograms( LoginRequiredMixin, django.views.View ):
 
 
 # ======================================================================
+
+class BrokerSorter:
+    def getbrokerstruct( self ):
+        brokers = {}
+        cfers = BrokerClassifier.objects.all().order_by( 'brokerName', 'brokerVersion',
+                                                         'classifierName', 'classifierParams' )
+        # There's probably a faster pythonic way to make
+        # a hierarchy like this, but oh well.  This works.
+        curbroker = None
+        curversion = None
+        curcfer = None
+        for cfer in cfers:
+            if cfer.brokerName != curbroker:
+                curbroker = cfer.brokerName
+                curversion = cfer.brokerVersion
+                curcfer = cfer.classifierName
+                brokers[curbroker] = {
+                    curversion: {
+                        curcfer: [ [ cfer.classifierParams, cfer.classifierId ] ]
+                    }
+                }
+            elif cfer.brokerVersion != curversion:
+                curversion = cfer.brokerVersion
+                curcfer = cfer.classifierName
+                brokers[curbroker][curversion] = {
+                    curcfer: [ [ cfer.classifierParams, cfer.classifierId ] ] }
+            elif cfer.classifierName != curcfer:
+                curcfer = cfer.classifierName
+                brokers[curbroker][curversion][curcfer] = [ [ cfer.classifierParams, cfer.classifierId ] ]
+            else:
+                brokers[curbroker][curversion][curcfer].append( [ cfer.classifierParams, cfer.classifierId ] )
+
+        return brokers
+
+# ======================================================================
+    
+class Elasticc2BrokerTimeDelayGraphs( LoginRequiredMixin, django.views.View, BrokerSorter ):
+    def get( self, request, info=None ):
+        return self.post( request, info )
+
+    def post( self, request, info=None ):
+        templ = loader.get_template( "elasticc2/brokerdelaygraphs.html" )
+        context = { 'brokers': [] }
+        graphdir = pathlib.Path(__file__).parent / "static/elasticc2/brokertiminggraphs"
+        try:
+            with open( graphdir / "updatetime.txt" ) as ifp:
+                context['updatetime'] = ifp.readline().strip()
+        except FileNotFoundError:
+            context['updatetime'] == "(unknown)"
+        files = list( graphdir.glob( "*.svg" ) )
+        files.sort()
+        weekmatch = re.compile( '^(.*)_(\d{4}-\d{2}-\d{2})\.svg$' )
+        summedmatch = re.compile( '^(.*)_summed\.svg$' )
+        brokers = set()
+        for fname in files:
+            match = summedmatch.search( fname.name )
+            if match is not None:
+                brokers.add( match.group(1) )
+        brokers = list(brokers)
+        brokers.sort()
+
+        context['brokers'] = {}
+        
+        for broker in brokers:
+            context['brokers'][broker] = { 'sum': f'{broker}_summed.svg', 'weeks': {} }
+            for fname in files:
+                match = weekmatch.search( fname.name )
+                if ( match is not None ) and ( match.group(1) == broker ):
+                    week = match.group(2)
+                    context['brokers'][broker]['weeks'][week] = fname.name
+            
+        return HttpResponse( templ.render( context, request ) )
+    
+
+# ======================================================================
 # DJango REST interfaces
 
 class PPDBDiaObjectViewSet( rest_framework.viewsets.ReadOnlyModelViewSet ):

@@ -8,7 +8,6 @@ __pycache__/
 
 # Helm and k8s
 helm-chart/charts/
-*secrets*.yaml
 
 
 .DS_Store

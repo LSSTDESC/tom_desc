@@ -1,37 +1,16 @@
-Rob's workflow
- ---> THIS IS CHANGING AS I USE YAML FILES AND THE COMMAND LINE
+Things to remember to do:
 
-  * In the local checked out tree ( $HOME/desc/tom_desc )
-     * Edit code
-     * Commit and push
-  * At /global/cfs/cdirs/m1727/tom/deploy_dev/tom_desc
-     * git pull
-  * On the spin dev server
-     * Run python manage.py makemigrations -n <short name>
-     * Fix bugs until that works, editing code in deploy_dev/tom_desc
-         ( edit on cori, not the spin server, which doesn't have emacs )
-         ---> For an example of providing initial data to a table,
-              see elasticc/migrations/0019_classificationmap.py
-     * Run python manage.py migrate
-     * Panic if that didn't work, try to fix it
-     * Run kill -HUP 1 to get new code loaded into the server
-     * git status
-     * git add any migrations that were created and any edited files
-     * Commit and push
-   * In the local checked out tree:
-     * Git pull
-
-When ready to deploy to production:
-
-  * At /global/cfs/cdirs/m1727/tom/deploy_production/tom_desc
-     * git pull
-  * On the spin production server
-     * Run python manage.py migrate
-     * Panic if that didn't just work
-     * Run kill -HUP 1
-     
-     
-
+ * Production code is checked out to a directory underneath
+     global/cfs/cdirs/desc-td/SOFTWARE/tom_deployment]
+   production : tom_desc is checkout used by desc-tom.lbl.gov
+   production-2 : tom_desc is checkout used by desc-tom-2.lbl.gov
+ * Update spin server if necessary
+ * kill -HUP 1 on the TOM server to get new code changes
+ * If database schema are changed in the code, run
+     python manage.py pgmakemigrations -n <short name>
+   to make new migrations
+ * pyton manage.py migrate when there are new migraitons
+ 
 ======================================================================
 
 Resetting migrations
@@ -45,6 +24,42 @@ migrations would have required PostGIS to work.  What I did:
  * blow away everything in <app>/migrations
  * python manage.py makemigrations <app>
  * python manage.py migrate <app>
+
+======================================================================
+
+Connecting to the PITT-Google broker:
+
+Requires pittgoogle-client>=0.2.0 from pip
+
+Need to authenticate a service account : https://mwvgroup.github.io/pittgoogle-client/overview/authentication.html#service-account-recommended
+
+Google cloud project :
+  https://console.cloud.google.com/welcome?project=elasticc-challenge
+
+Google's instructions for creating a service account :
+  https://cloud.google.com/iam/docs/service-accounts-create#creating
+
+  Account needs role "Pub/Sub editor"
+
+Under "IAM & Admin" (left sidebar, if you get to the right page in the
+mess that is the Google Cloud UI), do "Service Accounts".  Find the
+service account in the list.  From the three-dot menu to the right,
+select "Manage keys".  Add key, key type JSON.  Private key is saved to
+the computer.
+
+Turn this key into a secret; see tom-2-secrets.yam in admin/spin.
+Encode this into base64 with
+
+  base64 -w 0 <keyfile>
+
+Paste the resultant barf file after pitt_gogole_auth_key.json: | (indented
+properly)
+
+The pitt-google code in brokerpoll2 requires environment variables:
+
+  GOOGLE_CLOUD_PROJECT="elasticc-challenge"
+  GOOGLE_APPLICATION_CREDENTIALS="/secrets/path/to/auth_key.json"
+
 
 ======================================================================
 

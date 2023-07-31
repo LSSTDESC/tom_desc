@@ -41,10 +41,10 @@ spec:
         - name: FINK_USERNAME
           value: johann
         - name: GOOGLE_APPLICATION_CREDENTIALS
-          value: /secrets/GCP_auth_key-pitt_broker_user_project.json
+          value: /secrets/pitt_google_auth_key.json
         - name: GOOGLE_CLOUD_PROJECT
-          value: pitt-broker-user-project
-        image: rknop/tom-desc-dev
+          value: elasticc-challenge
+        image: rknop/tom_desc:tom2
         imagePullPolicy: Always
         name: tom-2-app-shell
         resources: {}
@@ -68,8 +68,8 @@ spec:
           name: tom-2-secrets
         - mountPath: /tom_desc
           name: tom-2-deployment
-        - mountPath: /snana_data
-          name: tom-2-snana-data
+        - mountPath: /elasticc_www
+          name: elasticc-www
         command: [ "tail" ]
         args: [ "-f", "/etc/issue" ]
       dnsConfig: {}
@@ -90,6 +90,6 @@ spec:
           type: Directory
         name: tom-2-deployment
       - hostPath:
-          path: /global/cfs/cdirs/desc-td/ELASTICC_DATA
+          path: /global/cfs/cdirs/lsst/www/DESC_TD_PUBLIC/ELASTICC
           type: Directory
-        name: tom-2-snana-data
+        name: elasticc-www
