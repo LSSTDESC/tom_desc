@@ -68,8 +68,8 @@ spec:
           name: tom-2-secrets
         - mountPath: /tom_desc
           name: tom-2-deployment
-        - mountPath: /elasticc_www
-          name: elasticc-www
+        - mountPath: /sample
+          name: tom-2-sample
         command: [ "tail" ]
         args: [ "-f", "/etc/issue" ]
       dnsConfig: {}
@@ -90,6 +90,6 @@ spec:
           type: Directory
         name: tom-2-deployment
       - hostPath:
-          path: /global/cfs/cdirs/lsst/www/DESC_TD_PUBLIC/ELASTICC
+          path: /global/cfs/cdirs/lsst/www/DESC_TD_PUBLIC/ELASTICC/ELASTICC2_TRAINING_SAMPLE
           type: Directory
-        name: elasticc-www
+        name: tom-2-sample
