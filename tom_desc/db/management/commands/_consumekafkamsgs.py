@@ -47,11 +47,11 @@ class MsgConsumer(object):
         self.logger = logger
         self.tot_handled = 0
 
-        self.schema = fastavro.schema.load_schema( schema )
+        self.schema = None if schema is None else fastavro.schema.load_schema( schema )
         self.consume_nmsgs = consume_nmsgs
         self.consume_timeout = consume_timeout
         self.nomsg_sleeptime = nomsg_sleeptime
-        
+
         consumerconfig = { "bootstrap.servers": server,
                            "auto.offset.reset": "earliest",
                            "group.id": groupid }
@@ -70,10 +70,10 @@ class MsgConsumer(object):
             sys.stderr.write( "Closing MsgConsumer\n" )
             self.consumer.close()
             self.consumer = None
-        
+
     def __del__( self ):
         self.close()
-        
+
     def subscribe( self, topics ):
         if topics is None:
             self.topics = []
@@ -92,7 +92,7 @@ class MsgConsumer(object):
             else:
                 subtopics.append( topic )
         self.topics = subtopics
-                
+
         if self.topics is not None and len(self.topics) > 0:
             self.logger.info( f'Subscribing to topics: {", ".join( topics )}' )
             self.consumer.subscribe( topics, on_assign=self._sub_callback )
@@ -124,7 +124,7 @@ class MsgConsumer(object):
     def get_topics( self ):
         cluster_meta = self.consumer.list_topics()
         return [ n for n in cluster_meta.topics ]
-        
+
     def print_topics( self, newlines=False ):
         topics = self.get_topics()
         if not newlines:
@@ -133,15 +133,28 @@ class MsgConsumer(object):
             topicstr = '\n  '.join( topics )
             self.logger.info( f"\nTopics:\n  {topicstr}" )
 
+    def get_topic_size_offsets( self, topic ):
+        partitions = self.consumer.list_topics( topic ).topics[topic].partitions
+        partdata = {}
+        tot = 0
+        for i, partition in partitions.items():
+            partid = partition.id
+            low_offset, high_offset = self.consumer.get_watermark_offsets(
+                confluent_kafka.TopicPartition( topic, partid )
+            )
+            partdata[partid] = { 'low': low_offset, 'high': high_offset }
+            tot += high_offset - low_offset
+        return tot, partdata
+
     def _get_positions( self, partitions ):
         return self.consumer.position( partitions )
-        
+
     def _dump_assignments( self, ofp, partitions ):
         ofp.write( f'{"Topic":<32s} {"partition":>9s} {"offset":>12s}\n' )
         for par in partitions:
             ofp.write( f"{par.topic:32s} {par.partition:9d} {par.offset:12d}\n" )
         ofp.write( "\n" )
-        
+
     def print_assignments( self ):
         asmgt = self._get_positions( self.consumer.assignment() )
         ofp = io.StringIO()
@@ -149,7 +162,7 @@ class MsgConsumer(object):
         self._dump_assignments( ofp, asmgt )
         self.logger.info( ofp.getvalue() )
         ofp.close()
-        
+
     def _sub_callback( self, consumer, partitions ):
         self.subscribed = True
         ofp = io.StringIO()
@@ -208,7 +221,7 @@ class MsgConsumer(object):
 
         self.logger.info( f"Stopping poll loop after consuming {nconsumed} messages during {runtime}" )
         return retval
-        
+
     def consume_one_message( self, timeout=None, handler=None ):
         """Both calls handler and returns a batch of 1 message."""
         timeout = self.consume_timeout if timeout is None else timeout
@@ -225,7 +238,7 @@ class MsgConsumer(object):
 
     def default_handle_message_batch( self, msgs ):
         self.logger.info( f'Got {len(msgs)}; have received {self._tot_handled} so far.' )
-                
+
     def echoing_handle_message_batch( self, msgs ):
         self.logger.info( f'Handling {len(msgs)} messages' )
         for msg in msgs:
