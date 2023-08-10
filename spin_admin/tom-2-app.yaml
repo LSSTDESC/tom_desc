@@ -40,6 +40,8 @@ spec:
           value: fragile
         - name: DB_USER
           value: postgres
+        - name: ALERCE_KAFKA_SERVER
+          value: b-3-public.publicproduction.o8ncxm.c18.kafka.us-east-1.amazonaws.com:9196,b-2-public.publicproduction.o8ncxm.c18.kafka.us-east-1.amazonaws.com:9196,b-1-public.publicproduction.o8ncxm.c18.kafka.us-east-1.amazonaws.com:9196
         - name: FINK_GROUP_ID
           value: lsstfr-johann
         - name: FINK_SERVER
