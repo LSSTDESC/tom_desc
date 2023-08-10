@@ -740,7 +740,7 @@ class BrokerMessage(models.Model):
             'msghdrtimestamp': self.msghdrtimestamp.isoformat(),
             'descingesttimestamp': self.descingesttimestamp.isoformat(),
             'elasticcpublishtimestamp': int( self.elasticcpublishtimestamp.timestamp() * 1e3 ),
-            'brokeringestT=timestamp': int( self.brokeringesttimestamp.timestamp() * 1e3 ),
+            'brokeringesttimestamp': int( self.brokeringesttimestamp.timestamp() * 1e3 ),
             'brokername': "<unknown>",
             'brokerversion': "<unknown>",
             'classifications': []

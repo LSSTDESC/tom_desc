@@ -1,4 +1,5 @@
 import sys
+import os
 import io
 import re
 import pathlib
@@ -48,7 +49,9 @@ class BrokerConsumer:
 
         self.countlogger = logging.getLogger( f"countlogger_{loggername}" )
         self.countlogger.propagate = False
-        _countlogout = logging.FileHandler( _rundir.parent.parent.parent / f"logs/brokerpoll_counts_{loggername}.log" )
+        _countlogfile = _rundir.parent.parent.parent / f"logs/brokerpoll_counts_{loggername}.log"
+        _countlogfile.parent.mkdir( parents=True, exist_ok=True )
+        _countlogout = logging.FileHandler( _countlogfile  )
         _countformatter = logging.Formatter( f'[%(asctime)s - %(levelname)s] - %(message)s',
                                              datefmt='%Y-%m-%d %H:%M:%S' )
         _countlogout.setFormatter( _countformatter )
@@ -275,36 +278,43 @@ class FinkConsumer(BrokerConsumer):
 # ======================================================================
 
 class AlerceConsumer(BrokerConsumer):
-    def __init__( self, grouptag=None,
-                  usernamefile='/secrets/alerce_username', passwdfile='/secrets/alerce_passwd',
-                  loggername="ALERCE", **kwargs ):
-        server = "kafka.alerce.science:9093"
+    def __init__( self,
+                  grouptag=None,
+                  usernamefile='/secrets/alerce_username',
+                  passwdfile='/secrets/alerce_passwd',
+                  loggername="ALERCE",
+                  early_offset=os.getenv( "ALERCE_TOPIC_RELDATEOFFSET", -4 ),
+                  **kwargs ):
+        server = os.getenv( "ALERCE_KAFKA_SERVER", "kafka.alerce.science:9093" )
         groupid = "elasticc-lbnl" + ( "" if grouptag is None else "-" + grouptag )
+        self.early_offset = int( early_offset )
         topics = None
         updatetopics = True
         with open( usernamefile ) as ifp:
             username = ifp.readline().strip()
         with open( passwdfile ) as ifp:
             passwd = ifp.readline().strip()
-        extraconfig = {  "security.protocol": "SASL_PLAINTEXT",
-                         "sasl.mechanism": "SCRAM-SHA-256",
+        extraconfig = {  "security.protocol": "SASL_SSL",
+                         "sasl.mechanism": "SCRAM-SHA-512",
                          "sasl.username": username,
                          "sasl.password": passwd }
         super().__init__( server, groupid, topics=topics, updatetopics=updatetopics, extraconfig=extraconfig,
                           loggername=loggername, **kwargs )
         self.logger.info( f"Alerce group id is {groupid}" )
 
+        self.badtopics = [ 'lc_classifier_balto_20230807' ]
+        
     def update_topics( self, *args, **kwargs ):
         now = datetime.datetime.now()
         datestrs = []
-        for ddays in range(-4, 3):
+        for ddays in range(self.early_offset, 3):
             then = now + datetime.timedelta( days=ddays )
             datestrs.append( f"{then.year:04d}{then.month:02d}{then.day:02d}" )
         tosub = []
         topics = self.consumer.get_topics()
         for topic in topics:
-            match = re.search( '^alerce_elasticc_.*_(\d{4}\d{2}\d{2})$', topic )
-            if match and ( match.group(1) in datestrs ):
+            match = re.search( '^lc_classifier_.*_(\d{4}\d{2}\d{2})$', topic )
+            if match and ( match.group(1) in datestrs ) and ( topic not in self.badtopics ):
                 tosub.append( topic )
         self.topics = tosub
         self.consumer.subscribe( self.topics )
@@ -314,17 +324,18 @@ class AlerceConsumer(BrokerConsumer):
 class PittGoogleBroker(BrokerConsumer):
     def __init__(
         self,
-        topic_name: str,
-        topic_project: str,
+        pitt_topic: str,
+        pitt_project: str,
         max_workers: int = 8,  # max number of ThreadPoolExecutor workers
         batch_maxn: int = 1000,  # max number of messages in a batch
         batch_maxwait: int = 5,  # max seconds to wait between messages before processing a batch
         loggername: str = "PITTGOOGLE",
+        **kwargs
     ):
-        super().__init__(server=None, groupid=None, loggername=loggername)
+        super().__init__(server=None, groupid=None, loggername=loggername, **kwargs)
 
-        topic = pittgoogle.pubsub.Topic(topic_name, topic_project)
-        subscription = pittgoogle.pubsub.Subscription(name=f"{topic_name}-desc", topic=topic)
+        topic = pittgoogle.pubsub.Topic(pitt_topic, pitt_project)
+        subscription = pittgoogle.pubsub.Subscription(name=f"{pitt_topic}-desc", topic=topic)
         # if the subscription doesn't already exist, this will create one in the
         # project given by the env var GOOGLE_CLOUD_PROJECT
         subscription.touch()
@@ -431,6 +442,9 @@ class Command(BaseCommand):
                              help="Poll from Rob's test kafka server" )
         parser.add_argument( '--brahms-topic', default=None,
                              help="Topic to poll on brahms (required if --do-brahms is True)" )
+        parser.add_argument( '--do-pitt', action='store_true', default=False, help="Poll from PITT-Google" )
+        parser.add_argument( '--pitt-topic', default=None, help="Topic name for PITT-Google" )
+        parser.add_argument( '--pitt-project', default=None, help="Project name for PITT-Google" )
         parser.add_argument( '--do-test', action='store_true', default=False,
                              help="Poll from kafka-server:9092 (for testing purposes)" )
         parser.add_argument( '---test-topic', default='classifications',
@@ -468,6 +482,8 @@ class Command(BaseCommand):
             brokerstodo['antares'] = AntaresConsumer
         if options['do_fink']:
             brokerstodo['fink'] = FinkConsumer
+        if options['do_pitt']:
+            brokerstodo['pitt'] = PittGoogleBroker
         if options['do_brahms']:
             brokerstodo['brahms'] = BrahmsConsumer
         if options['do_test']:
