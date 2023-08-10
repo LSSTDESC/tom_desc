@@ -45,10 +45,23 @@ services:
       timeout: 10s
       retries: 5
 
+  cassandra:
+    image: registry.nersc.gov/m1727/raknop/tom_cassandra
+    build:
+      context: ../docker_cassandra
+    healthcheck:
+#       test: [ "CMD-SHELL", "[ $$(nodetool statusgossip) = running ]" ]
+       test: cqlsh -u cassandra -p cassandra cassandra < /dev/null
+       interval: 10s
+       timeout: 2s
+       retries: 10
+      
   createdb:
     depends_on:
       postgres:
         condition: service_healthy
+      cassandra:
+         condition: service_healthy
     image: registry.nersc.gov/m1727/raknop/tom_desc_extcode
     build:
       context: ../
@@ -124,10 +137,12 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      cassandra:
+        condition: service_healthy
       tom:
         condition: service_started
       fakebroker:
-        condition: service_started
+       condition: service_started
       brokerpoll:
         condition: service_started
     image: registry.nersc.gov/m1727/raknop/tom_desc_extcode

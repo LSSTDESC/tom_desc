@@ -15,6 +15,7 @@ import os
 import socket
 import tempfile
 import psqlextra
+import cassandra
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -36,8 +37,11 @@ ALLOWED_HOSTS = ['*']
 DATA_UPLOAD_MAX_MEMORY_SIZE = 524288000
 
 # Application definition
+# NOTE -- django_cassandra_engine demands to be first
+# Just gotta hope nobody else makes the same claim.
 
 INSTALLED_APPS = [
+    'django_cassandra_engine',
     'whitenoise.runserver_nostatic',
     'django.contrib.admin',
     'django.contrib.auth',
@@ -126,6 +130,24 @@ DATABASES = {
         'PASSWORD': os.getenv('DB_PASS', ''),
         'HOST': os.getenv('DB_HOST', 'tom-desc-postgis'),
         'PORT': os.getenv('DB_PORT', '5432'),
+    },
+    'cassandra': {
+        'ENGINE': 'django_cassandra_engine',
+        'NAME': os.getenv('CASSANDRA_DB', default='tom_desc' ),
+        'HOST': os.getenv('CASSANDRA_HOST', default='cassandra' ),
+        'USER': os.getenv('CASSANDRA_USER', default='cassandra' ),
+        'PASSWORD': os.getenv('CASSANDRA_PASSWORD', default='cassandra' ),
+        'OPTIONS': {
+            'replication': {
+                'strategy_class': 'SimpleStrategy',
+                'replication_factor': 1
+            },
+            'connection': {
+                'consistency': cassandra.ConsistencyLevel.LOCAL_ONE,
+                'port': int( os.getenv('CASSANDRA_PORT', default=9042 ) ),
+                'retry_connect': True
+            },
+        }
     }
 }
 

@@ -13,6 +13,10 @@ from django.db import models
 from guardian.shortcuts import assign_perm
 from django.contrib.auth.models import Group
 
+import uuid
+from cassandra.cqlengine import columns
+from django_cassandra_engine.models import DjangoCassandraModel
+
 # NOTE FOR ROB
 #
 # Many schema are similar to elasticc.
@@ -1008,7 +1012,24 @@ class BrokerSourceIds(models.Model):
             return
         objs = [ BrokerSourceIds( i ) for i in sources ]
         addedsources = BrokerSourceIds.objects.bulk_create( objs, len(objs), ignore_conflicts=True )
-                      
+
+class CassBrokerMessage(DjangoCassandraModel):
+    sourceid = columns.BigInt( primary_key=True )
+    id = columns.UUID( primary_key=True, default=uuid.uuid4 )
+    created_at = columns.DateTime( primary_key=True, default=datetime.datetime.utcnow() )
+    alertid = columns.BigInt()
+    elasticcpublishtimestamp = columns.DateTime()
+    brokeringesttimestamp = columns.DateTime()
+    brokername = columns.Text()
+    brokerversion = columns.Text()
+    classifiername = columns.Text()
+    classifierparams = columns.Text()
+    classid = columns.List( columns.Integer() )
+    probability = columns.List( columns.Float() )
+
+    class Meta:
+        get_pk_field = 'id'
+    
 # This is a thing I use as a "don't run twice at once" lock
 
 class ImportPPDBRunning(models.Model):
