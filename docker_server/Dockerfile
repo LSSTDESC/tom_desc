@@ -31,6 +31,9 @@ RUN pip install \
 	--requirement pip-packages.txt && \
     rm -rf /.cache/pip
 
+COPY docker_server/pubsub.patch /tmp
+RUN patch /usr/local/lib/python3.9/dist-packages/pittgoogle/pubsub.py /tmp/pubsub.patch
+
 RUN mkdir -p /.astropy
 RUN chmod -R 777 /.astropy
 
