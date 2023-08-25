@@ -73,7 +73,7 @@ class Command(BaseCommand):
         #   be a practical problem.
         runningfile = pathlib.Path( options['runningfile'] )
         if runningfile.exists():
-            self.logger.warn( "{runningfile} exists, not starting." )
+            self.logger.warn( f"{runningfile} exists, not starting." )
             return
 
         try:

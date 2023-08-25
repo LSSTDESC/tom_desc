@@ -45,7 +45,7 @@ whitenoise~=5.2
 antares-client==1.1
 fink-client~=2.0
 hop-client==0.5.0
-pittgoogle-client>=0.2.0
+pittgoogle-client==0.2.0
 
 #
 # I'm including all of these as git submodules
