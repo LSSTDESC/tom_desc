@@ -1,4 +1,5 @@
 import sys
+import os
 import io
 import re
 import pathlib
@@ -11,6 +12,8 @@ import json
 import multiprocessing
 import fastavro
 import confluent_kafka
+import pittgoogle
+from concurrent.futures import ThreadPoolExecutor  # for pittgoogle
 from django.core.management.base import BaseCommand, CommandError
 from elasticc2.models import BrokerMessage
 
@@ -46,7 +49,9 @@ class BrokerConsumer:
 
         self.countlogger = logging.getLogger( f"countlogger_{loggername}" )
         self.countlogger.propagate = False
-        _countlogout = logging.FileHandler( _rundir.parent.parent.parent / f"logs/brokerpoll_counts_{loggername}.log" )
+        _countlogfile = _rundir.parent.parent.parent / f"logs/brokerpoll_counts_{loggername}.log"
+        _countlogfile.parent.mkdir( parents=True, exist_ok=True )
+        _countlogout = logging.FileHandler( _countlogfile  )
         _countformatter = logging.Formatter( f'[%(asctime)s - %(levelname)s] - %(message)s',
                                              datefmt='%Y-%m-%d %H:%M:%S' )
         _countlogout.setFormatter( _countformatter )
@@ -54,7 +59,7 @@ class BrokerConsumer:
         self.countlogger.setLevel( logging.INFO )
 
         if schemafile is None:
-            schemafile = _rundir / "elasticc.v0_9.brokerClassification.avsc"
+            schemafile = _rundir / "elasticc.v0_9_1.brokerClassification.avsc"
 
         self.countlogger.info( f"************ Starting Brokerconsumer for {loggername} ****************" )
 
@@ -75,7 +80,6 @@ class BrokerConsumer:
 
         self.nmessagesconsumed = 0
 
-        self.create_connection()
 
     @property
     def reset( self ):
@@ -111,6 +115,8 @@ class BrokerConsumer:
         if self._reset and ( self.topics is not None ):
             self.countlogger.info( f"*************** Resetting to start of broker kafka stream ***************" )
             self.reset_to_start()
+            # Only want to reset the first time the connection is opened!
+            self._reset = False
 
         self.countlogger.info( f"**************** Consumer connection opened *****************" )
 
@@ -154,13 +160,14 @@ class BrokerConsumer:
                                f"{added['addedclassifications']} classifications. " )
 
     def poll( self, restart_time=datetime.timedelta(minutes=30) ):
+        self.create_connection()
         while True:
             if self._updatetopics:
                 self.update_topics()
             strio = io.StringIO("")
             if len(self.consumer.topics) == 0:
-                self.logger.info( "No topics, will wait 1m and reconnect." )
-                time.sleep(60)
+                self.logger.info( "No topics, will wait 10s and reconnect." )
+                time.sleep(10)
             else:
                 self.logger.info( f"Subscribed to topics: {self.consumer.topics}; starting poll loop." )
                 self.countlogger.info( f"Subscribed to topics: {self.consumer.topics}; starting poll loop." )
@@ -184,6 +191,13 @@ class BrokerConsumer:
                     self.logger.warning( otherstrio.getvalue() )
                     strio.write( f"Exception polling: {str(e)}. " )
 
+            if self.pipe.poll():
+                msg = self.pipe.recv()
+                if ( 'command' in msg ) and ( msg['command'] == 'die' ):
+                    self.logger.info( "No topics, but also exiting broker poll due to die command." )
+                    self.countlogger.info( "No topics, but also existing broker poll due to die command." )
+                    self.close_connection()
+                    return
             strio.write( "Reconnecting.\n" )
             self.logger.info( strio.getvalue() )
             self.countlogger.info( strio.getvalue() )
@@ -193,6 +207,7 @@ class BrokerConsumer:
             self.create_connection()
 
 # ======================================================================
+# I should replace this and the next one with a generic noauth consumer
 
 class BrahmsConsumer(BrokerConsumer):
     def __init__( self, grouptag=None, brahms_topic=None, loggername="BRAHMS", **kwargs ):
@@ -203,6 +218,18 @@ class BrahmsConsumer(BrokerConsumer):
         topics = [ brahms_topic ]
         super().__init__( server, groupid, topics=topics, loggername=loggername, **kwargs )
         self.logger.info( f"Brahms group id is {groupid}, topic is {brahms_topic}" )
+
+# ======================================================================
+
+class TestConsumer(BrokerConsumer):
+    def __init__( self, grouptag=None, test_topic=None, loggername="TEST", **kwargs ):
+        if test_topic is None:
+            raise RuntimeError( "Must specify test topic" )
+        server = "kafka-server:9092"
+        groupid = "testing" + ("" if grouptag is None else "-" + grouptag )
+        topics = [ test_topic ]
+        super().__init__( server, groupid, topics=topics, loggername=loggername, **kwargs )
+        self.logger.info( f"Test group id is {groupid}, topic is {test_topic}" )
 
 # ======================================================================
 
@@ -251,41 +278,149 @@ class FinkConsumer(BrokerConsumer):
 # ======================================================================
 
 class AlerceConsumer(BrokerConsumer):
-    def __init__( self, grouptag=None,
-                  usernamefile='/secrets/alerce_username', passwdfile='/secrets/alerce_passwd',
-                  loggername="ALERCE", **kwargs ):
-        server = "kafka.alerce.science:9093"
+    def __init__( self,
+                  grouptag=None,
+                  usernamefile='/secrets/alerce_username',
+                  passwdfile='/secrets/alerce_passwd',
+                  loggername="ALERCE",
+                  early_offset=os.getenv( "ALERCE_TOPIC_RELDATEOFFSET", -4 ),
+                  **kwargs ):
+        server = os.getenv( "ALERCE_KAFKA_SERVER", "kafka.alerce.science:9093" )
         groupid = "elasticc-lbnl" + ( "" if grouptag is None else "-" + grouptag )
+        self.early_offset = int( early_offset )
         topics = None
         updatetopics = True
         with open( usernamefile ) as ifp:
             username = ifp.readline().strip()
         with open( passwdfile ) as ifp:
             passwd = ifp.readline().strip()
-        extraconfig = {  "security.protocol": "SASL_PLAINTEXT",
-                         "sasl.mechanism": "SCRAM-SHA-256",
+        extraconfig = {  "security.protocol": "SASL_SSL",
+                         "sasl.mechanism": "SCRAM-SHA-512",
                          "sasl.username": username,
                          "sasl.password": passwd }
         super().__init__( server, groupid, topics=topics, updatetopics=updatetopics, extraconfig=extraconfig,
                           loggername=loggername, **kwargs )
         self.logger.info( f"Alerce group id is {groupid}" )
 
+        self.badtopics = [ 'lc_classifier_balto_20230807' ]
+        
     def update_topics( self, *args, **kwargs ):
         now = datetime.datetime.now()
         datestrs = []
-        for ddays in range(-4, 3):
+        for ddays in range(self.early_offset, 3):
             then = now + datetime.timedelta( days=ddays )
             datestrs.append( f"{then.year:04d}{then.month:02d}{then.day:02d}" )
         tosub = []
         topics = self.consumer.get_topics()
         for topic in topics:
-            match = re.search( '^alerce_elasticc_.*_(\d{4}\d{2}\d{2})$', topic )
-            if match and ( match.group(1) in datestrs ):
+            match = re.search( '^lc_classifier_.*_(\d{4}\d{2}\d{2})$', topic )
+            if match and ( match.group(1) in datestrs ) and ( topic not in self.badtopics ):
                 tosub.append( topic )
         self.topics = tosub
         self.consumer.subscribe( self.topics )
 
 # =====================================================================
+
+class PittGoogleBroker(BrokerConsumer):
+    def __init__(
+        self,
+        pitt_topic: str,
+        pitt_project: str,
+        max_workers: int = 8,  # max number of ThreadPoolExecutor workers
+        batch_maxn: int = 1000,  # max number of messages in a batch
+        batch_maxwait: int = 5,  # max seconds to wait between messages before processing a batch
+        loggername: str = "PITTGOOGLE",
+        **kwargs
+    ):
+        super().__init__(server=None, groupid=None, loggername=loggername, **kwargs)
+
+        topic = pittgoogle.pubsub.Topic(pitt_topic, pitt_project)
+        subscription = pittgoogle.pubsub.Subscription(name=f"{pitt_topic}-desc", topic=topic)
+        # if the subscription doesn't already exist, this will create one in the
+        # project given by the env var GOOGLE_CLOUD_PROJECT
+        subscription.touch()
+
+        self.consumer = pittgoogle.pubsub.Consumer(
+            subscription=subscription,
+            msg_callback=self.handle_message,
+            batch_callback=self.handle_message_batch,
+            batch_maxn=batch_maxn,
+            batch_maxwait=batch_maxwait,
+            executor=ThreadPoolExecutor(
+                max_workers=max_workers,
+                initializer=self.worker_init,
+                initargs=(
+                    self.schema,
+                    subscription.topic.name,
+                    self.logger,
+                    self.countlogger
+                ),
+            ),
+        )
+
+    @staticmethod
+    def worker_init(classification_schema: dict, pubsub_topic: str,
+                    broker_logger: logging.Logger, broker_countlogger: logging.Logger ):
+        """Initializer for the ThreadPoolExecutor."""
+        global countlogger
+        global logger
+        global schema
+        global topic
+
+        countlogger = broker_countlogger
+        logger = broker_logger
+        schema = classification_schema
+        topic = pubsub_topic
+
+        logger.info( "In worker_init" )
+        
+    @staticmethod
+    def handle_message(alert: pittgoogle.pubsub.Alert) -> pittgoogle.pubsub.Response:
+        """Callback that will process a single message. This will run in a background thread."""
+        global logger
+        global schema
+        global topic
+
+        logger.info( "In handle_message" )
+        
+        message = {
+            "msg": fastavro.schemaless_reader(io.BytesIO(alert.bytes), schema),
+            "topic": topic,
+            # this is a DatetimeWithNanoseconds, a subclass of datetime.datetime
+            # https://googleapis.dev/python/google-api-core/latest/helpers.html
+            "timestamp": alert.metadata["publish_time"].astimezone(datetime.timezone.utc),
+            # there is no offset in pubsub
+            # if this cannot be null, perhaps the message id would work?
+            "msgoffset": alert.metadata["message_id"],
+        }
+
+        return pittgoogle.pubsub.Response(result=message, ack=True)
+
+    @staticmethod
+    def handle_message_batch(messagebatch: list) -> None:
+        """Callback that will process a batch of messages. This will run in the main thread."""
+        global logger
+        global countlogger
+        
+        logger.info( "In handle_message_batch" )
+        # import pdb; pdb.set_trace()
+        
+        added = BrokerMessage.load_batch(messagebatch, logger=logger)
+        countlogger.info(
+            f"...added {added['addedmsgs']} messages, "
+            f"{added['addedclassifiers']} classifiers, "
+            f"{added['addedclassifications']} classifications. "
+        )
+
+    def poll(self):
+        # this blocks indefinitely or until a fatal error
+        # use Control-C to exit
+        self.consumer.stream( pipe=self.pipe, heartbeat=60 )
+
+
+# =====================================================================
+# To make this die cleanly, send the USR1 signal to it
+# (SIGTERM doesn't work because django captures that, sadly.)
 
 class Command(BaseCommand):
     help = 'Poll ELAsTiCC Brokers'
@@ -293,6 +428,16 @@ class Command(BaseCommand):
 
     def __init__( self, *args, **kwargs ):
         super().__init__( *args, **kwargs )
+
+        # Make sure the log directory exists
+
+        logdir = _rundir.parent.parent.parent / "logs"
+        if logdir.exists():
+            if not logdir.is_dir():
+                raise RuntimeError( "{logdir} exists but is not a directory!" )
+        else:
+            logdir.mkdir( parents=True )
+
         self.logger = logging.getLogger( "brokerpoll_baselogger" )
         self.logger.propagate = False
         logout = logging.FileHandler( _rundir.parent.parent.parent / f"logs/brokerpoll.log" )
@@ -310,7 +455,13 @@ class Command(BaseCommand):
                              help="Poll from Rob's test kafka server" )
         parser.add_argument( '--brahms-topic', default=None,
                              help="Topic to poll on brahms (required if --do-brahms is True)" )
-        
+        parser.add_argument( '--do-pitt', action='store_true', default=False, help="Poll from PITT-Google" )
+        parser.add_argument( '--pitt-topic', default=None, help="Topic name for PITT-Google" )
+        parser.add_argument( '--pitt-project', default=None, help="Project name for PITT-Google" )
+        parser.add_argument( '--do-test', action='store_true', default=False,
+                             help="Poll from kafka-server:9092 (for testing purposes)" )
+        parser.add_argument( '---test-topic', default='classifications',
+                             help="Topic to poll from on kafka-server:9092" )
         parser.add_argument( '-g', '--grouptag', default=None, help="Tag to add to end of kafka group ids" )
         parser.add_argument( '-r', '--reset', default=False, action='store_true',
                              help='Reset all stream pointers' )
@@ -324,6 +475,8 @@ class Command(BaseCommand):
                        lambda sig, stack: self.logger.warning( f"{brokerclass.__name__} ignoring SIGINT" ) )
         signal.signal( signal.SIGTERM,
                        lambda sig, stack: self.logger.warning( f"{brokerclass.__name__} ignoring SIGTERM" ) )
+        signal.signal( signal.SIGUSR1,
+                       lambda sig, stack: self.logger.warning( f"{brokerclass.__name__} ignoring SIGUSR1" ) )
         consumer = brokerclass( pipe=pipe, **options )
         consumer.poll()
 
@@ -333,6 +486,7 @@ class Command(BaseCommand):
         self.mustdie = False
         signal.signal( signal.SIGTERM, lambda sig, stack: self.sigterm( "TERM" ) )
         signal.signal( signal.SIGINT, lambda sig, stack: self.sigterm( "INT" ) )
+        signal.signal( signal.SIGUSR1, lambda sig, stack: self.sigterm( "USR1" ) )
 
         brokerstodo = {}
         if options['do_alerce']:
@@ -341,8 +495,12 @@ class Command(BaseCommand):
             brokerstodo['antares'] = AntaresConsumer
         if options['do_fink']:
             brokerstodo['fink'] = FinkConsumer
+        if options['do_pitt']:
+            brokerstodo['pitt'] = PittGoogleBroker
         if options['do_brahms']:
             brokerstodo['brahms'] = BrahmsConsumer
+        if options['do_test']:
+            brokerstodo['test'] = TestConsumer
         if len( brokerstodo ) == 0:
             self.logger.error( "Must give at least one broker to listen to." )
             raise RuntimeError( "No brokers given to listen to." )

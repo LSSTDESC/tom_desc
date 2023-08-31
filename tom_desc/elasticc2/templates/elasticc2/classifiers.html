@@ -1,0 +1,25 @@
+{% extends 'tom_common/base.html' %}
+{% load static %}
+{% block title %}
+ELAsTiCC2 Admin Summary
+{% endblock %}
+{% block additional_css %}
+<link rel="stylesheet" href="{% static 'elasticc/elasticc.css' %}">
+{% endblock %}
+{% block content %}
+<h2>ELAsTiCC2 Classifiers</h2>
+
+<table class="elasticc_table1">
+  <tr><th>id</th><th>Broker Name</th><th>Broker Version</th><th>Classifier Name</th><th>Classifier Params</th></tr>
+  {% for row in cfers %}
+  <tr>
+    <td>{{ row.id }}</td>
+    <td>{{ row.brokername }}</td>
+    <td>{{ row.brokerversion }}</td>
+    <td>{{ row.classifiername }}</td>
+    <td>{{ row.classifierparams }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}
+

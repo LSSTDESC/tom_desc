@@ -1,0 +1,65 @@
+# These were extracted from the requires_dist
+# from the metadata of tomtoolkit on PyPI
+
+astroquery>=0.4.2
+astroplan~=0.8
+astropy>=5.0
+beautifulsoup4~=4.9
+django<5.0,>=3.1
+djangorestframework~=3.12
+django-bootstrap4<23,>=3
+django-contrib-comments~=2.0
+django-crispy-forms~=1.11
+django-extensions~=3.1
+django-filter<23,>=21
+django-gravatar2~=1.4
+django-guardian~=2.3
+fits2image>=0.4.2
+Markdown~=3.4
+numpy~=1.20
+pillow~=9.2
+plotly~=5.0
+python-dateutil~=2.8
+requests~=2.25
+specutils~=1.8
+recommonmark~=0.7
+sphinx<6,>=4
+factory-boy~=3.2.1
+
+# 
+
+django-postgres-extra~=2.0.8
+gunicorn[gevent]==20.0.4
+psycopg2===2.9.6
+kafka-python
+avro==1.10.2
+fastavro
+healpy>=1.14
+scikit-learn
+seaborn
+tables
+whitenoise~=5.2
+
+antares-client==1.1
+fink-client~=2.0
+hop-client==0.5.0
+pittgoogle-client==0.2.0
+
+#
+# I'm including all of these as git submodules
+#  now rather than pulling them from PyPI,
+#  as I am going to modify some things in tom_base
+#
+# tomtoolkit>=2.6.5
+# tom-antares
+# tom-fink
+# tom-alerts-dash[scimma]>=0.1.2
+
+#
+# # Seems to be needed by tom-pittgoogle
+# 
+# tom-pittgoogle==0.1.11
+# google-api-core
+# google-cloud-pubsub
+# google-cloud-logging
+# google-auth-oauthlib

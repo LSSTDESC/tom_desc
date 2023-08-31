@@ -1,0 +1,190 @@
+version: "3.3"
+
+services:
+  kafka-zookeeper:
+    image: registry.nersc.gov/m1727/raknop/kafka
+    build:
+      context: ../docker_kafka
+    healthcheck:
+      test: netcat -w 1 localhost 2181 || exit 1
+      interval: 5s
+      timeout: 10s
+      retries: 5
+    entrypoint: [ "bin/zookeeper-server-start.sh", "config/zookeeper.properties" ]
+
+  kafka-server:
+    depends_on:
+       kafka-zookeeper:
+         condition: service_healthy
+    image: registry.nersc.gov/m1727/raknop/kafka
+    build:
+      context: ../docker_kafka
+    healthcheck:
+      test: netcat -w 1 localhost 9092 || exit 1
+      interval: 5s
+      timeout: 10s
+      retries: 5
+    entrypoint: [ "bin/kafka-server-start.sh", "config/server.properties" ]
+
+  fakebroker:
+    depends_on:
+      kafka-server:
+        condition: service_healthy
+    image: registry.nersc.gov/m1727/raknop/fakebroker
+    build:
+      context: .
+      dockerfile: Dockerfile.fakebroker
+      
+  postgres:
+    image: registry.nersc.gov/m1727/raknop/tom-postgres
+    build:
+      context: ../docker_postgres
+    healthcheck:
+      test: netcat -w 1 localhost 5432 || exit 1
+      interval: 5s
+      timeout: 10s
+      retries: 5
+
+  createdb:
+    depends_on:
+      postgres:
+        condition: service_healthy
+    image: registry.nersc.gov/m1727/raknop/tom_desc_extcode
+    build:
+      context: ../
+      dockerfile: docker_server/Dockerfile
+      target: tom-server-extcode
+    volumes:
+      - ${PWD}/django_secret_key:/secrets/django_secret_key
+      - type: bind
+        source: ../tom_desc
+        target: /tom_desc/tom_desc
+    environment:
+      DB_NAME: tom_desc
+      DB_HOST: postgres
+      DB_USER: postgres
+      DB_PASS: fragile
+      DB_PORT: 5432
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        python tom_desc/manage.py migrate
+        python tom_desc/manage.py create_test_superuser
+        python tom_desc/manage.py create_test_apibroker
+
+  tom:
+    depends_on:
+      createdb:
+        condition: service_completed_successfully
+    image: registry.nersc.gov/m1727/raknop/tom_desc_extcode
+    build:
+      context: ../
+      dockerfile: docker_server/Dockerfile
+      target: tom-server-extcode
+    volumes:
+      - ${PWD}/django_secret_key:/secrets/django_secret_key
+      - type: bind
+        source: ../tom_desc
+        target: /tom_desc
+    environment:
+      DB_NAME: tom_desc
+      DB_HOST: postgres
+      DB_USER: postgres
+      DB_PASS: fragile
+      DB_PORT: 5432
+
+  brokerpoll:
+    depends_on:
+      postgres:
+        condition: service_healthy
+      tom:
+        condition: service_started
+      fakebroker:
+        condition: service_started
+    image: registry.nersc.gov/m1727/raknop/tom_desc_extcode
+    build:
+      context: ../
+      dockerfile: docker_server/Dockerfile
+      target: tom-server-extcode
+    volumes:
+      - ${PWD}/django_secret_key:/secrets/django_secret_key
+      - type: bind
+        source: ../tom_desc
+        target: /tom_desc
+    environment:
+      DB_NAME: tom_desc
+      DB_HOST: postgres
+      DB_USER: postgres
+      DB_PASS: fragile
+      DB_PORT: 5432
+    entrypoint: [ "python", "manage.py", "brokerpoll2", "--do-test" ]
+      
+  shellhost:
+    depends_on:
+      postgres:
+        condition: service_healthy
+      tom:
+        condition: service_started
+      fakebroker:
+        condition: service_started
+      brokerpoll:
+        condition: service_started
+    image: registry.nersc.gov/m1727/raknop/tom_desc_extcode
+    build:
+      context: ../
+      dockerfile: docker_server/Dockerfile
+      target: tom-server-extcode
+    volumes:
+      - ${PWD}/django_secret_key:/secrets/django_secret_key
+      - type: bind
+        source: ../tom_desc
+        target: /tom_desc
+      - type: bind
+        source: .
+        target: /tests
+      - type: bind
+        source: ${ELASTICC2_TEST_DATA:-/dev/null}
+        target: /elasticc2data
+    environment:
+      DB_NAME: tom_desc
+      DB_HOST: postgres
+      DB_USER: postgres
+      DB_PASS: fragile
+      DB_PORT: 5432
+    entrypoint: [ "tail", "-f", "/etc/issue" ]
+
+  runtests:
+    depends_on:
+      tom:
+        condition: service_started
+      kafka-server:
+        condition: service_healthy
+      fakebroker:
+        condition: service_started
+      brokerpoll:
+        condition: service_started
+    image: registry.nersc.gov/m1727/raknop/tom_desc_extcode
+    build:
+      context: ../
+      dockerfile: docker_server/Dockerfile
+      target: tom-server-extcode
+    volumes:
+      - ${PWD}/django_secret_key:/secrets/django_secret_key
+      - type: bind
+        source: ../tom_desc
+        target: /tom_desc
+      - type: bind
+        source: .
+        target: /tests
+      - type: bind
+        source: ${ELASTICC2_TEST_DATA:-/dev/null}
+        target: /elasticc2data
+    working_dir: /tests
+    environment:
+      DB_NAME: tom_desc
+      DB_HOST: postgres
+      DB_USER: postgres
+      DB_PASS: fragile
+      DB_PORT: 5432
+    entrypoint: [ "pytest", "-v" ]

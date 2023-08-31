@@ -1,0 +1,61 @@
+{% extends 'tom_common/base.html' %}
+{% load static %}
+{% block title %}
+ELAsTiCC2
+{% endblock %}
+{% block additional_css %}
+<link rel="stylesheet" href="{% static 'elasticc/elasticc.css' %}">
+{% endblock %}
+{% block content %}
+<h2>The ELAsTiCC2 Campaign</h2>
+
+<p>This is an upcoming simulation of 3 years of LSST DIA alerts, a
+  follow on to the <a href="/elasticc">first ELAsTiCC campaign</a>.</p>
+
+<p>For general information,
+  see <a href="https://portal.nersc.gov/cfs/lsst/DESC_TD_PUBLIC/ELASTICC/">The
+    DESC ELAsTiCC Challenge</a>.</p>
+
+<p>Streaming and Database Statistics:</p>
+
+<ul>
+  <li class="exbelow"><a href="/elasticc2/alertstreamhists">Graphs of hourly streaming rate of
+      original ELAsTiCC alerts sent to the ZADS broker</a> (updated
+      daily)</li>
+  <li class="exbelow"><a href="/elasticc2/brokertimedelays">Broker Time
+      Delays</a> — histogram of time delays between alerts being isused
+      and ingesting broker classifications (currently updated manually)</li>
+<!--
+  <li class="exbelow"><a href="/elasticc2/brokerstreamgraphs">Graphs of rate of messages received
+      from each broker</a> (updated daily)</li>
+  <li class="exbelow"><a href="/elasticc2/brokercompletenessgraphs">Classifier
+      completeness</a> — fraction of alerts sent each week for which each
+    broker/classifier has sent at least one classification (updated
+    daily)</li>
+  <li class="exbelow"><a href="/elasticc2/brokercompletenessvsndets">Classifier
+      completeness vs. number of detections</a> — fraction of alerts
+      sent for which each broker/classifier has sent at least one
+      classification, as a function of the number of detections of that
+      object included in the alert.  (Updated manually.)</li>
+  <li class="exbelow"><a href="/elasticc2/summary">A summary of alerts and broker
+      classifications</a> (Slow!)</li>
+  -->
+  <li class="exbelow"><a href="/elasticc2/classifiers">Known classifiers</a></li>
+  <li class="exbelow"><a href="/elasticc2/adminsummary">An admin summary</a> (Slow)</li>
+</ul>
+
+<!--
+<p>Metrics:</p>
+<ul>
+  <li class="exbelow"><a href="/elasticc2/latestconfmatrix">Confusion matrices for each
+      broker/classifier, using latest classification for each object</a> (updated
+      daily)</li>
+  <li class="exbelow"><a href="/elasticc2/probvsclassandt">Each
+      broker/classifier's average probability as a function of class ID
+      and time relative to peak</a>, broken out by true object
+      type.  (Averaged over all objects of that true type.)  (Takes
+      several seconds to load.)</li>
+</uL>
+-->
+
+{% endblock %}

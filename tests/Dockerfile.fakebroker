@@ -1,0 +1,37 @@
+FROM rknop/devuan-chimaera-rknop
+
+WORKDIR /fake
+ENV HOME /
+
+RUN DEBIAN_FRONTEND="noninteractive" \
+   apt-get update && \
+   apt-get -y upgrade && \
+   apt-get clean && \
+   rm -rf /var/lib/apt/lists/*
+
+RUN DEBIAN_FRONTEND="noninteractive" \
+   apt-get update && \
+   apt-get install -y python3 python3-pip && \
+   apt-get clean && \
+   rm -rf /var/lib/apt/lists/*
+
+RUN ln -s /usr/bin/python3 /usr/bin/python
+
+RUN pip install --upgrade pip
+
+RUN pip install \
+	--no-cache \
+	--disable-pip-version-check \
+        confluent_kafka \
+        fastavro && \
+    rm -rf /.cache/pip
+
+COPY fakebroker.py .
+COPY msgconsumer.py .
+COPY schema/ ./schema/
+
+ENTRYPOINT [ "python", "/fake/fakebroker.py", \
+             "--source", "kafka-server:9092", "-t", "alerts", \
+             "--dest", "kafka-server:9092", "-u", "classifications", \
+             "-s", "/fake/schema/elasticc.v0_9_1.alert.avsc", \
+             "-b", "/fake/schema/elasticc.v0_9_1.brokerClassification.avsc" ]

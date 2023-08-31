@@ -1,0 +1,65 @@
+{% extends 'tom_common/base.html' %}
+{% load static %}
+{% block title %}
+ELAsTiCC2 Broker Time Delays
+{% endblock %}
+{% block additional_css %}
+<link rel="stylesheet" href="{% static 'elasticc/elasticc.css' %}">
+{% endblock %}
+{% block additional_js %}
+<script type="text/javascript" src="{% static 'elasticc/elasticc.js' %}"></script>
+{% endblock %}
+{% block content %}
+<h2>ELAsTiCC2 Broker Time Delays</h2>
+
+<p>Updated {{ updatetime }}</p>
+
+<p>The graphs below show histograms of time intervals between alerts
+  being issued and broker messages being received.  Three time intervals are
+  shown:</p>
+
+<ul>
+  <li>the total time between the original detection alert being issued
+    and the DESC Tom ingesting a broker's classification;
+  <li>the time between between the original detection alert being issued
+    and the broker publishing a classification (as measured by the
+    header of the Kafka message)</li>
+  <li>the time between the broker publishing a classification and the
+    DESC Tom ingesting that classification.</li>
+</ul>
+
+<p>The time of the broker publishing a classification is based on the
+  message header from the Kafka stream for brokers who provide
+  classifications that way.  For brokers who send to the Tom's REST
+  interface, it's the time that the message was received by the
+  server.</p>
+
+<p>Some useful unit conversions:</p>
+<ul>
+  <li>10<span class="sup">2</span>s = 1.7 min</li>
+  <li>10<span class="sup">3</span>s = 16.7 min</li>
+  <li>10<span class="sup">4</span>s = 2.8 hour</li>
+  <li>10<span class="sup">4.5</span>s = 8.8 hour</li>
+  <li>10<span class="sup">5</span>s = 27.8 hour</li>
+  <li>10<span class="sup">5.5</span>s = 3.7 day</li>
+  <li>10<span class="sup">6</span>s = 11.6 day</li>
+</ul>
+
+{% for broker,brokerdata in brokers.items %}
+  <hr>
+  <h3>{{ broker }}</h3>
+  <img src="{% static 'elasticc2/brokertiminggraphs' %}/{{ brokerdata.sum }}"
+       width=1200 alt=["{{ broker }}"]>
+  <h4><button id="{{ broker }}button"
+              onclick="hideOrShow('{{ broker }}button', '{{ broker }}div')">Show
+    </button> by week</h4>
+  <div id="{{ broker }}div" style="display: none">
+    {% for week, fname in brokerdata.weeks.items %}
+      <p><b>{{broker}}, week of {{ week }}:</b></p>
+      <img src="{% static 'elasticc2/brokertiminggraphs' %}/{{ fname }}"
+           width=1200 alt="[ {{ broker }} {{ week }} ]" >
+    {% endfor %}
+  </div>
+{% endfor %}
+
+{% endblock %}

@@ -40,6 +40,8 @@ spec:
           value: fragile
         - name: DB_USER
           value: postgres
+        - name: ALERCE_KAFKA_SERVER
+          value: b-3-public.publicproduction.o8ncxm.c18.kafka.us-east-1.amazonaws.com:9196,b-2-public.publicproduction.o8ncxm.c18.kafka.us-east-1.amazonaws.com:9196,b-1-public.publicproduction.o8ncxm.c18.kafka.us-east-1.amazonaws.com:9196
         - name: FINK_GROUP_ID
           value: lsstfr-johann
         - name: FINK_SERVER
@@ -49,10 +51,10 @@ spec:
         - name: FINK_USERNAME
           value: johann
         - name: GOOGLE_APPLICATION_CREDENTIALS
-          value: /secrets/GCP_auth_key-pitt_broker_user_project.json
+          value: /secrets/pitt_google_auth_key.json
         - name: GOOGLE_CLOUD_PROJECT
-          value: pitt-broker-user-project
-        image: rknop/tom-desc-dev
+          value: elasticc-challenge
+        image: rknop/tom_desc:tom2
         imagePullPolicy: Always
         name: tom-2-app
         resources: {}
@@ -76,6 +78,8 @@ spec:
           name: tom-2-secrets
         - mountPath: /tom_desc
           name: tom-2-deployment
+        - mountPath: /sample
+          name: tom-2-sample
       dnsConfig: {}
       dnsPolicy: ClusterFirst
       restartPolicy: Always
@@ -93,3 +97,7 @@ spec:
           path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/production-2/tom_desc/tom_desc
           type: Directory
         name: tom-2-deployment
+      - hostPath:
+          path: /global/cfs/cdirs/lsst/www/DESC_TD_PUBLIC/ELASTICC/ELASTICC2_TRAINING_SAMPLE
+          type: Directory
+        name: tom-2-sample
