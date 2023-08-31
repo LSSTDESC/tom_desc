@@ -22,7 +22,7 @@ spec:
         field.cattle.io/ports: '[[]]'
         nersc.gov/collab_uids: 70268,99896
         nersc.gov/gid: "95089"
-        nersc.gov/gids: 45703,60152,57177,58102,59318,60070,63477,64483,79186,70268,92576,94721,95089,96414,99650
+        nersc.gov/gids: 95089,57177,60152,96414
         nersc.gov/roles: user
         nersc.gov/uid: "95089"
         nersc.gov/username: raknop
