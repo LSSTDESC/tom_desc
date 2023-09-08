@@ -1,4 +1,4 @@
-apiVersion: batch/v1beta1
+apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: tom-send-alerts
@@ -24,8 +24,8 @@ spec:
           - command: ['python']
             args: ['manage.py', 'send_elasticc2_alerts',
                '-a', '36',
-               '-k', 'public.alerts.ztf.uw.edu:9092', '-t', 'elasticc2-pre-test-2023august-i1',
-#               '--do'
+               '-k', 'public.alerts.ztf.uw.edu:9092', '-t', 'elasticc-1',
+               '--do'
                   ]
             env:
             - name: DB_HOST
@@ -79,4 +79,4 @@ spec:
             name: tom-deployment
   schedule: 0 0 * * *
   successfulJobsHistoryLimit: 7
-  suspend: true
+  suspend: false
