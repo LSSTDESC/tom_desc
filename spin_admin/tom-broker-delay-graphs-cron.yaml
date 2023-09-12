@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: tom-alerts-sent-hists
+  name: tom-broker-delay-graphs
   namespace: desc-tom
 spec:
   concurrencyPolicy: Forbid
@@ -23,9 +23,7 @@ spec:
           containers:
           - args:
             - manage.py
-            - update_alerts_sent_2
-            - --start
-            - 2023-09-08
+            - gen_elasticc2_brokerdelaygraphs
             command:
             - python
             env:
@@ -39,7 +37,7 @@ spec:
               value: postgres
             image: rknop/tom-desc-production
             imagePullPolicy: Always
-            name: tom-alerts-sent-hists
+            name: tom-broker-delay-graphs
             resources: {}
             securityContext:
               allowPrivilegeEscalation: false
@@ -78,6 +76,6 @@ spec:
               path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/production/tom_desc/tom_desc
               type: Directory
             name: tom-deployment
-  schedule: 0 6 * * *
+  schedule: 0 7 * * *
   successfulJobsHistoryLimit: 3
   suspend: false
