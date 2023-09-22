@@ -25,11 +25,11 @@ spec:
             args: ['manage.py', 'send_elasticc2_alerts',
                '-a', '36',
                '-k', 'public.alerts.ztf.uw.edu:9092', '-t', 'elasticc2-pre-test-2023august-i1',
-#               '--do'
+               '--do'
                   ]
             env:
             - name: DB_HOST
-              value: tom-desc-postgres
+              value: tom-postgres
             - name: DB_NAME
               value: tom_desc
             - name: DB_PASS

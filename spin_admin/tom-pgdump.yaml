@@ -20,7 +20,7 @@ spec:
             - name: PGDB
               value: tom_desc
             - name: PGHOST
-              value: tom-desc-postgres
+              value: tom-postgres
             - name: PGPASSWORD
               value: fragile
             image: rknop/devuan-chimaera-pgdump

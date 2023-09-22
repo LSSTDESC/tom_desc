@@ -34,7 +34,7 @@ spec:
       containers:
       - env:
         - name: DB_HOST
-          value: tom-desc-postgres
+          value: tom-postgres
         - name: DB_NAME
           value: tom_desc
         - name: DB_PASS
