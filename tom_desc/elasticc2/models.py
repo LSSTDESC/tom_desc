@@ -1016,11 +1016,11 @@ class BrokerSourceIds(models.Model):
 class CassBrokerMessage(DjangoCassandraModel):
     sourceid = columns.BigInt( primary_key=True )
     id = columns.UUID( primary_key=True, default=uuid.uuid4 )
+    brokername = columns.Text( primary_key=True )
     created_at = columns.DateTime( primary_key=True, default=datetime.datetime.utcnow() )
     alertid = columns.BigInt()
     elasticcpublishtimestamp = columns.DateTime()
     brokeringesttimestamp = columns.DateTime()
-    brokername = columns.Text()
     brokerversion = columns.Text()
     classifiername = columns.Text()
     classifierparams = columns.Text()

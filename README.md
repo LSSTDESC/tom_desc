@@ -192,6 +192,11 @@ If you change any database schema, you have to get a shell on the server's conta
 
 BE CAREFUL ABOUT DATABASE MIGRATIONS.  For throw-away development environments, it's fine.  But, the nature of database migrations is such that forks in database schema history are potentially a lot more painful to deal with than forks in source code (where git and text merge can usually handle it without _too_ much pain).  If you're going to make migrations that you want to have pulled into the main branch, coordinate with the other people working on the DESC Tom.  (As of this writing, that's me, Rob Knop.)
 
+#### Cassandra Migrations
+
+`pgmakemigrations` will create a migration file, but it doesn't seem to do anything.  You have to run `python manage.py sync_cassandra` to update cassandra schema.  This is scary; it doesn't seem to actually handle reversable migrations.
+
+
 ## Deployment at NERSC
 
 The server runs on NERSC Spin, in the `desc-tom` namespace of production m1727.  It reads its container image from `registry.services.nersc.gov/raknop/tom-desc-production`; that container image is built the Dockerfile in the "docker" subdirectory of this repository.  (I also run another instance on the development Spin server, for, of course, development.)
