@@ -6,14 +6,14 @@ metadata:
     nginx.ingress.kubernetes.io/preserve-trailing-slash: "true"
     nginx.ingress.kubernetes.io/proxy-body-size: 500m
     nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
-  generation: 3
+  generation: 1
   labels:
     cattle.io/creator: norman
   name: tom-desc-app
   namespace: desc-tom
-  selfLink: /apis/networking.k8s.io/v1/namespaces/desc-tom/ingresses/tom-desc-app
-  # uid: b211fb5e-e4c4-4f2c-a4f0-de36a8b94620
+  selfLink: /apis/networking.k8s.io/v1/namespaces/desc-tom/ingresses/tom-app
 spec:
+  ingressClassName: nginx
   rules:
   - host: tom-desc-app.desc-tom.production.svc.spin.nersc.org
     http:
@@ -36,4 +36,4 @@ spec:
   tls:
   - hosts:
     - desc-tom.lbl.gov
-    secretName: nc-fgrcr
+    secretName: tom-cert

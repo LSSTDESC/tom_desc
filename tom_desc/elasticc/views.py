@@ -951,8 +951,11 @@ class ElasticcBrokerTimeDelayGraphs( LoginRequiredMixin, django.views.View, Brok
         templ = loader.get_template( "elasticc/brokerdelaygraphs.html" )
         context = { 'brokers': [] }
         graphdir = pathlib.Path(__file__).parent / "static/elasticc/brokertiminggraphs"
-        with open( graphdir / "updatetime.txt" ) as ifp:
-            context['updatetime'] = ifp.readline().strip()
+        try:
+            with open( graphdir / "updatetime.txt" ) as ifp:
+                context['updatetime'] = ifp.readline().strip()
+        except FileNotFoundError as ex:
+            context['updatetime'] = '(unknown)'
         files = list( graphdir.glob( "*.svg" ) )
         files.sort()
         weekmatch = re.compile( '^(.*)_(\d{4}-\d{2}-\d{2})\.svg$' )
@@ -1004,8 +1007,11 @@ class ElasticcLatestConfMatrix( LoginRequiredMixin, django.views.View, BrokerSor
         templ = loader.get_template( "elasticc/basicmetrics.html" )
         context = { 'brokers': {} }
         rundir = pathlib.Path(__file__).parent
-        with open( rundir / "static/elasticc/confmatrix_update.txt" ) as ifp:
-            context['updatetime'] = ifp.readline().strip()
+        try:
+            with open( rundir / "static/elasticc/confmatrix_update.txt" ) as ifp:
+                context['updatetime'] = ifp.readline().strip()
+        except FileNotFoundError as ex:
+            context['updatetime'] == '(unknown)'
         context['brokers'] = self.getbrokerstruct()
         return HttpResponse( templ.render( context, request ) )
 

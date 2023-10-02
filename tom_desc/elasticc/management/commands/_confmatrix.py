@@ -52,8 +52,12 @@ class ConfMatrixClient:
 
     def get_classifications(self, *,
                             definition: str,
+                            nth_detection: int = 3,
                             classifier_id: Optional[int],
                             include_missed: bool = False) -> Dict[str, pd.DataFrame]:
+        if classifier_id is not None:
+            if isinstance( classifier_id, int ):
+                classifier_id = [ classifier_id ]
         if include_missed:
             best_last_join_type = 'LEFT'
             join_object_sent = '''
@@ -74,20 +78,30 @@ class ConfMatrixClient:
         if definition == 'last_best':
             distinct_order = ( 'elasticc_diaalert."alertSentTimestamp" DESC,'
                                'elasticc_brokerclassification."probability" DESC' )
+            count_join = ''
         elif definition == 'best':
             # I think we need additional sorting over alertSentTimestamp to get the deterministic result for the
             # case for equal probabilities (I've seen prob of 1.0)
             distinct_order = ( 'elasticc_brokerclassification."probability" DESC,'
                                'elasticc_diaalert."alertSentTimestamp" DESC' )
+            count_join = ''
+        elif definition == 'nth':
+            distinct_order = 'elasticc_brokerclassification."probability" DESC'
+            # Yeah, yeah, scary to interpolate a value passed to a function directly
+            #  into SQL, but force it to be an int so that it will be safe.
+            nth_detection = int( nth_detection )
+            count_join = ( f'INNER JOIN elasticc_view_prevsourcecounts '
+                           f'ON elasticc_diaalert."diaSourceId"=elasticc_view_prevsourcecounts."diaSourceId" '
+                           f'  AND elasticc_view_prevsourcecounts.ndetections={nth_detection}' )
         else:
             raise ValueError(f'Unknown classification definition: {definition}')
 
         dfs = {}
         for classifier_id_, classifier_name in self.classifiers.items():
-            if classifier_id is not None and classifier_id != classifier_id_:
+            if ( classifier_id is not None ) and ( classifier_id_ not in classifier_id ):
                 continue
 
-            self.logger.info(f'Getting classifications for {classifier_name}')
+            self.logger.info(f'Getting classifications for {classifier_name}...')
             query = f'''
                 SELECT best_last."classId" AS pred_class,
                        elasticc_gentypeofclassid."classId" AS true_class,
@@ -106,6 +120,7 @@ class ConfMatrixClient:
                       ON elasticc_brokerclassification."brokerMessageId"=elasticc_brokermessage."brokerMessageId"
                    INNER JOIN elasticc_diaalert
                       ON elasticc_brokermessage."alertId"=elasticc_diaalert."alertId"
+                   {count_join}
                    WHERE elasticc_brokerclassification."classifierId"={classifier_id_}
                    ORDER BY elasticc_diaalert."diaObjectId", {distinct_order}
                 ) best_last
@@ -124,7 +139,8 @@ class ConfMatrixClient:
             df['classifier_name'] = classifier_name
             df['pred_class'] = df['pred_class'].fillna(-1).astype(int)
             dfs[classifier_id_] = df
-
+            
+        self.logger.info('...done getting all classifications.')
         return dfs
 
 

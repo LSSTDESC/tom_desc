@@ -98,6 +98,10 @@ def populate_gentypeofclassid( apps, schema_editor ):
     cmap.save()
     cmap = CMap( classId=221, gentype=60, description='AGN' )
     cmap.save()
+
+def wipe_gentypeofclassid( apps, schema_editor ):
+    CMap = apps.get_model( 'elasticc2', 'GentypeOfClassId' )
+    CMap.objects.all().delete()
     
 def populate_classidofgentype( apps, schema_editor ):
     CMap = apps.get_model( 'elasticc2', 'ClassIdOfGentype' )
@@ -200,7 +204,10 @@ def populate_classidofgentype( apps, schema_editor ):
     cmap.save()
     cmap = CMap( classId=221, gentype=60, description='AGN', exactmatch=True, categorymatch=True )
     cmap.save()
-    
+
+def wipe_classidofgentype( apps, schema_editor ):
+    CMap= apps.get_model( 'elasticc2', 'ClassIdOfGentype' )
+    CMap.objects.all().delete()
 
 class Migration(migrations.Migration):
 
@@ -209,6 +216,6 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunPython( populate_classidofgentype ),
-        migrations.RunPython( populate_gentypeofclassid )
+        migrations.RunPython( populate_classidofgentype, wipe_classidofgentype ),
+        migrations.RunPython( populate_gentypeofclassid, wipe_gentypeofclassid )
     ]

@@ -4,8 +4,10 @@ import re
 import pathlib
 import logging
 import numpy
+import psycopg2.extras
 from astropy.table import Table
 import astropy.io
+import django.db
 
 # _rundir = pathlib.Path( __file__ ).parent
 
@@ -27,7 +29,7 @@ class Command(BaseCommand):
         self.logger.setLevel( logging.INFO )
 
     def add_arguments( self, parser ):
-        parser.add_argument( '-d', '--directory', default=None, required=True,
+        parser.add_argument( '-d', '--directories', default=[], nargs='+', required=True,
                              help="Directory to find the HEAD and PHOT fits files" )
         parser.add_argument( '-f', '--files', default=[], nargs='+',
                              help="Names of HEAD.fits[.[fg]z] files; default is to read all in directory" )
@@ -35,7 +37,7 @@ class Command(BaseCommand):
                              help="Set log level to DEBUG (default INFO)" )
         parser.add_argument( '-s', '--simversion', default='2023-04-01',
                              help="What to stick in the simversion column" )
-        parser.add_argument( '-m', '--max-sources-per-object', default=2000, type=int,
+        parser.add_argument( '-m', '--max-sources-per-object', default=100000, type=int,
                              help=( "Maximum number of sources for a single object.  Used to generate "
                                     "source ids, so make it big enough." ) )
         parser.add_argument( '-p', '--photflag-detect', default=4096, type=int,
@@ -48,6 +50,8 @@ class Command(BaseCommand):
                              help="Load the PPDB* tables" )
         parser.add_argument( '--train', action='store_true', default=False,
                              help='Load the Train* tables' )
+        parser.add_argument( '--dont-disable-indexes-fks', action='store_true', default=False,
+                             help="Don't temporarily disable indexes and foreign keys (by default will)" )
         parser.add_argument( '--do', action='store_true', default=False,
                              help="Actually do it (otherwise, slowly reads FITS files but doesn't affect db" )
         
@@ -129,68 +133,136 @@ class Command(BaseCommand):
         lcs = { }
         cls._map_columns( tab, mapper, lcs )
         
-    def handle( self, *args, **options ):
-        if options['verbose']:
-            self.logger.setLevel( logging.DEBUG )
+    def disable_indexes_and_fks( self, training=False ):
+        # Disable all indexes and foreign keys on the relevant
+        # tables to speed up loading
 
-        if not ( options['ppdb'] or options['train'] ):
-            raise RuntimeError( "Must give one of --ppdb or --train" )
-        if options['ppdb'] and options['train']:
-            raise RuntimeError( "Must give only one of --pdb or --train" )
+        tableindexes = {}
+        indexreconstructs = []
+        tableconstraints = {}
+        constraintreconstructs = []
+        tablepkconstraints = {}
+        primarykeys = {}
+        pkreconstructs = []
+        conn = django.db.connection.cursor().connection
+        cursor = conn.cursor( cursor_factory=psycopg2.extras.RealDictCursor )
 
-        if options['ppdb']:
-            from elasticc2.models import PPDBDiaObject as DiaObject
-            from elasticc2.models import PPDBDiaForcedSource as DiaForcedSource
-            from elasticc2.models import PPDBDiaSource as DiaSource
-            from elasticc2.models import PPDBAlert as Alert
-            from elasticc2.models import DiaObjectTruth as Truth
-        elif options['train']:
+        if training:
+            tables = [ 'elasticc2_trainingalert', 'elasticc2_trainingdiaobject',
+                       'elasticc2_trainingdiasource', 'elasticc2_trainingdiaforcedsource,'
+                       'elasticc2_trainingdiaobjecttruth' ]
+        else:
+            tables = [ 'elasticc2_ppdbalert', 'elasticc2_ppdbdiaobject',
+                       'elasticc2_ppdbdiasource', 'elasticc2_ppdbdiaforcedsource',
+                       'elasticc2_diaobjecttruth' ]
+
+        pkmatcher = re.compile( '^ *PRIMARY KEY \((.*)\) *$' )
+        pkindexmatcher = re.compile( ' USING .* \((.*)\) *$' )
+        for table in tables:
+            tableconstraints[table] = []
+            cursor.execute( f"SELECT table_name, conname, condef, contype "
+                            f"FROM "
+                            f"  ( SELECT conrelid::regclass::text AS table_name, conname, "
+                            f"           pg_get_constraintdef(oid) AS condef, contype "
+                            f"    FROM pg_constraint "
+                            f"  ) subq "
+                            f"WHERE table_name='{table}'" )
+            rows = cursor.fetchall()
+            for row in rows:
+                if row['contype'] == 'p':
+                    if table in primarykeys:
+                        raise RuntimeError( f"{table} has multiple primary keys!" )
+                    match = pkmatcher.search( row['condef'] )
+                    if match is None:
+                        raise RuntimeError( f"Failed to parse {row['condef']} for primary key" )
+                    primarykeys[table] = match.group(1)
+                    tablepkconstraints[table] = row['conname']
+                    pkreconstructs.insert( 0, f"ALTER TABLE {table} ADD {row['condef']}" )
+                else:
+                    tableconstraints[table].append( row['conname'] )
+                    constraintreconstructs.insert( 0, f"ALTER TABLE {table} ADD {row['condef']}" )
+
+        # Make sure we found the primary key for all tables
+        missing = []
+        for table in tables:
+            if table not in primarykeys:
+                missing.append( table )
+        if len(missing) > 0:
+            raise RuntimeError( f'Failed to find primary key for: {[",".join(missing)]}' )
+                
+        # Now do table indexes
+        for table in tables:
+            tableindexes[table] = []
+            cursor.execute( f"SELECT * FROM pg_indexes WHERE tablename='{table}'" )
+            rows = cursor.fetchall()
+            for row in rows:
+                match = pkindexmatcher.search( row['indexdef'] )
+                if match is None:
+                    raise RuntimeError( f"Error parsing index def {row['indexdef']}" )
+                if match.group(1) != primarykeys[table]:
+                    # The primary key index will be deleted when
+                    #  the primary key constraint is deleted
+                    tableindexes[table].append( row['indexname'] )
+                    indexreconstructs.insert( 0, row['indexdef'] )
+
+        with open( "load_snana_fits_reconstruct_indexes_constraints.sql", "w" ) as ofp:
+            for row in pkreconstructs:
+                ofp.write( f"{row}\n" )
+            for row in indexreconstructs:
+                ofp.write( f"{row}\n" )
+            for row in constraintreconstructs:
+                ofp.write( f"{row}\n" )
+
+        for table in tableconstraints.keys():
+            self.logger.warning( f"Dropping non-pk constraints from {table}" )
+            for constraint in tableconstraints[table]:
+                cursor.execute( f"ALTER TABLE {table} DROP CONSTRAINT {constraint}" )
+
+        for table in tableindexes.keys():
+            self.logger.warning( f"Dropping indexes from {table}" )
+            for dex in tableindexes[table]:
+                cursor.execute( f"DROP INDEX {dex}" )
+
+        for table, constraint in tablepkconstraints.items():
+            self.logger.warning( f"Dropping primary key from {table}" )
+            cursor.execute( f"ALTER TABLE {table} DROP CONSTRAINT {constraint}" )
+
+        conn.commit()
+
+    def recreate_indexes_and_fks( self, commandfile='load_snana_fits_reconstruct_indexes_constraints.sql' ):
+        with open( commandfile ) as ifp:
+            commands = ifp.readlines()
+
+        conn = django.db.connection.cursor().connection
+        cursor = conn.cursor( cursor_factory=psycopg2.extras.RealDictCursor )
+        for command in commands:
+            self.logger.info( f"Running {command}" )
+            cursor.execute( command )
+
+        conn.commit()
+
+    def actually_load( self, headfiles, photfiles, dump, really_do=False,
+                       alert_zeropoint=31.4, snana_zeropoint=27.5, simversion='unknown',
+                       max_sources_per_object=100000, photflag_detect=4096,
+                       training=False ):
+
+        if training:
             from elasticc2.models import TrainingDiaObject as DiaObject
             from elasticc2.models import TrainingDiaForcedSource as DiaForcedSource
             from elasticc2.models import TrainingDiaSource as DiaSource
             from elasticc2.models import TrainingAlert as Alert
             from elasticc2.models import TrainingDiaObjectTruth as Truth
         else:
-            raise RuntimeError( "This should never happen." )
+            from elasticc2.models import PPDBDiaObject as DiaObject
+            from elasticc2.models import PPDBDiaForcedSource as DiaForcedSource
+            from elasticc2.models import PPDBDiaSource as DiaSource
+            from elasticc2.models import PPDBAlert as Alert
+            from elasticc2.models import DiaObjectTruth as Truth
 
-        self.simversion = options['simversion']
-
-        # Read the dump file
         
-        direc = pathlib.Path( options['directory'] )
-        if not direc.is_dir():
-            raise RuntimeError( f"{str(direc)} isn't a directory" )
-        dumpfile = direc / f"{direc.name}.DUMP"
-        if not dumpfile.is_file():
-            raise RuntimeError( f"Can't read {dumpfile}" )
-        dump = astropy.io.ascii.read( dumpfile )
-
-        if len( options['files'] ) == 0:
-            headfiles = list( direc.glob( '*HEAD.FITS.gz' ) )
-        else:
-            headfiles = options['files']
-            headfiles = [ direc / h for h in headfiles ]
-
-        # Make sure all HEAD.FITS.gz and PHOT.FITS.gz files exist
-            
-        headre = re.compile( '^(.*)HEAD\.FITS\.gz' )
-        photfiles = []
-        for headfile in headfiles:
-            match = headre.search( headfile.name )
-            if match is None:
-                raise ValueError( f"Failed to parse {headfile.name} for *.HEAD.FITS.gz" )
-            photfile = direc / f"{match.group(1)}PHOT.FITS.gz"
-            if not headfile.is_file():
-                raise FileNotFoundError( f"Can't read {headfile}" )
-            if not photfile.is_file():
-                raise FileNotFoundError( f"Can't read {photfile}" )
-            photfiles.append( photfile )
-
-        # Load the HEAD/PHOT files
-
         self.logger.debug( f'Headfiles: {[headfiles]}' )
         self.logger.debug( f'Photfiles: {[photfiles]}' )
-        
+
         for headfile, photfile in zip( headfiles, photfiles ):
             self.logger.info( f"Reading {headfile.name}" )
 
@@ -201,15 +273,15 @@ class Command(BaseCommand):
 
             if len(head) == 0:
                 continue
-            
+
             phot = Table.read( photfile )
 
             # Load the DiaObject table
 
             self.diaobject_map_columns( head )
-            head.add_column( options['simversion'], name='simversion' )
-            
-            if options['do']:
+            head.add_column( simversion, name='simversion' )
+
+            if really_do:
                 n = DiaObject.bulk_insert_onlynew( dict( head ) )
                 self.logger.info( f"Loaded {n} objects from {headfile.name}" )
             else:
@@ -217,9 +289,9 @@ class Command(BaseCommand):
 
             # Calculate some derived fields we'll need
 
-            phot['FLUXCAL'] *= 10 ** ( ( options['alert_zeropoint'] - options['snana_zeropoint'] ) / 2.5 )
-            phot['FLUXCALERR'] *= 10 ** ( ( options['alert_zeropoint'] - options['snana_zeropoint'] ) / 2.5 )
-            
+            phot['FLUXCAL'] *= 10 ** ( ( alert_zeropoint - snana_zeropoint ) / 2.5 )
+            phot['FLUXCALERR'] *= 10 ** ( ( alert_zeropoint - snana_zeropoint ) / 2.5 )
+
             self.diasource_map_columns( phot )
             phot.add_column( numpy.int64(-1), name='diaobject_id' )
             phot.add_column( numpy.int64(-1), name='diaforcedsource_id' )
@@ -227,34 +299,38 @@ class Command(BaseCommand):
             phot['filtername'] = [ i.strip() for i in phot['filtername'] ]
             phot.add_column( -999., name='ra' )
             phot.add_column( -999., name='decl' )
-            
+
             # Load the DiaForcedSource table
 
             for obj in orig_head:
                 # All the -1 is because the files are 1-indexed, but astropy is 0-indexed
                 pmin = obj['PTROBS_MIN'] -1
                 pmax = obj['PTROBS_MAX'] -1
+                if ( pmax - pmin + 1 ) > max_sources_per_object:
+                    self.logger.error( f'SNID {obj["SNID"]} has {pmax-mpin+1} sources, which is more than '
+                                       f'max_sources_per_object={max_sources_per_object}' )
+                    raise RuntimeError( "Too many sources" )
                 phot['diaobject_id'][pmin:pmax+1] = obj['SNID']
-                phot['diaforcedsource_id'][pmin:pmax+1] = ( obj['SNID'] * options['max_sources_per_object']
+                phot['diaforcedsource_id'][pmin:pmax+1] = ( obj['SNID'] * max_sources_per_object
                                                             + numpy.arange( pmax - pmin + 1 ) )
                 phot['ra'][pmin:pmax+1] = obj['RA']
                 phot['decl'][pmin:pmax+1] = obj['DEC']
 
             # The phot table has separators, so there will still be some junk data in there I need to purge
             phot = phot[ phot['diaobject_id'] >= 0 ]
-                
-            if options['do']:
+
+            if really_do:
                 n = DiaForcedSource.bulk_insert_onlynew( phot )
                 self.logger.info( f"Loaded {n} forced photometry points from {photfile.name}" )
             else:
                 self.logger.info( f"Would try to load {len(phot)} forced photometry points" )
-            
+
             # Load the DiaSource table
 
             phot.rename_column( 'diaforcedsource_id', 'diasource_id' )
-            phot = phot[ ( phot['photflag'] & options['photflag_detect'] ) !=0 ]
+            phot = phot[ ( phot['photflag'] & photflag_detect ) !=0 ]
 
-            if options['do']:
+            if really_do:
                 n = DiaSource.bulk_insert_onlynew( phot )
                 self.logger.info( f"Loaded {n} sources from {photfile.name}" )
             else:
@@ -265,16 +341,85 @@ class Command(BaseCommand):
             alerts = { 'alert_id': phot[ 'diasource_id' ],
                        'diasource_id': phot[ 'diasource_id' ],
                        'diaobject_id': phot[ 'diaobject_id' ] }
-            if options['do']:
+            if really_do:
                 n = Alert.bulk_insert_onlynew( alerts )
                 self.logger.info( f"Loaded {n} alerts" )
             else:
                 self.logger.info( f"Would try to load {len(alerts['alert_id'])} alerts" )
-                
+
         # Load the object truth table
-            
+
         self.diaobjecttruth_map_columns( dump )
         self.logger.info( f"Trying to load {len(dump)} rows to object truth table" )
-        if options['do']:
+        if really_do:
             truthobjs = Truth.bulk_load_or_create( dump )
             self.logger.info( f"Loaded between 0 and {len(truthobjs)} rows to object truth table" )
+        
+        
+    def handle( self, *args, **options ):
+        if options['verbose']:
+            self.logger.setLevel( logging.DEBUG )
+
+        if not ( options['ppdb'] or options['train'] ):
+            raise RuntimeError( "Must give one of --ppdb or --train" )
+        if options['ppdb'] and options['train']:
+            raise RuntimeError( "Must give only one of --pdb or --train" )
+
+        self.simversion = options['simversion']
+
+        # Disable indexes and foreign keys
+
+        if not options[ "dont_disable_indexes_fks" ]:
+            self.logger.warning( "Disabling all indexes and foreign keys before loading" )
+            self.disable_indexes_and_fks( training=options['train'] )
+
+        # Read the dump file
+
+        for directory in options['directories']:
+            self.logger.info( f"Looking into directory {directory}" )
+        
+            direc = pathlib.Path( directory )
+            if not direc.is_dir():
+                raise RuntimeError( f"{str(direc)} isn't a directory" )
+            dumpfile = direc / f"{direc.name}.DUMP"
+            if not dumpfile.is_file():
+                raise RuntimeError( f"Can't read {dumpfile}" )
+            dump = astropy.io.ascii.read( dumpfile )
+
+            if len( options['files'] ) == 0:
+                headfiles = list( direc.glob( '*HEAD.FITS.gz' ) )
+            else:
+                headfiles = options['files']
+                headfiles = [ direc / h for h in headfiles ]
+
+            # Make sure all HEAD.FITS.gz and PHOT.FITS.gz files exist
+
+            headre = re.compile( '^(.*)HEAD\.FITS\.gz' )
+            photfiles = []
+            for headfile in headfiles:
+                match = headre.search( headfile.name )
+                if match is None:
+                    raise ValueError( f"Failed to parse {headfile.name} for *.HEAD.FITS.gz" )
+                photfile = direc / f"{match.group(1)}PHOT.FITS.gz"
+                if not headfile.is_file():
+                    raise FileNotFoundError( f"Can't read {headfile}" )
+                if not photfile.is_file():
+                    raise FileNotFoundError( f"Can't read {photfile}" )
+                photfiles.append( photfile )
+
+
+            # Load the HEAD/PHOT files
+            self.actually_load( headfiles, photfiles, dump,
+                                really_do=options['do'],
+                                alert_zeropoint=options['alert_zeropoint'],
+                                snana_zeropoint=options['snana_zeropoint'],
+                                simversion=options['simversion'],
+                                max_sources_per_object=options['max_sources_per_object'],
+                                photflag_detect=options['photflag_detect'],
+                                training=options['train'] )
+
+        # Recreate all indexes 
+
+        if not options[ "dont_disable_indexes_fks" ]:
+            self.logger.warning( "Recreating indexes and foreign keys" )
+            self.recreate_indexes_and_fks()

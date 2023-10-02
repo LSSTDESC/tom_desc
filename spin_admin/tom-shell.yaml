@@ -1,15 +1,17 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: tom-2-brokerpoll
-  namespace: desc-tom-2
+  name: tom-shell
+  namespace: desc-tom
+  labels:
+    workload.user.cattle.io/workloadselector: deployment-desc-tom-tom-shell
 spec:
   progressDeadlineSeconds: 600
   replicas: 1
   revisionHistoryLimit: 10
   selector:
     matchLabels:
-      workload.user.cattle.io/workloadselector: deployment-desc-tom-2-tom-2-brokerpoll
+      workload.user.cattle.io/workloadselector: deployment-desc-tom-tom-shell
   strategy:
     rollingUpdate:
       maxSurge: 1
@@ -17,31 +19,19 @@ spec:
     type: RollingUpdate
   template:
     metadata:
-      annotations:
-        cattle.io/timestamp: "2023-02-06T16:44:40Z"
-        field.cattle.io/ports: '[[]]'
-        nersc.gov/collab_uids: 70268,99896
-        nersc.gov/gid: "95089"
-        nersc.gov/gids: 45703,60152,57177,58102,59318,60070,63477,64483,79186,70268,92576,94721,95089,96414,99650
-        nersc.gov/roles: user
-        nersc.gov/uid: "95089"
-        nersc.gov/username: raknop
-      creationTimestamp: null
       labels:
-        workload.user.cattle.io/workloadselector: deployment-desc-tom-2-tom-2-brokerpoll
+        workload.user.cattle.io/workloadselector: deployment-desc-tom-tom-shell
     spec:
       containers:
       - env:
         - name: DB_HOST
-          value: tom-2-postgres
+          value: tom-postgres
         - name: DB_NAME
           value: tom_desc
         - name: DB_PASS
           value: fragile
         - name: DB_USER
           value: postgres
-        - name: ALERCE_KAFKA_SERVER
-          value: b-3-public.publicproduction.o8ncxm.c18.kafka.us-east-1.amazonaws.com:9196,b-2-public.publicproduction.o8ncxm.c18.kafka.us-east-1.amazonaws.com:9196,b-1-public.publicproduction.o8ncxm.c18.kafka.us-east-1.amazonaws.com:9196
         - name: FINK_GROUP_ID
           value: lsstfr-johann
         - name: FINK_SERVER
@@ -54,9 +44,9 @@ spec:
           value: /secrets/pitt_google_auth_key.json
         - name: GOOGLE_CLOUD_PROJECT
           value: elasticc-challenge
-        image: rknop/tom_desc:tom2
+        image: rknop/tom-desc-production
         imagePullPolicy: Always
-        name: tom-2-brokerpoll
+        name: tom-shell
         resources: {}
         securityContext:
           allowPrivilegeEscalation: false
@@ -75,21 +65,13 @@ spec:
         tty: true
         volumeMounts:
         - mountPath: /secrets
-          name: tom-2-secrets
+          name: tom-secrets
         - mountPath: /tom_desc
-          name: tom-2-deployment
+          name: tom-deployment
         - mountPath: /sample
-          name: tom-2-sample
-        command: [ "python" ]
-        args:
-          - manage.py
-          - brokerpoll2
-          - --do-alerce
-          - --do-pitt
-          - --pitt-topic
-          - elasticc-SuperNNova-august
-          - --pitt-project
-          - elasticc-challenge
+          name: tom-sample
+        command: [ "tail" ]
+        args: [ "-f", "/etc/issue" ]
       dnsConfig: {}
       dnsPolicy: ClusterFirst
       restartPolicy: Always
@@ -98,16 +80,16 @@ spec:
         fsGroup: 57177
       terminationGracePeriodSeconds: 30
       volumes:
-      - name: tom-2-secrets
+      - name: tom-secrets
         secret:
           defaultMode: 256
           optional: false
-          secretName: tom-2-secrets
+          secretName: tom-secrets
       - hostPath:
-          path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/production-2/tom_desc/tom_desc
+          path: /global/cfs/cdirs/desc-td/SOFTWARE/tom_deployment/production/tom_desc/tom_desc
           type: Directory
-        name: tom-2-deployment
+        name: tom-deployment
       - hostPath:
-          path: /global/cfs/cdirs/lsst/www/DESC_TD_PUBLIC/ELASTICC/ELASTICC2_TRAINING_SAMPLE
+          path: /global/cfs/cdirs/desc-td/ELASTICC2
           type: Directory
-        name: tom-2-sample
+        name: tom-sample

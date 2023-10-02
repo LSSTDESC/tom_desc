@@ -4,49 +4,53 @@ import math
 from django.db import migrations
 
 
+# ROB TODO : This whole migration is broken.  Don't try to fix
+#  it, just make a later one that does what you want
+
 class Migration(migrations.Migration):
 
     dependencies = [
         ('elasticc2', '0003_metric_matviews'),
     ]
 
-    t0 = -30.
-    t1 = 100.
-    dt = 5.
-    nt = math.floor( ( t1 - t0 ) / dt + 0.5 )
+    operations = []
+#     t0 = -30.
+#     t1 = 100.
+#     dt = 5.
+#     nt = math.floor( ( t1 - t0 ) / dt + 0.5 )
     
-    p0 = 0.
-    p1 = 1.
-    dp = 0.05
-    np = math.floor( ( p1 - p0 ) / dp + 0.5 )
+#     p0 = 0.
+#     p1 = 1.
+#     dp = 0.05
+#     np = math.floor( ( p1 - p0 ) / dp + 0.5 )
     
-    operations = [
-        migrations.RunSQL( f"""
-CREATE MATERIALIZED VIEW elasticc2_view_classifications_probmetrics AS
-  SELECT "classifierId","classId","trueClassId",tbin,probbin,COUNT(*) FROM
-  ( SELECT "classifierId","classId","trueClassId",
-           width_bucket( dt, {t0}, {t1}, {nt} ) AS tbin,
-           width_bucket( probability, {p0}, {p1}, {np} ) as probbin
-    FROM elasticc2_view_dedupedclassifications
-  ) subq
-  GROUP BY "classifierId","classId","trueClassId",tbin,probbin
-""",
-                           "DROP MATERIALIZED VIEW elasticc2_view_classifications_probmetrics"
-                          ),
+#     operations = [
+#         migrations.RunSQL( f"""
+# CREATE MATERIALIZED VIEW elasticc2_view_classifications_probmetrics AS
+#   SELECT "classifierId","classId","trueClassId",tbin,probbin,COUNT(*) FROM
+#   ( SELECT "classifierId","classId","trueClassId",
+#            width_bucket( dt, {t0}, {t1}, {nt} ) AS tbin,
+#            width_bucket( probability, {p0}, {p1}, {np} ) as probbin
+#     FROM elasticc2_view_dedupedclassifications
+#   ) subq
+#   GROUP BY "classifierId","classId","trueClassId",tbin,probbin
+# """,
+#                            "DROP MATERIALIZED VIEW elasticc2_view_classifications_probmetrics"
+#                           ),
 
-        migrations.RunSQL( "GRANT SELECT ON elasticc2_view_classifications_probmetrics TO postgres_elasticc_admin_ro",
-                           "" ),
-        migrations.RunSQL( f"""
-CREATE INDEX elasticc2_view_classifications_probmetrix_cferdex
-   ON elasticc2_view_classifications_probmetrics("classifierId")
-""",
-                           "" ),
-        migrations.RunSQL( f"""
-CREATE INDEX elasticc2_view_classifications_probmetrix_clsdex ON elasticc2_view_classifications_probmetrics("classId")
-""",
-                           "" ),
-        migrations.RunSQL( f"""
-CREATE INDEX elasticc2_view_classifications_probmetrix_truedex ON elasticc2_view_classifications_probmetrics("trueClassId")
-""",
-                           "" ),
-    ]
+#         migrations.RunSQL( "GRANT SELECT ON elasticc2_view_classifications_probmetrics TO postgres_elasticc_admin_ro",
+#                            "" ),
+#         migrations.RunSQL( f"""
+# CREATE INDEX elasticc2_view_classifications_probmetrix_cferdex
+#    ON elasticc2_view_classifications_probmetrics("classifierId")
+# """,
+#                            "" ),
+#         migrations.RunSQL( f"""
+# CREATE INDEX elasticc2_view_classifications_probmetrix_clsdex ON elasticc2_view_classifications_probmetrics("classId")
+# """,
+#                            "" ),
+#         migrations.RunSQL( f"""
+# CREATE INDEX elasticc2_view_classifications_probmetrix_truedex ON elasticc2_view_classifications_probmetrics("trueClassId")
+# """,
+#                            "" ),
+#     ]

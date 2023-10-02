@@ -3,19 +3,23 @@ kind: Service
 metadata:
   annotations:
     field.cattle.io/targetWorkloadIds: '["deployment:desc-tom:tom-app"]'
-  name: tom-ingress-service
+  name: tom-app
   namespace: desc-tom
   ownerReferences:
-  - apiVersion: v1beta1/extensions
+  - apiVersion: apps/v1beta2
     controller: true
-    kind: Ingress
+    kind: deployment
     name: tom-app
     uid: e8f8e9fa-9bb1-475a-810d-483dbc7f6bc8
 spec:
+  clusterIP: None
+  clusterIPs:
+    - None
   ports:
-  - port: 8080
+  - name: default
+    port: 42
     protocol: TCP
-    targetPort: 8080
+    targetPort: 42
   selector:
     workload.user.cattle.io/workloadselector: deployment-desc-tom-tom-app
   sessionAffinity: None

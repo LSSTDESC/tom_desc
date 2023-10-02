@@ -220,6 +220,15 @@ class Command(BaseCommand):
             # row = cursor.fetchone()
             # _logger.debug( f'existingforcedids {row["count"]} rows' )
             # ****
+            # This one tends to be incredibly slow
+            # ROB : try replacing the WHERE s.diaforcedsource_id NOT IN ( SELECT... ) with:
+            #   LEFT JOIN existingforcedids e ON s.diaforcedsource_id=e.diaforcedsource_id
+            #   WHERE e.diaforcedsource_id IS NULL
+            # --or--
+            #   WHERE NOT EXISTS ( SELECT e.diaforcedsource_id FROM existingforcedids e
+            #                      WHERE e.diaforcedsource_id=s.diaforcedsource_id )
+            # (Something I've read suggests that with postgres, these two are
+            # semantically equivalent.)
             _logger.info( "Creating new_forced table" )
             cursor.execute( "CREATE TEMP TABLE new_forced ( LIKE elasticc2_diaforcedsource )" )
             newforcedfields = ','.join( DiaForcedSource._create_kws )
@@ -234,6 +243,9 @@ class Command(BaseCommand):
             # row = cursor.fetchone()
             # _logger.debug( f'new_forced {row["count"]} rows' )
             # ****
+            # This one tends to be incredibly slow.
+            # ROB; consider temporarily disabling indexes.
+            #  See : https://fle.github.io/temporarily-disable-all-indexes-of-a-postgresql-table.html
             _logger.info( "Inserting into elasticc2_diaforcedsource" )
             cursor.execute( f"INSERT INTO elasticc2_diaforcedsource SELECT * FROM new_forced" )
 

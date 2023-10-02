@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: tom-postgres
+  namespace: desc-tom
+spec:
+  clusterIP: None
+  clusterIPs:
+  - None
+  ports:
+  - name: default
+    port: 42
+    protocol: TCP
+    targetPort: 42
+  selector:
+    workload.user.cattle.io/workloadselector: deployment-desc-tom-tom-postgres
+  sessionAffinity: None
+  type: ClusterIP
+status:
+  loadBalancer: {}
