@@ -15,7 +15,7 @@ import confluent_kafka
 import pittgoogle
 from concurrent.futures import ThreadPoolExecutor  # for pittgoogle
 from django.core.management.base import BaseCommand, CommandError
-from elasticc2.models import BrokerMessage
+from elasticc2.models import CassBrokerMessage
 
 _rundir = pathlib.Path(__file__).parent
 sys.path.insert(0, str(_rundir) )
@@ -44,8 +44,8 @@ class BrokerConsumer:
         formatter = logging.Formatter( f'[%(asctime)s - {loggername} - %(levelname)s] - %(message)s',
                                        datefmt='%Y-%m-%d %H:%M:%S' )
         logout.setFormatter( formatter )
-        self.logger.setLevel( logging.INFO )
-        # self.logger.setLevel( logging.DEBUG )
+        # self.logger.setLevel( logging.INFO )
+        self.logger.setLevel( logging.DEBUG )
 
         self.countlogger = logging.getLogger( f"countlogger_{loggername}" )
         self.countlogger.propagate = False
@@ -154,7 +154,7 @@ class BrokerConsumer:
                                    'msgoffset': msg.offset(),
                                    'timestamp': timestamp,
                                    'msg': alert } )
-        added = BrokerMessage.load_batch( messagebatch, logger=self.logger )
+        added = CassBrokerMessage.load_batch( messagebatch, logger=self.logger )
         self.countlogger.info( f"...added {added['addedmsgs']} messages, "
                                f"{added['addedclassifiers']} classifiers, "
                                f"{added['addedclassifications']} classifications. " )
@@ -405,7 +405,7 @@ class PittGoogleBroker(BrokerConsumer):
         logger.info( "In handle_message_batch" )
         # import pdb; pdb.set_trace()
         
-        added = BrokerMessage.load_batch(messagebatch, logger=logger)
+        added = CassBrokerMessage.load_batch(messagebatch, logger=logger)
         countlogger.info(
             f"...added {added['addedmsgs']} messages, "
             f"{added['addedclassifiers']} classifiers, "

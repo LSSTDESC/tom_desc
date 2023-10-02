@@ -1,6 +1,9 @@
 import sys
 import os
 import pathlib
+import datetime
+import pytz
+import random
 import subprocess
 import pytest
 
@@ -19,7 +22,7 @@ def tomclient():
 @pytest.fixture( scope="session" )
 def apibroker_client():
     return TomClient( "http://tom:8080", username="apibroker", password="testing" )
-    
+
 @pytest.fixture( scope="session" )
 def elasticc2_ppdb( tomclient ):
     basedir = pathlib.Path( "/elasticc2data" )
@@ -60,7 +63,7 @@ def elasticc2_ppdb( tomclient ):
 #         with open(f, "w") as ofp:
 #             ofp.write( topictag )
 #         return topictag
-    
+
 @pytest.fixture( scope="session" )
 def alerts_300days( elasticc2_ppdb ):
     result = subprocess.run( [ "python", "manage.py", "send_elasticc2_alerts", "-d", "60578",
@@ -131,4 +134,59 @@ def api_classify_existing_alerts( alerts_100daysmore, apibroker_client ):
     assert result.returncode == 0
 
     yield True
-    
+
+@pytest.fixture( scope="module" )
+def random_broker_classifications():
+    brokers = {
+        'rbc_test1': {
+            '1.0': {
+                'classifiertest1': [ '1.0' ],
+                'classifiertest2': [ '1.0' ]
+            }
+        },
+        'rbc_test2': {
+            '3.5': {
+                'testing1': [ '42' ],
+                'testing2': [ '23' ]
+            }
+        }
+    }
+
+    minsrc = 10
+    maxsrc = 20
+    mincls = 1
+    maxcls = 20
+
+    msgs = []
+    for brokername, brokerspec in brokers.items():
+        for brokerversion, versionspec in brokerspec.items():
+            for classifiername, clsspec in versionspec.items():
+                for classifierparams in clsspec:
+                    nsrcs = random.randint( minsrc, maxsrc )
+                    for src in range(nsrcs):
+                        ncls = random.randint( mincls, maxcls )
+                        probleft = 1.0
+                        classes = []
+                        probs = []
+                        for cls in range( ncls ):
+                            classes.append( cls )
+                            prob = random.random() * probleft
+                            probleft -= prob
+                            probs.append( prob )
+                        classes.append( ncls )
+                        probs.append( probleft )
+
+                        msgs.append( { 'sourceid': src,
+                                       'brokername': brokername,
+                                       'alertid': src,
+                                       'elasticcpublishtimestamp': datetime.datetime.now( tz=pytz.utc ),
+                                       'brokeringesttimestamp': datetime.datetime.now( tz=pytz.utc ),
+                                       'brokerversion': brokerversion,
+                                       'classifiername': classifiername,
+                                       'classifierparams': classifierparams,
+                                       'classid': classes,
+                                      'probability': probs } )
+
+    yield msgs
+
+

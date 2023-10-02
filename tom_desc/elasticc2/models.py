@@ -49,8 +49,8 @@ _formatter = logging.Formatter( f'[%(asctime)s - %(levelname)s] - %(message)s' )
 _logout.setFormatter( _formatter )
 _logger.propagate = False
 _logger.addHandler( _logout )
-_logger.setLevel( logging.INFO )
-# _logger.setLevel( logging.DEBUG )
+# _logger.setLevel( logging.INFO )
+_logger.setLevel( logging.DEBUG )
 
 # ======================================================================
 # ======================================================================
@@ -188,7 +188,7 @@ class BaseDiaSource(Createable):
     _create_kws = [ _pk, 'diaobject_id', 'midpointtai', 'filtername', 'ra', 'decl',
                     'psflux', 'psfluxerr', 'snr' ]
     _dict_kws = _create_kws
-    
+
 class BaseDiaForcedSource(Createable):
     diaforcedsource_id = models.BigIntegerField( primary_key=True, unique=True, db_index=True )
 
@@ -232,9 +232,9 @@ class BaseAlert(Createable):
 
     class Meta:
         abstract = True
-    
+
     _pk = 'alert_id'
-    
+
     # WARNING : I later assume that these are in the same order as _create_kws in DiaSource
     _create_kws = [ _pk, 'diasource_id', 'diaobject_id' ]
     _dict_kws = [ _pk, 'diasource_id', 'diaobject_id', 'alertsenttimestamp' ]
@@ -256,14 +256,14 @@ class BaseAlert(Createable):
         super().__init__( *args, **kwargs )
         self._objectfields = None
         self._objectfieldmap = None
-        
+
     def reconstruct( self, objsources=None, objforced=None ):
         """Reconstruct the dictionary that represents this alert.
-        
+
         It's not just a matter of dumping fields, as it also has to decide if the alert
         should include previous photometry and previous forced photometry, and then
         has to pull all that from the database.
-        
+
         For efficiency, some data can be passed in:
 
         objsources : a list of dictionaries with the fields from the ..DiaSource objects, sorted by midpointtai
@@ -271,7 +271,7 @@ class BaseAlert(Createable):
 
         both objsources and objforced are expected to have *all* sources for the object, not just
         ones that would be in this alert.  They'll be filtered here.
-        
+
         """
         alert = { "alertId": self.alert_id,
                   "diaSource": {},
@@ -283,7 +283,7 @@ class BaseAlert(Createable):
         gratuitous = django.db.connection.cursor()
         conn = gratuitous.connection
         cursor = conn.cursor( cursor_factory=psycopg2.extras.RealDictCursor )
-        
+
         t0 = time.perf_counter()
         sourcefields = [ "diaSourceId", "diaObjectId", "midPointTai",
                          "filterName", "ra", "decl", "psFlux", "psFluxErr", "snr" ]
@@ -309,11 +309,11 @@ class BaseAlert(Createable):
             self._objectfieldmap = { i: i.lower() for i in self._objectfields }
             self._objectfieldmap["diaObjectId"] = "diaobject_id"
         self.__class__._objectoverheadtime += time.perf_counter() - t0
-                
+
         for field in self._objectfields:
             alert["diaObject"][field] = getattr( self.diaobject, self._objectfieldmap[ field ] )
         self.__class__._objecttime += time.perf_counter() - t0
-            
+
         t0 = time.perf_counter()
         if objsources is None:
             objsources = ( self._sourceclass.objects
@@ -328,7 +328,7 @@ class BaseAlert(Createable):
                                     #= getattr( prevsource, sourcefieldmap[ field ] )
             alert["prvDiaSources"].append( newprevsource )
         self.__class__._prvsourcetime += time.perf_counter() - t0 
-            
+
         # If this source is the same night as the original detection, then
         # there will be no forced source information
 
@@ -338,7 +338,7 @@ class BaseAlert(Createable):
         forcedsourcefieldmap = { i: i.lower() for i in forcedsourcefields }
         forcedsourcefieldmap[ "diaForcedSourceId" ] = "diaforcedsource_id"
         forcedsourcefieldmap[ "diaObjectId" ] = "diaobject_id"
-        
+
         if self.diasource.midpointtai - objsources[0]['midpointtai'] > 0.5:
             if objforced is None:
                 objforced = ( self._forcedsourceclass.objects
@@ -365,10 +365,10 @@ class BaseAlert(Createable):
         # else:
         #     _logger.warn( "Not adding previous" )
         self.__class__._prvforcedsourcetime += time.perf_counter() - t0
-        
+
         return alert
-                  
-    
+
+
 # ======================================================================
 # Truth tables.  Of course, LSST won't really have these, but
 # we have them for our simulation.
@@ -415,7 +415,7 @@ class BaseObjectTruth(Createable):
 
     class Meta:
         abstract = True
-    
+
     _pk = 'diaobject_id'
     _create_kws = [ 'diaobject_id', 'libid', 'sim_searcheff_mask', 'gentype', 'sim_template_index',
                     'zcmb', 'zhelio', 'zcmb_smear', 'ra', 'dec', 'mwebv', 'galid', 'galzphot',
@@ -424,7 +424,7 @@ class BaseObjectTruth(Createable):
                     'peakmag_r', 'peakmag_i', 'peakmag_z', 'peakmag_y', 'snrmax', 'snrmax2', 'snrmax3',
                     'nobs', 'nobs_saturate' ]
     _dict_kws = _create_kws
-    
+
     # IMPORTANT : subclasses need the following line, with the right class name put in
     # _objectclass = BaseDiaObject
 
@@ -475,7 +475,7 @@ class PPDBDiaSource(BaseDiaSource):
 
     class Meta(BaseDiaSource.Meta):
         abstract = False
-    
+
 # Same status as DiaSource (see comment above)
 class PPDBDiaForcedSource(BaseDiaForcedSource):
     diaobject = models.ForeignKey( PPDBDiaObject, db_column='diaobject_id', on_delete=models.CASCADE )
@@ -503,7 +503,7 @@ class PPDBAlert(BaseAlert):
     _objectclass = PPDBDiaObject
     _sourceclass = PPDBDiaSource
     _forcedsourceclass = PPDBDiaForcedSource
-    
+
 # ======================================================================
 
 class DiaObjectTruth(BaseObjectTruth):
@@ -514,7 +514,7 @@ class DiaObjectTruth(BaseObjectTruth):
 
     class Meta(BaseObjectTruth.Meta):
         abstract = False
-    
+
 
 # ======================================================================
 # ======================================================================
@@ -531,7 +531,7 @@ class TrainingDiaSource(BaseDiaSource):
 
     class Meta(BaseDiaSource.Meta):
         abstract = False
-    
+
 class TrainingDiaForcedSource(BaseDiaForcedSource):
     diaobject = models.ForeignKey( TrainingDiaObject, db_column='diaobject_id', on_delete=models.CASCADE )
 
@@ -550,7 +550,7 @@ class TrainingAlert(BaseAlert):
     _objectclass = TrainingDiaObject
     _sourceclass = TrainingDiaSource
     _forcedsourceclass = TrainingDiaForcedSource
-    
+
 
 class TrainingDiaObjectTruth(BaseObjectTruth):
     diaobject = models.OneToOneField( TrainingDiaObject, db_column='diaobject_id',
@@ -603,8 +603,8 @@ class ClassIdOfGentype(models.Model):
     generalmatch = models.BooleanField( default=False )
     broadmatch = models.BooleanField( default=False )
     description = models.TextField()
-    
-    
+
+
 # ======================================================================
 # ======================================================================
 # ======================================================================
@@ -693,7 +693,7 @@ class DiaObjectOfTarget(models.Model):
         if len(newlinks) > 0:
             addedlinks = cls.objects.bulk_create( newlinks )
             # _logger.debug( f"Bulk created {len(newlinks)} links" )
-                
+
 
 # ======================================================================
 # Broker information
@@ -718,7 +718,7 @@ class BrokerMessage(models.Model):
     alert_id = models.BigIntegerField()
     diasource_id = models.BigIntegerField()
     # diaSource = models.ForeignKey( DiaSource, on_delete=models.PROTECT, null=True )
-    
+
     # timestamps as datetime.datetime (DateTimeField)
     msghdrtimestamp = models.DateTimeField(null=True)
     descingesttimestamp = models.DateTimeField(auto_now_add=True)  # auto-generated
@@ -767,7 +767,7 @@ class BrokerMessage(models.Model):
                                               'classid': classification.classid,
                                               'probability': classification.probability } )
         return resp
-        
+
 
     @staticmethod
     def load_batch( messages, logger=_logger ):
@@ -796,7 +796,7 @@ class BrokerMessage(models.Model):
         # the caveats on bulk-create.  I'm assuming that addedmsgs will have the right
         # value of brokermessage_id.  According to that page, this is only true for
         # Postgres... which is what I'm using...
-        
+
         logger.debug( f'In BrokerMessage.load_batch, received {len(messages)} messages.' );
 
         messageobjects = {}
@@ -846,7 +846,7 @@ class BrokerMessage(models.Model):
         # Q object thing won't be a disaster
 
         classifiers = {}
-        
+
         logger.debug( f"Looking for pre-existing classifiers" )
         cferconds = models.Q()
         i = 0
@@ -868,7 +868,7 @@ class BrokerMessage(models.Model):
                         f"{cur.classifiername}_{cur.classifierparams}" )
             classifiers[ keycfer ] = cur
         logger.debug( f'Found {len(classifiers)} existing classifiers.' )
-                
+
         # Create new classifiers as necessary
 
         addedkeys = set()
@@ -926,7 +926,7 @@ class BrokerMessage(models.Model):
                  "addedclassifiers": ncferstoadd,
                  "addedclassifications": len(newcfications),
                  "firstbrokermessage_id": None if len(addedmsgs)==0 else addedmsgs[0].brokermessage_id }
-        
+
 
 
 class BrokerClassifier(models.Model):
@@ -938,7 +938,7 @@ class BrokerClassifier(models.Model):
     brokerversion = models.TextField(null=True)     # state changes logically not part of the classifier
     classifiername = models.CharField(max_length=200)
     classifierparams = models.TextField(null=True)   # change in classifier code / parameters
-    
+
     modified = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -956,7 +956,7 @@ class BrokerClassification(psqlextra.models.PostgresPartitionedModel):
     class PartitioningMeta:
         method = psqlextra.types.PostgresPartitioningMethod.LIST
         key = [ 'classifier_id' ]
-        
+
     class Meta:
         constraints = [
             models.UniqueConstraint(
@@ -964,7 +964,7 @@ class BrokerClassification(psqlextra.models.PostgresPartitionedModel):
                 fields=( 'classifier_id', 'classification_id' )
             ),
         ]
-    
+
     classification_id = models.BigAutoField(primary_key=True)
     dbmessage = models.ForeignKey( BrokerMessage, db_column='brokermessage_id', on_delete=models.CASCADE, null=True )
     # I really want to make a foreign key here, but I haven't figured
@@ -1013,12 +1013,16 @@ class BrokerSourceIds(models.Model):
         objs = [ BrokerSourceIds( i ) for i in sources ]
         addedsources = BrokerSourceIds.objects.bulk_create( objs, len(objs), ignore_conflicts=True )
 
+
+
 class CassBrokerMessage(DjangoCassandraModel):
     sourceid = columns.BigInt( primary_key=True )
     id = columns.UUID( primary_key=True, default=uuid.uuid4 )
     brokername = columns.Text( primary_key=True )
-    created_at = columns.DateTime( primary_key=True, default=datetime.datetime.utcnow() )
+    descingesttimetamp = columns.DateTime( primary_key=True, default=datetime.datetime.utcnow() )
+    topicname = columns.Text()
     alertid = columns.BigInt()
+    msghdrtimestamp = columns.DateTime()
     elasticcpublishtimestamp = columns.DateTime()
     brokeringesttimestamp = columns.DateTime()
     brokerversion = columns.Text()
@@ -1029,7 +1033,115 @@ class CassBrokerMessage(DjangoCassandraModel):
 
     class Meta:
         get_pk_field = 'id'
-    
+
+    @staticmethod
+    def load_batch( messages, logger=_logger ):
+        """Load an array of broker classification messages.
+
+        This doesn't actually do any batching operation, because there's
+        no bulk_create in the Django Cassandra interface, and because I
+        don't understand Cassandra well enough to know how to do this --
+        I've read that batching can be a bad idea.  I'm worried about
+        the repeated network overhead, but we'll see how it goes.
+
+        """
+
+        cfers = {}
+        sourceids = []
+        logger.debug( "CassBrokerMessage.load_batch: iterating through messages" )
+        for i, msgmeta in enumerate(messages):
+            if ( i % 10 == 0 ) logger.debug( f"...on {i} of {len(messages)}" )
+            msg = msgmeta['msg']
+            if len( msg['classifications'] ) == 0:
+                logger.debug( 'Message with no classifications' )
+                continue
+            keycfer = f"{msg['brokerName']}_{msg['brokerVersion']}_{msg['classifierName']}_{msg['classifierParams']}"
+            if keycfer not in cfers.keys():
+                cfers[ keycfer ] = { 'brokername': msg['brokerName'],
+                                     'brokerversion': msg['brokerVersion'],
+                                     'classifiername': msg['classifierName'],
+                                     'classifierparams': msg['classifierParams'] }
+            sourceids.append( msg['diaSourceId'] )
+            classes = []
+            probs = []
+            for cification in msg['classifications']:
+                classes.append( cification['classId'] )
+                probs.append( cification['probability'] )
+            cassmsg = CassBrokerMessage(
+                sourceid=msg['diaSourceId'],
+                brokername=msg['brokerName'],
+                topic=msgmeta['topic'],
+                alertid=msg['alertId'],
+                msghdrtimestamp=msgmeta['timestamp'],
+                elasticcpublishtimestamp=msg['elasticcPublishTimestamp'],
+                brokeringesttimestamp=msg['brokerIngestTimestamp'],
+                brokerversion=msg['brokerVersion'],
+                classifiername=msg['classifierName'],
+                classifierparams=msg['classifierParams'],
+                classid=classes,
+                probability=probs
+            )
+            cassmsg.save()
+        logger.debug( f"Done loading {len(messages)} messagesinto the CassBrokerMessage table" )
+
+        # Update the log of new broker source ids
+        BrokerSourceIds.add_batch( sourceids )
+
+        # Create any classifiers that don't already exist; this
+        # is one place where we do get efficiency by calling
+        # this batch method.
+        cferconds = models.Q()
+        logger.debug( f"Looking for pre-existing classifiers" )
+        cferconds = models.Q()
+        i = 0
+        for cferkey, cfer in cfers.items():
+            newcond = ( models.Q( brokername = msg['brokerName'] ) &
+                        models.Q( brokerversion = msg['brokerVersion'] ) &
+                        models.Q( classifiername = msg['classifierName'] ) &
+                        models.Q( classifierparams = msg['classifierParams'] ) )
+            cferconds |= newcond
+        curcfers = BrokerClassifier.objects.filter( cferconds )
+        classifiers = {}
+        for cur in curcfers:
+            keycfer = ( f"{cur.brokername}_{cur.brokerversion}_"
+                        f"{cur.classifiername}_{cur.classifierparams}" )
+            classifiers[ keycfer ] = cur
+        logger.debug( f'Found {len(classifiers)} existing classifiers.' )
+
+        # Create new classifiers as necessary
+
+        addedkeys = set()
+        kwargses = []
+        for cferkey, cfer in cfers.items():
+            if cferkey not in classifiers.keys():
+                kwargses.append( { 'brokername': cfer['brokername'],
+                                   'brokerversion': cfer['brokerversion'],
+                                   'classifiername': cfer['classifiername'],
+                                   'classifierparams': cfer['classifierparams'] } )
+                addedkeys.add( keycfer )
+        ncferstoadd = len(kwargses)
+        logger.debug( f'Adding {ncferstoadd} new classifiers.' )
+        if ncferstoadd > 0:
+            objs = ( BrokerClassifier( **k ) for k in kwargses )
+            batch = list( itertools.islice( objs, len(kwargses) ) )
+            newcfers = BrokerClassifier.objects.bulk_create( batch, len(kwargses) )
+            for curcfer in newcfers:
+                keycfer = ( f"{curcfer.brokername}_{curcfer.brokerversion}_"
+                            f"{curcfer.classifiername}_{curcfer.classifierparams}" )
+                classifiers[ keycfer ] = curcfer
+                # logger.debug( f'key: {keycfer}; brokerName: {curcfer.brokerName}; '
+                #                f'brokerVersion: {curcfer.brokerVersion}; classifierName: {curcfer.ClassifierName}; '
+                #                f'classifierParams: {curcfer.classifierParams}' )
+
+        # return newcfications
+        return { "addedmsgs": len(messages),
+                 "addedclassifiers": ncferstoadd,
+                 "addedclassifications": None,
+                 "firstbrokermessage_id": None }
+
+
+
+
 # This is a thing I use as a "don't run twice at once" lock
 
 class ImportPPDBRunning(models.Model):

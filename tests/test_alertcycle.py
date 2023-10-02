@@ -10,6 +10,14 @@ import tom_targets.models
 
 from msgconsumer import MsgConsumer
 
+# The numbers in these tests are based on the SNANA files in
+# the directory /data/raknop/elasticc2_train_1pct_3models;
+# that needs to be in the ELASTICC2_TEST_DATA env var
+# when running docker compose.
+#
+# HARDCORE TODO: get the test data set integrated into the archive
+# somehow!  Or, at the very least, somewhere it can be downloaded.
+
 class TestAlertCycle:
 
     def test_hello_world( self ):
@@ -65,17 +73,22 @@ class TestAlertCycle:
         # looking for topics on the kafka server, so potentially that could be a full
         # 10s later than when the fakebrokers 10s timeout finished.
         time.sleep( 10 )
-        
-        msg  = elasticc2.models.BrokerMessage
+
+        import pdb; pdb.set_trace()
+        brkmsg = elasticc2.models.CassBrokerMessage
         cfer = elasticc2.models.BrokerClassifier
-        cify = elasticc2.models.BrokerClassification
         bsid = elasticc2.models.BrokerSourceIds
         
-        assert msg.objects.count() == 1090
+        assert brkmsg.objects.count() == 1090
         assert cfer.objects.count() == 2
         assert bsid.objects.count() == 545
+
+        numprobs = 0
+        for msg in brkmsg.objects.all():
+            assert len(msg.classid) == len(msg.probability)
+            numprobs += len(msg.classid)
         # 545 from NugentClassifier plus 7*545 for RandomSNType
-        assert cify.objects.count() == 4360
+        assert numprobs == 4360
 
         assert ( set( [ i.classifiername for i in cfer.objects.all() ] )
                  == set( [ "NugentClassifier", "RandomSNType" ] ) )
@@ -98,14 +111,18 @@ class TestAlertCycle:
     def test_100moredays_classifications_ingested( self, alerts_100daysmore ):
         time.sleep( 20 )
 
-        msg  = elasticc2.models.BrokerMessage
+        brkmsg = elasticc2.models.BrokerMessage
         cfer = elasticc2.models.BrokerClassifier
-        cify = elasticc2.models.BrokerClassification
 
-        assert msg.objects.count() == 1300
+        assert brkmsg.objects.count() == 1300
         assert cfer.objects.count() == 2
+
+        numprobs = 0
+        for msg in brkmsg.objects.all():
+            assert len(msg.classid) == len(msg.probability)
+            numprobs += len(msg.classid)
         # 650 from NugentClassifier plus 7*650 for RandomSNType
-        assert cify.objects.count() == 5200
+        assert numprobs == 5200
 
         assert ( set( [ i.classifiername for i in cfer.objects.all() ] )
                  == set( [ "NugentClassifier", "RandomSNType" ] ) )
@@ -128,7 +145,7 @@ class TestAlertCycle:
 
     def test_apibroker_existingsources( self, api_classify_existing_alerts ):
         cfer = elasticc2.models.BrokerClassifier
-        cify = elasticc2.models.BrokerClassification
+        brkmsg = elasticc2.models.CassBrokerMessage
         
         assert cfer.objects.count() == 3
         apibroker = cfer.objects.filter( brokername="apiclassifier" )[0]
@@ -136,18 +153,19 @@ class TestAlertCycle:
         assert apibroker.classifiername == "AlwaysTheSame"
         assert apibroker.classifierparams == "0.5 111, 0.75 112"
 
+        numprobs = 0
+        for msg in brkmsg.objects.all():
+            assert len(msg.classid) == len(msg.probability)
+            numprobs += len(msg.classid)
         # 5200 from before, plus 2*650 for the new classifier
-        assert cify.objects.count() == 6500
+        assert numprobs == 6500
 
-        onecification = cify.objects.filter( classifier_id=apibroker.classifier_id )[0]
-        assert onecification.classid in (111, 112)
-        if onecification.classid == 111:
-            assert onecification.probability == 0.25
-        elif onecification.classid == 112:
-            assert onecification.probability == 0.75
-        msg = onecification.dbmessage
-        assert msg.msghdrtimestamp >= msg.brokeringesttimestamp
-        assert msg.msghdrtimestamp - msg.brokeringesttimestamp < datetime.timedelta(seconds=5)
-        assert msg.descingesttimestamp - msg.msghdrtimestamp < datetime.timedelta(seconds=5)
-        
-        
+        apiclassmsgs = brkmsg.objects.filter( brokername="apiclassifier" )
+        import pdb; pdb.set_Trace()
+
+        onemsg = apiclassmsgs[0]
+        assert onemsg.classid == [ 111, 112 ]
+        assert onemsg.probability == [ 0.25, 0.75 ]
+        assert onemsg.msghdrtimestamp >= onemsg.brokeringesttimestamp
+        assert onemsg.msghdrtimestamp - onemsg.brokeringesttimestamp < datetime.timedelta(seconds=5)
+        assert onemsg.descingesttimestamp - onemsg.msghdrtimestamp < datetime.timedelta(seconds=5)
