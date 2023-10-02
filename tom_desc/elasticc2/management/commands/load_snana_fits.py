@@ -4,8 +4,10 @@ import re
 import pathlib
 import logging
 import numpy
+import psycopg2.extras
 from astropy.table import Table
 import astropy.io
+import django.db
 
 # _rundir = pathlib.Path( __file__ ).parent
 
@@ -35,7 +37,7 @@ class Command(BaseCommand):
                              help="Set log level to DEBUG (default INFO)" )
         parser.add_argument( '-s', '--simversion', default='2023-04-01',
                              help="What to stick in the simversion column" )
-        parser.add_argument( '-m', '--max-sources-per-object', default=2000, type=int,
+        parser.add_argument( '-m', '--max-sources-per-object', default=100000, type=int,
                              help=( "Maximum number of sources for a single object.  Used to generate "
                                     "source ids, so make it big enough." ) )
         parser.add_argument( '-p', '--photflag-detect', default=4096, type=int,
@@ -48,6 +50,10 @@ class Command(BaseCommand):
                              help="Load the PPDB* tables" )
         parser.add_argument( '--train', action='store_true', default=False,
                              help='Load the Train* tables' )
+        parser.add_argument( '--dont-disable-indexes-fks', action='store_true', default=False,
+                             help="Don't temporarily disable indexes and foreign keys (by default will)" )
+        parser.add_argument( '--test-index-disables', default=False, action='store_true',
+                             help="Don't do anything other than index disables and re-enables" )
         parser.add_argument( '--do', action='store_true', default=False,
                              help="Actually do it (otherwise, slowly reads FITS files but doesn't affect db" )
         
@@ -129,6 +135,190 @@ class Command(BaseCommand):
         lcs = { }
         cls._map_columns( tab, mapper, lcs )
         
+    def disable_indexes_and_fks( self, training=False ):
+        # Disable all indexes and foreign keys on the relevant
+        # tables to speed up loading
+
+        tableindexes = {}
+        tableconstraints = {}
+        primarykeys = {}
+        reconstructs = []
+        conn = django.db.connection.cursor().connection
+        cursor = conn.cursor( cursor_factory=psycopg2.extras.RealDictCursor )
+
+        if training:
+            tables = [ 'elasticc2_trainingalert', 'elasticc2_trainingdiaobject',
+                       'elasticc2_trainingdiasource', 'elasticc2_trainingdiaforcedsource,'
+                       'elasticc2_trainingdiaobjecttruth' ]
+        else:
+            tables = [ 'elasticc2_ppdbalert', 'elasticc2_ppdbdiaobject',
+                       'elasticc2_ppdbdiasource', 'elasticc2_ppdbdiaforcedsource',
+                       'elasticc2_diaobjecttruth' ]
+
+        pkmatcher = re.compile( '^ *PRIMARY KEY \((.*)\) *$' )
+        pkindexmatcher = re.compile( ' USING .* \((.*)\) *$' )
+        for table in tables:
+            tableconstraints[table] = []
+            cursor.execute( f"SELECT table_name, conname, condef "
+                            f"FROM "
+                            f"  ( SELECT conrelid::regclass::text AS table_name, conname, "
+                            f"           pg_get_constraintdef(oid) AS condef "
+                            f"    FROM pg_constraint "
+                            f"  ) subq "
+                            f"WHERE table_name='{table}'" )
+            rows = cursor.fetchall()
+            import pdb; pdb.set_trace()
+            for row in rows:
+                match = pkmatcher.search( row['condef'] )
+                if match is not None:
+                    if table in primarykeys:
+                        raise RuntimeError( f"{table} has more than one primary key!" )
+                    primarykeys[table] = match.group(1)
+                tableconstraints[table].append( row['conname'] )
+                reconstructs.append( row['condef'] )
+
+            if table not in primarykeys:
+                raise RuntimeError( f"Didn't find primary key for {table}" )
+                
+            tableindexes[table] = []
+            cursor.execute( f"SELECT * FROM pg_indexes WHERE tablename='{table}'" )
+            rows = cursor.fetchall()
+            for row in rows:
+                match = pkindexmatcher.search( row['indexdef'] )
+                if match is None:
+                    raise RuntimeError( f"Error parsing index def {row['indexdef']}" )
+                if match.group(1) != primarykeys[table]:
+                    # The primary key index will have been deleted when
+                    #  the primary key constraint was deleted
+                    tableindexes[table].append( row['indexname'] )
+                    reconstructs.append( row['indexdef'] )
+
+
+        with open( "load_snana_fits_reconstruct_indexes_constraints.sql", "w" ) as ofp:
+            for row in reconstructs:
+                ofp.write( f"{row}\n" )
+
+        for table in tableindexes.keys():
+            self.logger.warning( f"Dropping constraints from {table}" )
+            for constraint in tableconstraints[table]:
+                cursor.execute( f"ALTER TABLE {table} DROP CONSTRAINT {constraint}" )
+            self.logger.warning( f"Dropping indexes from {table}" )
+            for dex in tableindexes[table]:
+                cursor.execute( f"DROP INDEX {dex}" )
+
+        conn.commit()
+
+    def recreate_indexes_and_fks( self, commandfile='load_snana_fits_reconstruct_indexes_constraints.sql' ):
+        with open( commandfile ) as ifp:
+            commands = ifp.readlines()
+
+        conn = django.db.connection.cursor().connection
+        cursor = conn.cursor( cursor_factory=psycopg2.extras.RealDictCursor )
+        for command in commands:
+            _logger.info( "Running {command}" )
+            cursor.execute( command )
+
+        conn.commit()
+
+    def actually_load( self, headfiles, photfiles, really_do=False,
+                       alert_zeropoint=31.4, snana_zeropoint=27.5, simversion='unknown',
+                       max_sources_per_object=100000, photflag_detect=4096 ):
+        self.logger.debug( f'Headfiles: {[headfiles]}' )
+        self.logger.debug( f'Photfiles: {[photfiles]}' )
+
+        for headfile, photfile in zip( headfiles, photfiles ):
+            self.logger.info( f"Reading {headfile.name}" )
+
+            orig_head = Table.read( headfile )
+            # SNID was written as a string, we need it to be a bigint
+            orig_head['SNID'] = orig_head['SNID'].astype( numpy.int64 )
+            head = Table( orig_head )
+
+            if len(head) == 0:
+                continue
+
+            phot = Table.read( photfile )
+
+            # Load the DiaObject table
+
+            self.diaobject_map_columns( head )
+            head.add_column( simversion, name='simversion' )
+
+            if really_do:
+                n = DiaObject.bulk_insert_onlynew( dict( head ) )
+                self.logger.info( f"Loaded {n} objects from {headfile.name}" )
+            else:
+                self.logger.info( f"Would try to load {len(head)} objects" )
+
+            # Calculate some derived fields we'll need
+
+            phot['FLUXCAL'] *= 10 ** ( ( alert_zeropoint - snana_zeropoint ) / 2.5 )
+            phot['FLUXCALERR'] *= 10 ** ( ( alert_zeropoint - snana_zeropoint ) / 2.5 )
+
+            self.diasource_map_columns( phot )
+            phot.add_column( numpy.int64(-1), name='diaobject_id' )
+            phot.add_column( numpy.int64(-1), name='diaforcedsource_id' )
+            phot['snr'] = phot['psflux'] / phot['psfluxerr']
+            phot['filtername'] = [ i.strip() for i in phot['filtername'] ]
+            phot.add_column( -999., name='ra' )
+            phot.add_column( -999., name='decl' )
+
+            # Load the DiaForcedSource table
+
+            for obj in orig_head:
+                # All the -1 is because the files are 1-indexed, but astropy is 0-indexed
+                pmin = obj['PTROBS_MIN'] -1
+                pmax = obj['PTROBS_MAX'] -1
+                if ( pmax - pmin + 1 ) > max_sources_per_object:
+                    self.logger.error( f'SNID {obj["SNID"]} has {pmax-mpin+1} sources, which is more than '
+                                       f'max_sources_per_object={max_sources_per_object}' )
+                    raise RuntimeError( "Too many sources" )
+                phot['diaobject_id'][pmin:pmax+1] = obj['SNID']
+                phot['diaforcedsource_id'][pmin:pmax+1] = ( obj['SNID'] * max_sources_per_object
+                                                            + numpy.arange( pmax - pmin + 1 ) )
+                phot['ra'][pmin:pmax+1] = obj['RA']
+                phot['decl'][pmin:pmax+1] = obj['DEC']
+
+            # The phot table has separators, so there will still be some junk data in there I need to purge
+            phot = phot[ phot['diaobject_id'] >= 0 ]
+
+            if really_do:
+                n = DiaForcedSource.bulk_insert_onlynew( phot )
+                self.logger.info( f"Loaded {n} forced photometry points from {photfile.name}" )
+            else:
+                self.logger.info( f"Would try to load {len(phot)} forced photometry points" )
+
+            # Load the DiaSource table
+
+            phot.rename_column( 'diaforcedsource_id', 'diasource_id' )
+            phot = phot[ ( phot['photflag'] & photflag_detect ) !=0 ]
+
+            if really_do:
+                n = DiaSource.bulk_insert_onlynew( phot )
+                self.logger.info( f"Loaded {n} sources from {photfile.name}" )
+            else:
+                self.logger.info( f"Would try to load {len(phot)} sources" )
+
+            # Load the alert table based on this
+
+            alerts = { 'alert_id': phot[ 'diasource_id' ],
+                       'diasource_id': phot[ 'diasource_id' ],
+                       'diaobject_id': phot[ 'diaobject_id' ] }
+            if really_do:
+                n = Alert.bulk_insert_onlynew( alerts )
+                self.logger.info( f"Loaded {n} alerts" )
+            else:
+                self.logger.info( f"Would try to load {len(alerts['alert_id'])} alerts" )
+
+        # Load the object truth table
+
+        self.diaobjecttruth_map_columns( dump )
+        self.logger.info( f"Trying to load {len(dump)} rows to object truth table" )
+        if really_do:
+            truthobjs = Truth.bulk_load_or_create( dump )
+            self.logger.info( f"Loaded between 0 and {len(truthobjs)} rows to object truth table" )
+        
+        
     def handle( self, *args, **options ):
         if options['verbose']:
             self.logger.setLevel( logging.DEBUG )
@@ -186,95 +376,30 @@ class Command(BaseCommand):
                 raise FileNotFoundError( f"Can't read {photfile}" )
             photfiles.append( photfile )
 
-        # Load the HEAD/PHOT files
+        # Disable indexes and foreign keys
 
-        self.logger.debug( f'Headfiles: {[headfiles]}' )
-        self.logger.debug( f'Photfiles: {[photfiles]}' )
-        
-        for headfile, photfile in zip( headfiles, photfiles ):
-            self.logger.info( f"Reading {headfile.name}" )
+        if not options[ "dont_disable_indexes_fks" ]:
+            self.logger.warning( "Disabling all indexes and foreign keys before loading" )
+            self.disable_indexes_and_fks( training=options['train'] )
+            if options[ 'test_index_disables' ]:
+                import pdb; pdb.set_trace()
+                pass
 
-            orig_head = Table.read( headfile )
-            # SNID was written as a string, we need it to be a bigint
-            orig_head['SNID'] = orig_head['SNID'].astype( numpy.int64 )
-            head = Table( orig_head )
+        if not options[ 'test_index_disables' ]:
+            # Load the HEAD/PHOT files
+            self.actually_load( headfiles, photfiles,
+                                really_do=options['do'],
+                                alert_zeropoint=options['alert_zeropoint'],
+                                snana_zeropoint=options['snana_zeropoint'],
+                                simversion=options['simversion'],
+                                max_sources_per_object=options['max_sources_per_object'],
+                                photflag_detect=options['photfag_detect'] )
 
-            if len(head) == 0:
-                continue
-            
-            phot = Table.read( photfile )
+        # Recreate all indexes 
 
-            # Load the DiaObject table
-
-            self.diaobject_map_columns( head )
-            head.add_column( options['simversion'], name='simversion' )
-            
-            if options['do']:
-                n = DiaObject.bulk_insert_onlynew( dict( head ) )
-                self.logger.info( f"Loaded {n} objects from {headfile.name}" )
-            else:
-                self.logger.info( f"Would try to load {len(head)} objects" )
-
-            # Calculate some derived fields we'll need
-
-            phot['FLUXCAL'] *= 10 ** ( ( options['alert_zeropoint'] - options['snana_zeropoint'] ) / 2.5 )
-            phot['FLUXCALERR'] *= 10 ** ( ( options['alert_zeropoint'] - options['snana_zeropoint'] ) / 2.5 )
-            
-            self.diasource_map_columns( phot )
-            phot.add_column( numpy.int64(-1), name='diaobject_id' )
-            phot.add_column( numpy.int64(-1), name='diaforcedsource_id' )
-            phot['snr'] = phot['psflux'] / phot['psfluxerr']
-            phot['filtername'] = [ i.strip() for i in phot['filtername'] ]
-            phot.add_column( -999., name='ra' )
-            phot.add_column( -999., name='decl' )
-            
-            # Load the DiaForcedSource table
-
-            for obj in orig_head:
-                # All the -1 is because the files are 1-indexed, but astropy is 0-indexed
-                pmin = obj['PTROBS_MIN'] -1
-                pmax = obj['PTROBS_MAX'] -1
-                phot['diaobject_id'][pmin:pmax+1] = obj['SNID']
-                phot['diaforcedsource_id'][pmin:pmax+1] = ( obj['SNID'] * options['max_sources_per_object']
-                                                            + numpy.arange( pmax - pmin + 1 ) )
-                phot['ra'][pmin:pmax+1] = obj['RA']
-                phot['decl'][pmin:pmax+1] = obj['DEC']
-
-            # The phot table has separators, so there will still be some junk data in there I need to purge
-            phot = phot[ phot['diaobject_id'] >= 0 ]
-                
-            if options['do']:
-                n = DiaForcedSource.bulk_insert_onlynew( phot )
-                self.logger.info( f"Loaded {n} forced photometry points from {photfile.name}" )
-            else:
-                self.logger.info( f"Would try to load {len(phot)} forced photometry points" )
-            
-            # Load the DiaSource table
-
-            phot.rename_column( 'diaforcedsource_id', 'diasource_id' )
-            phot = phot[ ( phot['photflag'] & options['photflag_detect'] ) !=0 ]
-
-            if options['do']:
-                n = DiaSource.bulk_insert_onlynew( phot )
-                self.logger.info( f"Loaded {n} sources from {photfile.name}" )
-            else:
-                self.logger.info( f"Would try to load {len(phot)} sources" )
-
-            # Load the alert table based on this
-
-            alerts = { 'alert_id': phot[ 'diasource_id' ],
-                       'diasource_id': phot[ 'diasource_id' ],
-                       'diaobject_id': phot[ 'diaobject_id' ] }
-            if options['do']:
-                n = Alert.bulk_insert_onlynew( alerts )
-                self.logger.info( f"Loaded {n} alerts" )
-            else:
-                self.logger.info( f"Would try to load {len(alerts['alert_id'])} alerts" )
-                
-        # Load the object truth table
-            
-        self.diaobjecttruth_map_columns( dump )
-        self.logger.info( f"Trying to load {len(dump)} rows to object truth table" )
-        if options['do']:
-            truthobjs = Truth.bulk_load_or_create( dump )
-            self.logger.info( f"Loaded between 0 and {len(truthobjs)} rows to object truth table" )
+        if not options[ "dont_disable_indexes_fks" ]:
+            self.logger.warning( "Recreating indexes and foreign keys" )
+            self.recreate_indees_and_fks()
+            if options[ 'test_index_disables' ]:
+                pdb.set_trace()
+                pass

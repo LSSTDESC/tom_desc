@@ -54,9 +54,9 @@ CREATE MATERIALIZED VIEW elasticc2_view_maxprobdiff_hist AS
                            "DROP MATERIALIZED VIEW elasticc2_view_maxprobdiff_hist"
                            ),
 
-        migrations.RunSQL( 'CREATE INDEX ON elasticc2_view_maxprobdiff_hist("classifierId")' ),
-        migrations.RunSQL( 'CREATE INDEX ON elasticc2_view_maxprobdiff_hist("trueClassId")' ),
-        migrations.RunSQL( 'CREATE INDEX ON elasticc2_view_maxprobdiff_hist(earlytimebin,latetimebin)' ),
+        migrations.RunSQL( 'CREATE INDEX ON elasticc2_view_maxprobdiff_hist("classifierId")', "" ),
+        migrations.RunSQL( 'CREATE INDEX ON elasticc2_view_maxprobdiff_hist("trueClassId")', "" ),
+        migrations.RunSQL( 'CREATE INDEX ON elasticc2_view_maxprobdiff_hist(earlytimebin,latetimebin)', "" ),
 
         migrations.RunSQL( 'GRANT SELECT ON elasticc2_view_maxprobdiff_hist TO postgres_elasticc_admin_ro', "" ),
         

@@ -78,8 +78,8 @@ spec:
           name: tom-2-secrets
         - mountPath: /tom_desc
           name: tom-2-deployment
-        - mountPath: /sample
-          name: tom-2-sample
+        # - mountPath: /sample
+        #   name: tom-2-sample
       dnsConfig: {}
       dnsPolicy: ClusterFirst
       restartPolicy: Always
@@ -97,7 +97,7 @@ spec:
           path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/production-2/tom_desc/tom_desc
           type: Directory
         name: tom-2-deployment
-      - hostPath:
-          path: /global/cfs/cdirs/lsst/www/DESC_TD_PUBLIC/ELASTICC/ELASTICC2_TRAINING_SAMPLE
-          type: Directory
-        name: tom-2-sample
+      # - hostPath:
+      #     path: /global/cfs/cdirs/desc-td/ELASTICC2
+      #     type: Directory
+      #   name: tom-2-sample

@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: tom-desc-pgdump
+  name: tom-pgdump
   namespace: desc-tom
 spec:
   concurrencyPolicy: Allow
@@ -20,12 +20,12 @@ spec:
             - name: PGDB
               value: tom_desc
             - name: PGHOST
-              value: tom-desc-postgres
+              value: tom-postgres
             - name: PGPASSWORD
               value: fragile
             image: rknop/devuan-chimaera-pgdump
             imagePullPolicy: Always
-            name: tom-desc-pgdump
+            name: tom-pgdump
             resources: {}
             securityContext:
               allowPrivilegeEscalation: false
@@ -59,4 +59,4 @@ spec:
             name: pgdump
   schedule: 0 5 * * 0
   successfulJobsHistoryLimit: 3
-  suspend: false
+  suspend: true

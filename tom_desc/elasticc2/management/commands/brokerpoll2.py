@@ -239,7 +239,7 @@ class AntaresConsumer(BrokerConsumer):
                   loggername="ANTARES", **kwargs ):
         server = "kafka.antares.noirlab.edu:9092"
         groupid = "elasticc-lbnl" + ( "" if grouptag is None else "-" + grouptag )
-        topics = [ 'elasticc-2022fall-classifications' ]
+        topics = [ 'elasticc-1' ]
         updatetopics = False
         with open( usernamefile ) as ifp:
             username = ifp.readline().strip()
