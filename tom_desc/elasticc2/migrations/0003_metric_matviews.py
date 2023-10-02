@@ -3,66 +3,70 @@
 from django.db import migrations
 
 
+# ROB TODO : This whole migration is broken.  Don't try to fix
+#  it, just make a later one that does what you want
+
 class Migration(migrations.Migration):
 
     dependencies = [
         ('elasticc2', '0002_fill_typemap'),
     ]
 
-    operations = [
-        migrations.RunSQL( """
-CREATE MATERIALIZED VIEW elasticc2_view_prevsourcecounts AS
-SELECT subq."diaSourceId",subq."diaObjectId",subq."midPointTai",subq.ndetections,subq.mint,
-       COUNT(fs."diaForcedSourceId") as nforced
-FROM (
-  SELECT s0."diaSourceId",s0."diaObjectId",s0."midPointTai",
-         COUNT(s."diaSourceId") AS ndetections,
-         MIN(s."midPointTai") AS mint
-  FROM elasticc2_diasource s0
-  LEFT JOIN elasticc2_diasource s
-       ON s."diaObjectId"=s0."diaObjectId" AND s."midPointTai"<=s0."midPointTai"
-  GROUP BY s0."diaSourceId",s0."diaObjectId",s0."midPointTai"
-  ) subq
-LEFT JOIN elasticc2_diaforcedsource fs
-   ON fs."diaObjectId"=subq."diaObjectId"
-      AND fs."midPointTai"<subq."midPointTai"
-      AND subq."midPointTai">(subq.mint+0.5)
-        GROUP BY subq."diaSourceId",subq."diaObjectId",subq."midPointTai",subq.ndetections,subq.mint""" ),
+    operations = []
+#     operations = [
+#         migrations.RunSQL( """
+# CREATE MATERIALIZED VIEW elasticc2_view_prevsourcecounts AS
+# SELECT subq."diaSourceId",subq."diaObjectId",subq."midPointTai",subq.ndetections,subq.mint,
+#        COUNT(fs."diaForcedSourceId") as nforced
+# FROM (
+#   SELECT s0."diaSourceId",s0."diaObjectId",s0."midPointTai",
+#          COUNT(s."diaSourceId") AS ndetections,
+#          MIN(s."midPointTai") AS mint
+#   FROM elasticc2_diasource s0
+#   LEFT JOIN elasticc2_diasource s
+#        ON s."diaObjectId"=s0."diaObjectId" AND s."midPointTai"<=s0."midPointTai"
+#   GROUP BY s0."diaSourceId",s0."diaObjectId",s0."midPointTai"
+#   ) subq
+# LEFT JOIN elasticc2_diaforcedsource fs
+#    ON fs."diaObjectId"=subq."diaObjectId"
+#       AND fs."midPointTai"<subq."midPointTai"
+#       AND subq."midPointTai">(subq.mint+0.5)
+#         GROUP BY subq."diaSourceId",subq."diaObjectId",subq."midPointTai",subq.ndetections,subq.mint""" ),
 
-        migrations.RunSQL( 'CREATE INDEX ON elasticc2_view_prevsourcecounts ("diaSourceId")' ),
-        migrations.RunSQL( 'CREATE INDEX ON elasticc2_view_prevsourcecounts ("diaObjectId")' ),
+#         migrations.RunSQL( 'CREATE INDEX ON elasticc2_view_prevsourcecounts ("diaSourceId")' ),
+#         migrations.RunSQL( 'CREATE INDEX ON elasticc2_view_prevsourcecounts ("diaObjectId")' ),
         
-        migrations.RunSQL( "GRANT SELECT ON elasticc2_view_prevsourcecounts TO postgres_elasticc_admin_ro" ),
+#         migrations.RunSQL( "GRANT SELECT ON elasticc2_view_prevsourcecounts TO postgres_elasticc_admin_ro" ),
 
-        migrations.RunSQL( f"""
-CREATE MATERIALIZED VIEW elasticc2_view_classifications_totprobpersource AS
-  SELECT "classifierId","diaSourceId",SUM(probability) AS totprob
-  FROM
-  ( SELECT c."classifierId",m."diaSourceId",c.probability
-    FROM elasticc2_brokerclassification c
-    INNER JOIN elasticc2_brokermessage m ON c."brokerMessageId"=m."brokerMessageId"
-  ) subq
-  GROUP BY "classifierId","diaSourceId"
-""" ),
-        migrations.RunSQL( 'CREATE INDEX ON elasticc2_view_classifications_totprobpersource ("diaSourceId")' ),
-        migrations.RunSQL( 'CREATE INDEX ON elasticc2_view_classifications_totprobpersource ("classifierId")' ),
-        migrations.RunSQL( "GRANT SELECT ON elasticc2_view_classifications_totprobpersource TO postgres_elasticc_admin_ro" ),
+#         migrations.RunSQL( f"""
+# CREATE MATERIALIZED VIEW elasticc2_view_classifications_totprobpersource AS
+#   SELECT "classifierId","diaSourceId",SUM(probability) AS totprob
+#   FROM
+#   ( SELECT c."classifierId",m."diaSourceId",c.probability
+#     FROM elasticc2_brokerclassification c
+#     INNER JOIN elasticc2_brokermessage m ON c."brokerMessageId"=m."brokerMessageId"
+#   ) subq
+#   GROUP BY "classifierId","diaSourceId"
+# """ ),
+#         migrations.RunSQL( 'CREATE INDEX ON elasticc2_view_classifications_totprobpersource ("diaSourceId")' ),
+#         migrations.RunSQL( 'CREATE INDEX ON elasticc2_view_classifications_totprobpersource ("classifierId")' ),
+#         migrations.RunSQL( "GRANT SELECT ON elasticc2_view_classifications_totprobpersource TO postgres_elasticc_admin_ro" ),
 
 
-        migrations.RunSQL( f"""
-CREATE MATERIALIZED VIEW elasticc2_view_dedupedclassifications AS
-  SELECT c."classifierId", c."brokerMessageId", c."classId", gtoc."classId" AS "trueClassId", m."diaSourceId",
-         s."midPointTai"-ot.peakmjd AS dt,
-         COUNT(probability) AS n, AVG(probability) AS probability, STDDEV(probability) AS sigma
-  FROM elasticc2_brokerclassification c
-  INNER JOIN elasticc2_brokermessage m ON c."brokerMessageId"=m."brokerMessageId"
-  INNER JOIN elasticc2_diasource s ON m."diaSourceId"=s."diaSourceId"
-  INNER JOIN elasticc2_diaobjecttruth ot ON s."diaObjectId"=ot."diaObjectId"
-  INNER JOIN elasticc2_gentypeofclassid gtoc ON ot.gentype=gtoc.gentype
-  GROUP BY c."classifierId",c."brokerMessageId",c."classId",gtoc."classId",m."diaSourceId",s."midPointTai",ot.peakmjd
-"""),
-        migrations.RunSQL( "GRANT SELECT ON elasticc2_view_dedupedclassifications TO postgres_elasticc_admin_ro" ),
-        migrations.RunSQL( 'CREATE INDEX elasticc2_view_dedupedcls_cfer ON elasticc2_view_dedupedclassifications("classifierId")' ),
-        migrations.RunSQL( 'CREATE INDEX elasticc2_view_dedupedcls_cls ON elasticc2_view_dedupedclassifications("classId")' ),
-        migrations.RunSQL( 'CREATE INDEX elasticc2_view_dedupedcls_trcls ON elasticc2_view_dedupedclassifications("trueClassId")' ),        
-    ]
+#         migrations.RunSQL( f"""
+# CREATE MATERIALIZED VIEW elasticc2_view_dedupedclassifications AS
+#   SELECT c."classifierId", c."brokerMessageId", c."classId", gtoc."classId" AS "trueClassId", m."diaSourceId",
+#          s."midPointTai"-ot.peakmjd AS dt,
+#          COUNT(probability) AS n, AVG(probability) AS probability, STDDEV(probability) AS sigma
+#   FROM elasticc2_brokerclassification c
+#   INNER JOIN elasticc2_brokermessage m ON c."brokerMessageId"=m."brokerMessageId"
+#   INNER JOIN elasticc2_diasource s ON m."diaSourceId"=s."diaSourceId"
+#   INNER JOIN elasticc2_diaobjecttruth ot ON s."diaObjectId"=ot."diaObjectId"
+#   INNER JOIN elasticc2_gentypeofclassid gtoc ON ot.gentype=gtoc.gentype
+#   GROUP BY c."classifierId",c."brokerMessageId",c."classId",gtoc."classId",m."diaSourceId",s."midPointTai",ot.peakmjd
+# """),
+#         migrations.RunSQL( "GRANT SELECT ON elasticc2_view_dedupedclassifications TO postgres_elasticc_admin_ro" ),
+#         migrations.RunSQL( 'CREATE INDEX elasticc2_view_dedupedcls_cfer ON elasticc2_view_dedupedclassifications("classifierId")' ),
+#         migrations.RunSQL( 'CREATE INDEX elasticc2_view_dedupedcls_cls ON elasticc2_view_dedupedclassifications("classId")' ),
+#         migrations.RunSQL( 'CREATE INDEX elasticc2_view_dedupedcls_trcls ON elasticc2_view_dedupedclassifications("trueClassId")' ),        
+#     ]
