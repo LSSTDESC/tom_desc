@@ -1,35 +1,52 @@
+THIS NEEDS TO BE UPDATED, MANY THINGS HERE ARE WRONG
+
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: tom-send-alerts
+  annotations:
+    field.cattle.io/creatorId: u-6fc5nwq2ou
+    nersc.gov/collab_uids: 70268,99896
+    nersc.gov/gid: "95089"
+    nersc.gov/gids: 45703,60152,57177,58102,59318,60070,63477,64483,79186,70268,74560,92576,94721,95089,96414,99650
+    nersc.gov/roles: user
+    nersc.gov/uid: "95089"
+    nersc.gov/username: raknop
+  creationTimestamp: "2022-11-07T15:13:14Z"
+  labels:
+    cattle.io/creator: norman
+  name: tom-desc-updatemetrics
   namespace: desc-tom
+  resourceVersion: "425219312"
+  selfLink: /apis/batch/v1/namespaces/desc-tom/cronjobs/tom-desc-updatemetrics
+  uid: 27dec005-1f7a-47be-acd3-a95a1f8e84c3
 spec:
-  concurrencyPolicy: Forbid
+  concurrencyPolicy: Allow
   failedJobsHistoryLimit: 1
   jobTemplate:
+    metadata:
+      creationTimestamp: null
     spec:
       template:
         metadata:
           annotations:
+            cattle.io/timestamp: "2022-11-07T15:13:13Z"
             field.cattle.io/ports: '[[]]'
-            nersc.gov/collab_uids: "99896"
+            nersc.gov/collab_uids: 70268,99896
             nersc.gov/gid: "95089"
-            nersc.gov/gids: 95089,57177,60152,96414
+            nersc.gov/gids: 45703,60152,57177,58102,59318,60070,63477,64483,79186,70268,74560,92576,94721,95089,96414,99650
             nersc.gov/roles: user
             nersc.gov/uid: "95089"
             nersc.gov/username: raknop
           creationTimestamp: null
         spec:
           containers:
-          - command: ['python']
-            args: ['manage.py', 'send_elasticc2_alerts',
-               '-a', '36',
-               '-k', 'public.alerts.ztf.uw.edu:9092', '-t', 'elasticc-1',
-               '--do'
-                  ]
+          - command:
+            - python
+            - manage.py
+            - genconfmatrices
             env:
             - name: DB_HOST
-              value: tom-postgres
+              value: tom-desc-postgres
             - name: DB_NAME
               value: tom_desc
             - name: DB_PASS
@@ -38,7 +55,7 @@ spec:
               value: postgres
             image: rknop/tom-desc-production
             imagePullPolicy: Always
-            name: tom-2-send-alerts
+            name: tom-desc-updatemetrics
             resources: {}
             securityContext:
               allowPrivilegeEscalation: false
@@ -57,26 +74,28 @@ spec:
             tty: true
             volumeMounts:
             - mountPath: /secrets
-              name: tom-secrets
+              name: desc-tom-secrets
             - mountPath: /tom_desc
-              name: tom-deployment
-            workingDir: /tom_desc
+              name: tom-deploy-production
+          dnsConfig: {}
           dnsPolicy: ClusterFirst
           restartPolicy: Never
           schedulerName: default-scheduler
           securityContext:
-            fsGroup: 57177
+            fsGroup: 60152
           terminationGracePeriodSeconds: 30
           volumes:
-          - name: tom-secrets
+          - name: desc-tom-secrets
             secret:
               defaultMode: 256
               optional: false
-              secretName: tom-secrets
+              secretName: desc-tom-secrets
           - hostPath:
-              path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/production/tom_desc/tom_desc
+              path: /global/cfs/cdirs/desc-td/SOFTWARE/tom_deployment/production/tom_desc
               type: Directory
-            name: tom-deployment
-  schedule: 0 0 * * *
-  successfulJobsHistoryLimit: 7
+            name: tom-deploy-production
+  schedule: 00 10 * * *
+  successfulJobsHistoryLimit: 3
   suspend: true
+status:
+  lastScheduleTime: "2023-02-27T10:00:00Z"

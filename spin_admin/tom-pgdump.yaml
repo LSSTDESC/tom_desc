@@ -59,4 +59,4 @@ spec:
             name: pgdump
   schedule: 0 5 * * 0
   successfulJobsHistoryLimit: 3
-  suspend: true
+  suspend: false

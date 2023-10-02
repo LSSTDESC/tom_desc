@@ -80,4 +80,4 @@ spec:
             name: tom-deployment
   schedule: 0 6 * * *
   successfulJobsHistoryLimit: 3
-  suspend: false
+  suspend: true

@@ -78,4 +78,5 @@ spec:
             name: tom-deployment
   schedule: 0 7 * * *
   successfulJobsHistoryLimit: 3
-  suspend: false
+  suspend: true
+  
