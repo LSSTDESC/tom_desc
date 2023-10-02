@@ -81,6 +81,7 @@ spec:
         args:
           - manage.py
           - brokerpoll2
+          - --do-antares
           - --do-alerce
           - --do-pitt
           - --pitt-topic
