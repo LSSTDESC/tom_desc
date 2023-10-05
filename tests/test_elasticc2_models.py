@@ -1,6 +1,7 @@
 import pytest
 import io
 import datetime
+import dateutil.parser
 import pytz
 
 from elasticc2.models import CassBrokerMessage, BrokerSourceIds
@@ -31,7 +32,7 @@ class TestElasticc2Models:
                          }
             sourceids.append( msg['sourceid'] )
             alerts.append( { 'topic': 'testing',
-                             'msgoiffset': i,
+                             'msgoffset': i,
                              'timestamp': datetime.datetime.now( tz=pytz.utc ),
                              'msg': alertdict
                             } )
@@ -60,5 +61,5 @@ class TestElasticc2Models:
         assert msgs.count() == loaded_broker_classifications[ 'addedmsgs' ]
         sources = set()
         for msg in msgs.all():
-            sources.add( msg.sourceid )
+            sources.add( msg.diasource_id )
         assert sources.issubset( set( [ b.diasource_id for b in BrokerSourceIds.objects.all() ] ) )

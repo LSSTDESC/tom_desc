@@ -14,6 +14,7 @@ import fastavro
 import confluent_kafka
 import pittgoogle
 from concurrent.futures import ThreadPoolExecutor  # for pittgoogle
+import django.db
 from django.core.management.base import BaseCommand, CommandError
 from elasticc2.models import CassBrokerMessage
 
@@ -478,6 +479,10 @@ class Command(BaseCommand):
         signal.signal( signal.SIGUSR1,
                        lambda sig, stack: self.logger.warning( f"{brokerclass.__name__} ignoring SIGUSR1" ) )
         consumer = brokerclass( pipe=pipe, **options )
+        # Make sure this subprocess has a cassandra connection
+        # (Search for "connection.unregsiter" and see the comments there.)
+        django.db.connections['cassandra'].connection.register()
+        # Do
         consumer.poll()
 
     def handle( self, *args, **options ):
@@ -507,6 +512,21 @@ class Command(BaseCommand):
             
         # Launch a process for each broker that will poll that broker indefinitely
 
+        # We want to make sure that django doesn't send copies of database sessions
+        # to the subprocesses; at least for Cassandra, that breaks things.  So,
+        # before launching all the processes, close all the database django connections
+        # so that each process will open a new one as it needs it
+        django.db.connections.close_all()
+        # Unfortunately, the cassandra django engine doesn't actually
+        # close.  Looking at the source code, it looks like we need to
+        # "unregister" the connection, and then (empirically) we need to
+        # manually register the connection in each thread.  Because I
+        # figured this out by looking at source code and not
+        # documentation (which is very sparse), it's entirely possible
+        # that a future version of the django cassandra engine will
+        # break this code.
+        django.db.connections['cassandra'].connection.unregister()
+        
         brokers = {}
         for name,brokerclass in brokerstodo.items():
             self.logger.info( f"Launching thread for {name}" )

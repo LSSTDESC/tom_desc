@@ -18,7 +18,7 @@ from django.template import loader
 import rest_framework
 
 from elasticc2.models import PPDBDiaObject, PPDBDiaSource, PPDBDiaForcedSource, PPDBAlert, DiaObjectTruth
-from elasticc2.models import DiaObject, DiaSource, DiaForcedSource, BrokerMessage, BrokerClassifier
+from elasticc2.models import DiaObject, DiaSource, DiaForcedSource, BrokerClassifier, CassBrokerMessage
 from elasticc2.serializers import PPDBDiaObjectSerializer, PPDBDiaSourceSerializer, PPDBDiaForcedSourceSerializer
 
 # I tried inherting from the root logger, but it
@@ -354,6 +354,7 @@ class BrokerMessageView(PermissionRequiredMixin, django.views.View):
             return bool(self.request.user.is_authenticated)
 
     def get_queryset( self, request, info, offset=0, num=100 ):
+        raise RuntimeError( "This is broken, fix for CassBrokerMessage." )
         n = None
         if isinstance( info, int ):
             msgs = BrokerMessage.objects.filter(pk=info)
@@ -449,7 +450,7 @@ class BrokerMessageView(PermissionRequiredMixin, django.views.View):
         if not isinstance( data, list ):
             data = [ data ]
         messageinfo = []
-        # Reformulate the data array into what BrokerMessage.load_batch is expecting
+        # Reformulate the data array into what CassBrokerMessage.load_batch is expecting
         _logger.debug( f"BrokerMessageView.put: len(data)={len(data)}" )
         for datum in data:
             datum['elasticcPublishTimestamp'] = datetime.datetime.fromtimestamp( datum['elasticcPublishTimestamp']
@@ -471,7 +472,7 @@ class BrokerMessageView(PermissionRequiredMixin, django.views.View):
             
 
         _logger.debug( f"BrokerMessageView.put: load_batch of {len(messageinfo)} messages." )
-        batchret = BrokerMessage.load_batch( messageinfo, logger=_logger )
+        batchret = CassBrokerMessage.load_batch( messageinfo, logger=_logger )
         dex = -1 if batchret['firstbrokermessage_id'] is None else batchret['firstbrokermessage_id']
         resp = JsonResponse( { 'brokerMessageId': dex,
                                'num_loaded': batchret['addedmsgs'] },

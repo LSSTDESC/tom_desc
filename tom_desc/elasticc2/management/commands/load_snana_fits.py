@@ -95,7 +95,7 @@ class Command(BaseCommand):
         lcs = { 'RA', 'MWEBV', 'MWEBV_ERR', 'simversion' }
         for hostgal in ( "", "2" ):
             for q in ( 'Q000', 'Q010', 'Q020', 'Q030', 'Q040', 'Q050',
-                       'Q060', 'q070', 'Q080', 'Q090', 'Q100' ):
+                       'Q060', 'Q070', 'Q080', 'Q090', 'Q100' ):
                 lcs.add( f'HOSTGAL{hostgal}_ZPHOT_{q}' )
             for f in ( 'MAG_u', 'MAG_g', 'MAG_r', 'MAG_i', 'MAG_z', 'MAG_Y',
                        'MAGERR_u', 'MAGERR_g', 'MAGERR_r', 'MAGERR_i', 'MAGERR_z', 'MAGERR_Y',

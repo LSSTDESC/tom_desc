@@ -740,7 +740,7 @@ class BrokerMessage(models.Model):
             'brokermessage_id': self.brokermessage_id,
             'streammessage_id': self.streammessage_id,
             'alert_id': self.alert_id,
-            'diasourceid': self.diasource_id,
+            'diasource_id': self.diasource_id,
             'msghdrtimestamp': self.msghdrtimestamp.isoformat(),
             'descingesttimestamp': self.descingesttimestamp.isoformat(),
             'elasticcpublishtimestamp': int( self.elasticcpublishtimestamp.timestamp() * 1e3 ),
@@ -1016,12 +1016,14 @@ class BrokerSourceIds(models.Model):
 
 
 class CassBrokerMessage(DjangoCassandraModel):
-    sourceid = columns.BigInt( primary_key=True )
+    diasource_id = columns.BigInt( primary_key=True )
     id = columns.UUID( primary_key=True, default=uuid.uuid4 )
     brokername = columns.Text( primary_key=True )
-    descingesttimetamp = columns.DateTime( primary_key=True, default=datetime.datetime.utcnow() )
+    descingesttimestamp = columns.DateTime( primary_key=True, default=datetime.datetime.utcnow() )
+
     topicname = columns.Text()
-    alertid = columns.BigInt()
+    streammessage_id = columns.BigInt()
+    alert_id = columns.BigInt()
     msghdrtimestamp = columns.DateTime()
     elasticcpublishtimestamp = columns.DateTime()
     brokeringesttimestamp = columns.DateTime()
@@ -1048,9 +1050,7 @@ class CassBrokerMessage(DjangoCassandraModel):
 
         cfers = {}
         sourceids = []
-        logger.debug( "CassBrokerMessage.load_batch: iterating through messages" )
         for i, msgmeta in enumerate(messages):
-            if ( i % 10 == 0 ) logger.debug( f"...on {i} of {len(messages)}" )
             msg = msgmeta['msg']
             if len( msg['classifications'] ) == 0:
                 logger.debug( 'Message with no classifications' )
@@ -1068,10 +1068,11 @@ class CassBrokerMessage(DjangoCassandraModel):
                 classes.append( cification['classId'] )
                 probs.append( cification['probability'] )
             cassmsg = CassBrokerMessage(
-                sourceid=msg['diaSourceId'],
+                diasource_id=msg['diaSourceId'],
                 brokername=msg['brokerName'],
-                topic=msgmeta['topic'],
-                alertid=msg['alertId'],
+                topicname=msgmeta['topic'],
+                streammessage_id=msgmeta['msgoffset'],
+                alert_id=msg['alertId'],
                 msghdrtimestamp=msgmeta['timestamp'],
                 elasticcpublishtimestamp=msg['elasticcPublishTimestamp'],
                 brokeringesttimestamp=msg['brokerIngestTimestamp'],
@@ -1082,11 +1083,12 @@ class CassBrokerMessage(DjangoCassandraModel):
                 probability=probs
             )
             cassmsg.save()
-        logger.debug( f"Done loading {len(messages)} messagesinto the CassBrokerMessage table" )
 
         # Update the log of new broker source ids
         BrokerSourceIds.add_batch( sourceids )
 
+        logger.debug( f"Classifiers in the messages lost loaded: {cfers.keys()}" )
+        
         # Create any classifiers that don't already exist; this
         # is one place where we do get efficiency by calling
         # this batch method.
@@ -1095,43 +1097,33 @@ class CassBrokerMessage(DjangoCassandraModel):
         cferconds = models.Q()
         i = 0
         for cferkey, cfer in cfers.items():
-            newcond = ( models.Q( brokername = msg['brokerName'] ) &
-                        models.Q( brokerversion = msg['brokerVersion'] ) &
-                        models.Q( classifiername = msg['classifierName'] ) &
-                        models.Q( classifierparams = msg['classifierParams'] ) )
+            newcond = ( models.Q( brokername = cfer['brokername'] ) &
+                        models.Q( brokerversion = cfer['brokerversion'] ) &
+                        models.Q( classifiername = cfer['classifiername'] ) &
+                        models.Q( classifierparams = cfer['classifierparams'] ) )
             cferconds |= newcond
         curcfers = BrokerClassifier.objects.filter( cferconds )
-        classifiers = {}
+        known_classifiers = []
         for cur in curcfers:
-            keycfer = ( f"{cur.brokername}_{cur.brokerversion}_"
-                        f"{cur.classifiername}_{cur.classifierparams}" )
-            classifiers[ keycfer ] = cur
-        logger.debug( f'Found {len(classifiers)} existing classifiers.' )
+            known_classifiers.append( f"{cur.brokername}_{cur.brokerversion}_"
+                                      f"{cur.classifiername}_{cur.classifierparams}" )
+        logger.debug( f'Found {len(known_classifiers)} existing classifiers that match the ones in this batch.' )
 
         # Create new classifiers as necessary
 
-        addedkeys = set()
         kwargses = []
         for cferkey, cfer in cfers.items():
-            if cferkey not in classifiers.keys():
+            if cferkey not in known_classifiers:
                 kwargses.append( { 'brokername': cfer['brokername'],
                                    'brokerversion': cfer['brokerversion'],
                                    'classifiername': cfer['classifiername'],
                                    'classifierparams': cfer['classifierparams'] } )
-                addedkeys.add( keycfer )
         ncferstoadd = len(kwargses)
         logger.debug( f'Adding {ncferstoadd} new classifiers.' )
         if ncferstoadd > 0:
             objs = ( BrokerClassifier( **k ) for k in kwargses )
             batch = list( itertools.islice( objs, len(kwargses) ) )
             newcfers = BrokerClassifier.objects.bulk_create( batch, len(kwargses) )
-            for curcfer in newcfers:
-                keycfer = ( f"{curcfer.brokername}_{curcfer.brokerversion}_"
-                            f"{curcfer.classifiername}_{curcfer.classifierparams}" )
-                classifiers[ keycfer ] = curcfer
-                # logger.debug( f'key: {keycfer}; brokerName: {curcfer.brokerName}; '
-                #                f'brokerVersion: {curcfer.brokerVersion}; classifierName: {curcfer.ClassifierName}; '
-                #                f'classifierParams: {curcfer.classifierParams}' )
 
         # return newcfications
         return { "addedmsgs": len(messages),

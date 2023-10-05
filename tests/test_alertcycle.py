@@ -1,3 +1,11 @@
+# The tests in this file depend on a completely fresh environment, just
+# started with docker compose.  Because they are testing the result of
+# other services started in the docker compose file, they don't restore
+# the state of everything.  As such, they will fail if run a second time
+# without completely restarting the docker compose environment.  (There
+# will already be pre-existing alerts on the kafka server, there will
+# already be existing database records.)
+
 import os
 import sys
 import datetime
@@ -74,7 +82,6 @@ class TestAlertCycle:
         # 10s later than when the fakebrokers 10s timeout finished.
         time.sleep( 10 )
 
-        import pdb; pdb.set_trace()
         brkmsg = elasticc2.models.CassBrokerMessage
         cfer = elasticc2.models.BrokerClassifier
         bsid = elasticc2.models.BrokerSourceIds
@@ -111,12 +118,22 @@ class TestAlertCycle:
     def test_100moredays_classifications_ingested( self, alerts_100daysmore ):
         time.sleep( 20 )
 
-        brkmsg = elasticc2.models.BrokerMessage
+        brkmsg = elasticc2.models.CassBrokerMessage
         cfer = elasticc2.models.BrokerClassifier
 
-        assert brkmsg.objects.count() == 1300
-        assert cfer.objects.count() == 2
+        # THIS DOES NOT WORK
+        # This is something that's broken about the cassandra django
+        # engine.  It doesn't seem to go back to the database to
+        # recount, but it's remembering what it has cached.  It may
+        # really be a mismatch between how you're supposed to use
+        # Cassandra and the built-in relational-database assumptions of
+        # django.
+        # assert brkmsg.objects.count() == 1300
 
+        assert len( brkmsg.objects.all() ) == 1300
+        assert cfer.objects.count() == 2
+        assert len( cfer.objects.all() ) == 2
+        
         numprobs = 0
         for msg in brkmsg.objects.all():
             assert len(msg.classid) == len(msg.probability)
@@ -161,7 +178,6 @@ class TestAlertCycle:
         assert numprobs == 6500
 
         apiclassmsgs = brkmsg.objects.filter( brokername="apiclassifier" )
-        import pdb; pdb.set_Trace()
 
         onemsg = apiclassmsgs[0]
         assert onemsg.classid == [ 111, 112 ]
