@@ -6,7 +6,7 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('elasticc2', '0019_populate_elasticc2_importppdbrunning'),
+        ('elasticc2', '0020_diaobject_isddf_ppdbdiaobject_isddf_and_more'),
     ]
 
     operations = [

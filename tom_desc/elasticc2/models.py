@@ -1078,7 +1078,7 @@ class CassBrokerMessage(DjangoCassandraModel):
         curcfers = BrokerClassifier.objects.filter( cferconds )
         numknown = 0
         for cur in curcfers:
-            keycfer = f"{cur.brokername}_{cur.brokeversion}_{cur.classifiername}_{cur.classifierparms}"
+            keycfer = f"{cur.brokername}_{cur.brokerversion}_{cur.classifiername}_{cur.classifierparams}"
             cfers[ keycfer ][ 'classifier_id' ] = cur.classifier_id
             numknown += 1
         logger.debug( f'Found {numknown} existing classifiers that match the ones in this batch.' )
@@ -1132,7 +1132,7 @@ class CassBrokerMessage(DjangoCassandraModel):
         # Update the log of new broker source ids
         BrokerSourceIds.add_batch( sourceids )
 
-        logger.debug( f"Classifiers in the messages lost loaded: {cfers.keys()}" )
+        logger.debug( f"Classifiers in the messages just loaded: {list(cfers.keys())}" )
 
 
         # return newcfications

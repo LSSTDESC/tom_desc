@@ -546,9 +546,9 @@ class FITSLoader( ColumnMapper ):
             if self.really_do:
                 # This one is slow because it does a SELECT IN
                 # truthobjs = Truth.bulk_load_or_create( dump )
+                self.logger.info( f"Trying to load {len(dump)} rows to object truth table" )
                 truthobjs = Truth.objects.bulk_create( [ Truth( **(Truth.data_to_createdict( i )) ) for i in dump ],
                                                          ignore_conflicts=True )
-                self.logger.info( f"Trying to load {len(dump)} rows to object truth table" )
                 self.logger.info( f"Loaded {len(truthobjs)} of {len(dump)} rows to object truth table" )
 
             self.logger.info( f'Done with directory {direc}' )

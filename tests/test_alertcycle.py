@@ -177,7 +177,7 @@ class TestAlertCycle:
         # 5200 from before, plus 2*650 for the new classifier
         assert numprobs == 6500
 
-        apiclassmsgs = brkmsg.objects.filter( brokername="apiclassifier" )
+        apiclassmsgs = brkmsg.objects.filter( classifier_id=apibroker.classifier_id )
 
         onemsg = apiclassmsgs[0]
         assert onemsg.classid == [ 111, 112 ]

@@ -1,6 +1,7 @@
 import io
 import psycopg2
 import psycopg2.extras
+import numpy
 import pandas
 
 import django.db
@@ -19,7 +20,7 @@ class q3c_ang2ipix(models.Func):
 class Float32Field(models.Field):
     def db_type( self, connection ):
         return "real"
-    
+
 # A hack so that I can have index names that go up to
 #   the 63 characters postgres allows, instead of the
 #   30 that django allows
@@ -91,9 +92,13 @@ class Createable(models.Model):
             kwargs = {}
             for kw in cls._create_kws:
                 kwargs[kw] = data[ datamap[kw] ] if kw in datamap else None
+                # Do some preemptive type conversions
+                # to avoid django/postgres screaming
+                if isinstance(kwargs[kw], numpy.int64 ):
+                     kwargs[kw] = int( kwargs[kw] )
 
         return kwargs
-    
+
     @classmethod
     def create( cls, data, kwmap=None ):
         """Create a new object based on data.  data must be a dict of { kw: value } for a single table row.
@@ -129,7 +134,7 @@ class Createable(models.Model):
         """Insert a bunch of data into the database.  Ignores records that conflict with things present.
 
         data can be:
-          * a dict of { kw: iterable }.  All of the iterables must have the same length, 
+          * a dict of { kw: iterable }.  All of the iterables must have the same length,
             and must be something that pandas.DataFrame could handle
           * a list of dicts.  The keys in all dicts must be the same
         data and kwmap will be run through data_to_createdict
@@ -195,7 +200,7 @@ class Createable(models.Model):
                 conn.autocommit = origautocommit
                 origautocommit = None
                 conn = None
-        
+
     # NOTE -- this version returns all the objects that were
     #   either loaded or created.  I've got other classes that
     #   have their own "bulk_load_or_create" that don't return
@@ -224,4 +229,4 @@ class Createable(models.Model):
             addedobjs = cls.objects.bulk_create( newobjs )
             curobjs.extend( addedobjs )
         return curobjs
-        
+
