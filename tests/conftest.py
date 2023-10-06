@@ -31,6 +31,7 @@ def elasticc2_ppdb( tomclient ):
         if subdir.is_dir():
             result = subprocess.run( [ "python", "manage.py", "load_snana_fits", "-d", str(subdir), "--ppdb", "--do" ],
                                      cwd="/tom_desc", capture_output=True )
+            import pdb; pdb.set_trace()
             assert result.returncode == 0
 
     yield True
@@ -185,7 +186,7 @@ def random_broker_classifications():
                                        'classifiername': classifiername,
                                        'classifierparams': classifierparams,
                                        'classid': classes,
-                                      'probability': probs } )
+                                       'probability': probs } )
 
     yield msgs
 

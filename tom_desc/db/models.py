@@ -16,6 +16,10 @@ from django.utils.functional import cached_property
 class q3c_ang2ipix(models.Func):
     function = "q3c_ang2ipix"
 
+class Float32Field(models.Field):
+    def db_type( self, connection ):
+        return "real"
+    
 # A hack so that I can have index names that go up to
 #   the 63 characters postgres allows, instead of the
 #   30 that django allows

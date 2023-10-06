@@ -38,7 +38,7 @@ from django_cassandra_engine.models import DjangoCassandraModel
 # (django limits to 30, postgres has more), and the Createable base class
 # that defines the "create" and "load_or_create" methods for bulk
 # upserting.
-from db.models import q3c_ang2ipix, LongNameBTreeIndex, Createable
+from db.models import q3c_ang2ipix, LongNameBTreeIndex, Createable, Float32Field
 
 # Link to tom targets
 import tom_targets.models
@@ -62,74 +62,74 @@ class BaseDiaObject(Createable):
     simversion = models.TextField( null=True )
     ra = models.FloatField( )
     decl = models.FloatField( )
-    mwebv = models.FloatField( null=True )
-    mwebv_err = models.FloatField( null=True )
-    z_final = models.FloatField( null=True )
-    z_final_err = models.FloatField( null=True )
-    hostgal_ellipticity = models.FloatField( null=True )
-    hostgal_sqradius = models.FloatField( null=True )
-    hostgal_zspec = models.FloatField( null=True )
-    hostgal_zspec_err = models.FloatField( null=True )
-    hostgal_zphot = models.FloatField( null=True )
-    hostgal_zphot_err = models.FloatField( null=True )
-    hostgal_zphot_q000 = models.FloatField( null=True)
-    hostgal_zphot_q010 = models.FloatField( null=True )
-    hostgal_zphot_q020 = models.FloatField( null=True )
-    hostgal_zphot_q030 = models.FloatField( null=True )
-    hostgal_zphot_q040 = models.FloatField( null=True )
-    hostgal_zphot_q050 = models.FloatField( null=True )
-    hostgal_zphot_q060 = models.FloatField( null=True )
-    hostgal_zphot_q070 = models.FloatField( null=True )
-    hostgal_zphot_q080 = models.FloatField( null=True )
-    hostgal_zphot_q090 = models.FloatField( null=True )
-    hostgal_zphot_q100 = models.FloatField( null=True )
-    hostgal_mag_u = models.FloatField( null=True )
-    hostgal_mag_g = models.FloatField( null=True )
-    hostgal_mag_r = models.FloatField( null=True )
-    hostgal_mag_i = models.FloatField( null=True )
-    hostgal_mag_z = models.FloatField( null=True )
-    hostgal_mag_y = models.FloatField( null=True )
-    hostgal_ra = models.FloatField( null=True )
-    hostgal_dec = models.FloatField( null=True )
-    hostgal_snsep = models.FloatField( null=True )
-    hostgal_magerr_u = models.FloatField( null=True )
-    hostgal_magerr_g = models.FloatField( null=True )
-    hostgal_magerr_r = models.FloatField( null=True )
-    hostgal_magerr_i = models.FloatField( null=True )
-    hostgal_magerr_z = models.FloatField( null=True )
-    hostgal_magerr_y = models.FloatField( null=True )
-    hostgal2_ellipticity = models.FloatField( null=True )
-    hostgal2_sqradius = models.FloatField( null=True )
-    hostgal2_zspec = models.FloatField( null=True )
-    hostgal2_zspec_err = models.FloatField( null=True )
-    hostgal2_zphot = models.FloatField( null=True )
-    hostgal2_zphot_err = models.FloatField( null=True )
-    hostgal2_zphot_q000 = models.FloatField( null=True )
-    hostgal2_zphot_q010 = models.FloatField( null=True )
-    hostgal2_zphot_q020 = models.FloatField( null=True )
-    hostgal2_zphot_q030 = models.FloatField( null=True )
-    hostgal2_zphot_q040 = models.FloatField( null=True )
-    hostgal2_zphot_q050 = models.FloatField( null=True )
-    hostgal2_zphot_q060 = models.FloatField( null=True )
-    hostgal2_zphot_q070 = models.FloatField( null=True )
-    hostgal2_zphot_q080 = models.FloatField( null=True )
-    hostgal2_zphot_q090 = models.FloatField( null=True )
-    hostgal2_zphot_q100 = models.FloatField( null=True )
-    hostgal2_mag_u = models.FloatField( null=True )
-    hostgal2_mag_g = models.FloatField( null=True )
-    hostgal2_mag_r = models.FloatField( null=True )
-    hostgal2_mag_i = models.FloatField( null=True )
-    hostgal2_mag_z = models.FloatField( null=True )
-    hostgal2_mag_y = models.FloatField( null=True )
-    hostgal2_ra = models.FloatField( null=True )
-    hostgal2_dec = models.FloatField( null=True )
-    hostgal2_snsep = models.FloatField( null=True )
-    hostgal2_magerr_u = models.FloatField( null=True )
-    hostgal2_magerr_g = models.FloatField( null=True )
-    hostgal2_magerr_r = models.FloatField( null=True )
-    hostgal2_magerr_i = models.FloatField( null=True )
-    hostgal2_magerr_z = models.FloatField( null=True )
-    hostgal2_magerr_y = models.FloatField( null=True )
+    mwebv = Float32Field( null=True )
+    mwebv_err = Float32Field( null=True )
+    z_final = Float32Field( null=True )
+    z_final_err = Float32Field( null=True )
+    hostgal_ellipticity = Float32Field( null=True )
+    hostgal_sqradius = Float32Field( null=True )
+    hostgal_zspec = Float32Field( null=True )
+    hostgal_zspec_err = Float32Field( null=True )
+    hostgal_zphot = Float32Field( null=True )
+    hostgal_zphot_err = Float32Field( null=True )
+    hostgal_zphot_q000 = Float32Field( null=True)
+    hostgal_zphot_q010 = Float32Field( null=True )
+    hostgal_zphot_q020 = Float32Field( null=True )
+    hostgal_zphot_q030 = Float32Field( null=True )
+    hostgal_zphot_q040 = Float32Field( null=True )
+    hostgal_zphot_q050 = Float32Field( null=True )
+    hostgal_zphot_q060 = Float32Field( null=True )
+    hostgal_zphot_q070 = Float32Field( null=True )
+    hostgal_zphot_q080 = Float32Field( null=True )
+    hostgal_zphot_q090 = Float32Field( null=True )
+    hostgal_zphot_q100 = Float32Field( null=True )
+    hostgal_mag_u = Float32Field( null=True )
+    hostgal_mag_g = Float32Field( null=True )
+    hostgal_mag_r = Float32Field( null=True )
+    hostgal_mag_i = Float32Field( null=True )
+    hostgal_mag_z = Float32Field( null=True )
+    hostgal_mag_y = Float32Field( null=True )
+    hostgal_ra = Float32Field( null=True )
+    hostgal_dec = Float32Field( null=True )
+    hostgal_snsep = Float32Field( null=True )
+    hostgal_magerr_u = Float32Field( null=True )
+    hostgal_magerr_g = Float32Field( null=True )
+    hostgal_magerr_r = Float32Field( null=True )
+    hostgal_magerr_i = Float32Field( null=True )
+    hostgal_magerr_z = Float32Field( null=True )
+    hostgal_magerr_y = Float32Field( null=True )
+    hostgal2_ellipticity = Float32Field( null=True )
+    hostgal2_sqradius = Float32Field( null=True )
+    hostgal2_zspec = Float32Field( null=True )
+    hostgal2_zspec_err = Float32Field( null=True )
+    hostgal2_zphot = Float32Field( null=True )
+    hostgal2_zphot_err = Float32Field( null=True )
+    hostgal2_zphot_q000 = Float32Field( null=True )
+    hostgal2_zphot_q010 = Float32Field( null=True )
+    hostgal2_zphot_q020 = Float32Field( null=True )
+    hostgal2_zphot_q030 = Float32Field( null=True )
+    hostgal2_zphot_q040 = Float32Field( null=True )
+    hostgal2_zphot_q050 = Float32Field( null=True )
+    hostgal2_zphot_q060 = Float32Field( null=True )
+    hostgal2_zphot_q070 = Float32Field( null=True )
+    hostgal2_zphot_q080 = Float32Field( null=True )
+    hostgal2_zphot_q090 = Float32Field( null=True )
+    hostgal2_zphot_q100 = Float32Field( null=True )
+    hostgal2_mag_u = Float32Field( null=True )
+    hostgal2_mag_g = Float32Field( null=True )
+    hostgal2_mag_r = Float32Field( null=True )
+    hostgal2_mag_i = Float32Field( null=True )
+    hostgal2_mag_z = Float32Field( null=True )
+    hostgal2_mag_y = Float32Field( null=True )
+    hostgal2_ra = Float32Field( null=True )
+    hostgal2_dec = Float32Field( null=True )
+    hostgal2_snsep = Float32Field( null=True )
+    hostgal2_magerr_u = Float32Field( null=True )
+    hostgal2_magerr_g = Float32Field( null=True )
+    hostgal2_magerr_r = Float32Field( null=True )
+    hostgal2_magerr_i = Float32Field( null=True )
+    hostgal2_magerr_z = Float32Field( null=True )
+    hostgal2_magerr_y = Float32Field( null=True )
 
     class Meta:
         abstract = True
@@ -172,9 +172,9 @@ class BaseDiaSource(Createable):
     filtername = models.TextField()
     ra = models.FloatField( )
     decl = models.FloatField( )
-    psflux = models.FloatField()
-    psfluxerr = models.FloatField()
-    snr = models.FloatField( )
+    psflux = Float32Field()
+    psfluxerr = Float32Field()
+    snr = Float32Field( )
 
     class Meta:
         abstract = True
@@ -197,8 +197,8 @@ class BaseDiaForcedSource(Createable):
 
     midpointtai = models.FloatField( db_index=True )
     filtername = models.TextField()
-    psflux = models.FloatField()
-    psfluxerr = models.FloatField()
+    psflux = Float32Field()
+    psfluxerr = Float32Field()
 
     class Meta:
         abstract = True
@@ -382,34 +382,34 @@ class BaseObjectTruth(Createable):
     sim_searcheff_mask = models.IntegerField( )
     gentype = models.IntegerField( db_index=True )
     sim_template_index = models.IntegerField( db_index=True )
-    zcmb = models.FloatField( db_index=True )
-    zhelio = models.FloatField( db_index=True )
-    zcmb_smear = models.FloatField( )
+    zcmb = Float32Field( db_index=True )
+    zhelio = Float32Field( db_index=True )
+    zcmb_smear = Float32Field( )
     ra = models.FloatField( )
     dec = models.FloatField( )
-    mwebv = models.FloatField( )
+    mwebv = Float32Field( )
     galid = models.BigIntegerField( null=True )
-    galzphot = models.FloatField( null=True )
-    galzphoterr = models.FloatField( null=True )
-    galsnsep = models.FloatField( null=True )
-    galsnddlr = models.FloatField( null=True )
-    rv = models.FloatField( )
-    av = models.FloatField( )
-    mu = models.FloatField( )
-    lensdmu = models.FloatField( )
-    peakmjd = models.FloatField( db_index=True ) 
+    galzphot = Float32Field( null=True )
+    galzphoterr = Float32Field( null=True )
+    galsnsep = Float32Field( null=True )
+    galsnddlr = Float32Field( null=True )
+    rv = Float32Field( )
+    av = Float32Field( )
+    mu = Float32Field( )
+    lensdmu = Float32Field( )
+    peakmjd = Float32Field( db_index=True ) 
     mjd_detect_first = models.FloatField( db_index=True )
     mjd_detect_last = models.FloatField( db_index=True )
-    dtseason_peak = models.FloatField( )
-    peakmag_u = models.FloatField( )
-    peakmag_g = models.FloatField( )
-    peakmag_r = models.FloatField( )
-    peakmag_i = models.FloatField( )
-    peakmag_z = models.FloatField( )
-    peakmag_y = models.FloatField( )
-    snrmax = models.FloatField( )
-    snrmax2 = models.FloatField( )
-    snrmax3 = models.FloatField( )
+    dtseason_peak = Float32Field( )
+    peakmag_u = Float32Field( )
+    peakmag_g = Float32Field( )
+    peakmag_r = Float32Field( )
+    peakmag_i = Float32Field( )
+    peakmag_z = Float32Field( )
+    peakmag_y = Float32Field( )
+    snrmax = Float32Field( )
+    snrmax2 = Float32Field( )
+    snrmax3 = Float32Field( )
     nobs = models.IntegerField( )
     nobs_saturate = models.IntegerField( )
 
@@ -983,7 +983,7 @@ class BrokerClassification(psqlextra.models.PostgresPartitionedModel):
     # diasource_id = models.ForeignKey( DiaSource, on_delete=models.PROTECT, null=True )
 
     classid = models.IntegerField( db_index=True )
-    probability = models.FloatField()
+    probability = Float32Field()
 
     # JSON blob of additional information from the broker?
     # Here or in a separate table?
@@ -1017,9 +1017,8 @@ class BrokerSourceIds(models.Model):
 
 class CassBrokerMessage(DjangoCassandraModel):
     diasource_id = columns.BigInt( primary_key=True )
+    classifier_id = columns.BigInt( primary_key=True )
     id = columns.UUID( primary_key=True, default=uuid.uuid4 )
-    brokername = columns.Text( primary_key=True )
-    descingesttimestamp = columns.DateTime( primary_key=True, default=datetime.datetime.utcnow() )
 
     topicname = columns.Text()
     streammessage_id = columns.BigInt()
@@ -1027,9 +1026,7 @@ class CassBrokerMessage(DjangoCassandraModel):
     msghdrtimestamp = columns.DateTime()
     elasticcpublishtimestamp = columns.DateTime()
     brokeringesttimestamp = columns.DateTime()
-    brokerversion = columns.Text()
-    classifiername = columns.Text()
-    classifierparams = columns.Text()
+    descingesttimestamp = columns.DateTime( default=datetime.datetime.utcnow )
     classid = columns.List( columns.Integer() )
     probability = columns.List( columns.Float() )
 
@@ -1060,35 +1057,10 @@ class CassBrokerMessage(DjangoCassandraModel):
                 cfers[ keycfer ] = { 'brokername': msg['brokerName'],
                                      'brokerversion': msg['brokerVersion'],
                                      'classifiername': msg['classifierName'],
-                                     'classifierparams': msg['classifierParams'] }
+                                     'classifierparams': msg['classifierParams'],
+                                     'classifier_id': None }
             sourceids.append( msg['diaSourceId'] )
-            classes = []
-            probs = []
-            for cification in msg['classifications']:
-                classes.append( cification['classId'] )
-                probs.append( cification['probability'] )
-            cassmsg = CassBrokerMessage(
-                diasource_id=msg['diaSourceId'],
-                brokername=msg['brokerName'],
-                topicname=msgmeta['topic'],
-                streammessage_id=msgmeta['msgoffset'],
-                alert_id=msg['alertId'],
-                msghdrtimestamp=msgmeta['timestamp'],
-                elasticcpublishtimestamp=msg['elasticcPublishTimestamp'],
-                brokeringesttimestamp=msg['brokerIngestTimestamp'],
-                brokerversion=msg['brokerVersion'],
-                classifiername=msg['classifierName'],
-                classifierparams=msg['classifierParams'],
-                classid=classes,
-                probability=probs
-            )
-            cassmsg.save()
 
-        # Update the log of new broker source ids
-        BrokerSourceIds.add_batch( sourceids )
-
-        logger.debug( f"Classifiers in the messages lost loaded: {cfers.keys()}" )
-        
         # Create any classifiers that don't already exist; this
         # is one place where we do get efficiency by calling
         # this batch method.
@@ -1103,27 +1075,64 @@ class CassBrokerMessage(DjangoCassandraModel):
                         models.Q( classifierparams = cfer['classifierparams'] ) )
             cferconds |= newcond
         curcfers = BrokerClassifier.objects.filter( cferconds )
-        known_classifiers = []
+        numknown = 0
         for cur in curcfers:
-            known_classifiers.append( f"{cur.brokername}_{cur.brokerversion}_"
-                                      f"{cur.classifiername}_{cur.classifierparams}" )
-        logger.debug( f'Found {len(known_classifiers)} existing classifiers that match the ones in this batch.' )
+            keycfer = f"{cur.brokername}_{cur.brokeversion}_{cur.classifiername}_{cur.classifierparms}"
+            cfers[ keycfer ][ 'classifier_id' ] = cur.classifier_id
+            numknown += 1
+        logger.debug( f'Found {numknown} existing classifiers that match the ones in this batch.' )
 
         # Create new classifiers as necessary
 
         kwargses = []
-        for cferkey, cfer in cfers.items():
-            if cferkey not in known_classifiers:
+        ncferstoadd = 0
+        for keycfer, cfer in cfers.items():
+            if cfer[ 'classifier_id' ] is None:
                 kwargses.append( { 'brokername': cfer['brokername'],
                                    'brokerversion': cfer['brokerversion'],
                                    'classifiername': cfer['classifiername'],
                                    'classifierparams': cfer['classifierparams'] } )
+                ncferstoadd += 1
         ncferstoadd = len(kwargses)
         logger.debug( f'Adding {ncferstoadd} new classifiers.' )
         if ncferstoadd > 0:
             objs = ( BrokerClassifier( **k ) for k in kwargses )
             batch = list( itertools.islice( objs, len(kwargses) ) )
             newcfers = BrokerClassifier.objects.bulk_create( batch, len(kwargses) )
+            for newcfer in newcfers:
+                keycfer = ( f'{newcfer.brokername}_{newcfer.brokerversion}_'
+                            f'{newcfer.classifiername}_{newcfer.classifierparams}' )
+                cfers[keycfer]['classifier_id'] = newcfer.classifier_id
+
+        for i, msgmeta in enumerate( messages ):
+            msg = msgmeta['msg']
+            if len( msg['classifications' ] ) == 0:
+                    continue
+            keycfer = f"{msg['brokerName']}_{msg['brokerVersion']}_{msg['classifierName']}_{msg['classifierParams']}"
+            classes = []
+            probs = []
+            for cification in msg['classifications']:
+                classes.append( cification['classId'] )
+                probs.append( cification['probability'] )
+            cassmsg = CassBrokerMessage(
+                diasource_id=msg['diaSourceId'],
+                classifier_id=cfers[ keycfer ][ 'classifier_id' ],
+                topicname=msgmeta['topic'],
+                streammessage_id=msgmeta['msgoffset'],
+                alert_id=msg['alertId'],
+                msghdrtimestamp=msgmeta['timestamp'],
+                elasticcpublishtimestamp=msg['elasticcPublishTimestamp'],
+                brokeringesttimestamp=msg['brokerIngestTimestamp'],
+                classid=classes,
+                probability=probs
+            )
+            cassmsg.save()
+
+        # Update the log of new broker source ids
+        BrokerSourceIds.add_batch( sourceids )
+
+        logger.debug( f"Classifiers in the messages lost loaded: {cfers.keys()}" )
+
 
         # return newcfications
         return { "addedmsgs": len(messages),

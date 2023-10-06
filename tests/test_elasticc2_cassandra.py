@@ -18,6 +18,8 @@ import elasticc2.models as m
 
 class TestElasticc2Cassandra:
 
+    #TODO lots more
+
     @pytest.fixture(scope='class')
     def load_some( self ):
         brokers = {
@@ -41,6 +43,7 @@ class TestElasticc2Cassandra:
         maxcls = 20
 
         msgs = []
+        classifier_id = 0
         for brokername, brokerspec in brokers.items():
             for brokerversion, versionspec in brokerspec.items():
                 for classifiername, clsspec in versionspec.items():
@@ -60,16 +63,15 @@ class TestElasticc2Cassandra:
                             probs.append( probleft )
 
                         msg = m.CassBrokerMessage( sourceid=src,
-                                                   brokername=brokername,
+                                                   classifier_id=classifier_id,
                                                    alertid=src,
                                                    elasticcpublishtimestmp=datetime.datetime.now( tz=pytz.utc ),
                                                    brokeringesttimestamp=datetime.datetime.now( tz=pytz.utc ),
-                                                   brokerversion=brokerversion,
-                                                   classifiername=classifiername,
-                                                   classifierparams=classifierparams,
                                                    classid=classes,
                                                    probability=probs )
                         msgs.append( msg )
+
+                        classifier_id += 1
 
         m.CassBrokerMessage.objects.bulk_create( msgs )
 
@@ -77,7 +79,7 @@ class TestElasticc2Cassandra:
 
         conn = django.db.connections['cassandra'].cursor().connection
         conn.execute( "TRUNCATE TABLE tom_desc.cass_broker_message" )
-        
+
 
     def test_some_loaded( self, load_some ):
         import pdb; pdb.set_trace()
