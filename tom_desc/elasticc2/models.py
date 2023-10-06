@@ -55,6 +55,7 @@ _logger.setLevel( logging.INFO )
 
 class BaseDiaObject(Createable):
     diaobject_id = models.BigIntegerField( primary_key=True, unique=True, db_index=True )
+    isddf = models.BooleanField( default=False )
     simversion = models.TextField( null=True )
     ra = models.FloatField( )
     decl = models.FloatField( )
@@ -137,7 +138,7 @@ class BaseDiaObject(Createable):
     _pk = 'diaobject_id'
 
     # WARNING : I later assume that these are in the same order as _create_kws in DiaObject
-    _create_kws = [ _pk, 'simversion', 'ra', 'decl', 'mwebv', 'mwebv_err', 'z_final', 'z_final_err' ]
+    _create_kws = [ _pk, 'isddf', 'simversion', 'ra', 'decl', 'mwebv', 'mwebv_err', 'z_final', 'z_final_err' ]
     for _gal in [ "", "2" ]:
         _create_kws.append( f'hostgal{_gal}_zspec' )
         _create_kws.append( f'hostgal{_gal}_zspec_err' )
