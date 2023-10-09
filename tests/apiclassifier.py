@@ -1,5 +1,6 @@
 import sys
 import io
+import time
 import pathlib
 import argparse
 import logging
@@ -57,7 +58,7 @@ class APIClassifier:
             brokermsgs.append( brokermsg )
 
         res = self.tomclient.request( "PUT", "elasticc2/brokermessage/", json=brokermsgs )
-            
+
 
 # ======================================================================
 
@@ -66,7 +67,7 @@ def main():
                                       formatter_class=argparse.ArgumentDefaultsHelpFormatter )
     parser.add_argument( "--source", default="brahms.lbl.gov:9092",
                          help="Server to pull ELAsTiCC alerts from" )
-    parser.add_argument( "-t", "--source-topic", required=True, help="Topic on source server" )
+    parser.add_argument( "-t", "--source-topics", nargs='+', required=True, help="Topics on source server" )
     parser.add_argument( "-g", "--group-id", default="rknop-test",
                          help="Group ID to use on source server" )
     parser.add_argument( "-r", "--reset", action='store_true', default=False,
@@ -84,44 +85,62 @@ def main():
 
     if ( args.tom_user is None ) or ( args.tom_password is None ):
         raise RuntimeError( "--tom-user and --tom-password are required" )
-    
+
     alertschema = fastavro.schema.load_schema( args.alert_schema )
     brokermsgschema = fastavro.schema.load_schema( args.brokermessage_schema )
 
     cfer = APIClassifier( "apiclassifier", "1.0", "AlwaysTheSame", "0.5 111, 0.75 112",
                           args.tom_user, args.tom_password, alertschema )
-    
-    # Wait for the topic to exist, and only then subscribe
-    
-    done = False
+
+    def handle_message_batch( msgs ):
+        cfer.classify_alerts( msgs )
+
     consumer = None
-    while not done:
+    if args.reset:
+        topicstoreset = set( args.source_topics )
+    else:
+        topicstoreset = set()
+
+    subbed = []
+    missing = []
+
+    # TODO: make this a loop so it can suck in new topics, but also make
+    # it so that there is a way to tell it to just run once, or a few
+    # times.  (Right now that's handled by the stopafternsleeps in
+    # cosumer.poll_loop.)
+
+    while len(subbed) == 0:
         if consumer is not None:
             consumer.close()
         consumer = MsgConsumer( args.source, args.group_id, [], args.alert_schema, logger=_logger,
                                 consume_nmsgs=100 )
         topics = consumer.topic_list()
-        if args.source_topic in topics:
-            consumer.subscribe( [ args.source_topic ] )
-            done = True
+        for topic in args.source_topics:
+            if topic in topics:
+                subbed.append( topic )
+            else:
+                missing.append( topic )
+        if len( subbed ) > 0:
+            consumer.subscribe( subbed )
+            _logger.info( f"Subscribed to topics {subbed}" )
+            if len( missing ) > 0:
+                _logger.warning( f"(Didn't see topics {missing}, proceeding anyway." )
         else:
-            _logger.warning( f"Topic {args.source_topic} doesn't exist, sleeping 10s and trying again." )
+            _logger.warning( f"No topics in {args.source_topics} exist, sleeping 10s and trying again." )
             time.sleep(10)
 
-    if args.reset:
-        consumer.reset_to_start( args.source_topic )
+    if len( topicstoreset ) > 0:
+        for topic in subbed:
+            if topic in topicstoreset:
+                consumer.reset_to_start( topic )
+                topicstoreset.remove( topic )
 
-    def handle_message_batch( msgs ):
-        cfer.classify_alerts( msgs )
-        
     consumer.poll_loop( handler = handle_message_batch,
                         stopafter=datetime.timedelta(days=3650),
                         stopafternsleeps=args.stop_after_sleeps )
-    
-                          
 
 # ======================================================================
 
 if __name__ == "__main__":
     main()
-    
+

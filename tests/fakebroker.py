@@ -42,7 +42,7 @@ class Classifier:
         self.nclassified = 0
         self.logevery = 10
         self.nextlog = self.logevery
-        
+
     def determine_types_and_probabilities( self, alert ):
         """Given an alert (a dict in the format of the elasticc alert schema), return a list of 
         two-element tuples that is (classId, probability)."""
@@ -77,7 +77,7 @@ class Classifier:
         if ( self.nclassified > self.nextlog ):
             _logger.info( f"{self.classifiername} has classified {self.nclassified} alerts" )
             self.nextlog = self.logevery * ( math.floor( self.nclassified / self.logevery ) + 1 )
-            
+
 # ======================================================================
 
 class NugentClassifier(Classifier):
@@ -93,7 +93,7 @@ class RandomSNType(Classifier):
     def __init__( self, *args, **kwargs ):
         super().__init__( "FakeBroker", "v1.0", "RandomSNType", "Perfect", **kwargs )
         random.seed()
-        
+
     def determine_types_and_probabilities( self, alert ):
         totprob = 0.
         types = [ 2222, 2223, 2224, 2225, 2226,
@@ -110,7 +110,7 @@ class RandomSNType(Classifier):
         # SLSN seems to be the default type....
         retval.append( ( 2242, 1-totprob ) )
         return retval
-        
+
 # ======================================================================        
 
 def main():
@@ -118,7 +118,7 @@ def main():
                                       formatter_class=argparse.ArgumentDefaultsHelpFormatter )
     parser.add_argument( "--source", default="brahms.lbl.gov:9092",
                          help="Server to pull ELAsTiCC alerts from" )
-    parser.add_argument( "-t", "--source-topic", required=True, help="Topic on source server" )
+    parser.add_argument( "-t", "--source-topics", nargs='+', required=True, help="Topics on source server" )
     parser.add_argument( "-g", "--group-id", default="rknop-test",
                          help="Group ID to use on source server" )
     parser.add_argument( "-r", "--reset", action='store_true', default=False,
@@ -131,7 +131,7 @@ def main():
     parser.add_argument( "-b", "--brokermessage-schema",
                          default=f"{_rundir.parent}/alert_schema/elasticc.v0_9_1.brokerClassification.avsc",
                          help="File with broker message alert schema" )
-    
+
     args = parser.parse_args()
 
     alertschema = fastavro.schema.load_schema( args.alert_schema )
@@ -141,33 +141,51 @@ def main():
                     RandomSNType(  kafkaserver=args.dest, topic=args.dest_topic,
                                    alertschema=alertschema, brokermessageschema=brokermsgschema )
                    ]
-    
-    # Wait for the topic to exist, and only then subscribe
-    
-    done = False
-    consumer = None
-    while not done:
-        if consumer is not None:
-            consumer.close()
-        consumer = MsgConsumer( args.source, args.group_id, [], args.alert_schema, logger=_logger,
-                                consume_nmsgs=100 )
-        topics = consumer.topic_list()
-        if args.source_topic in topics:
-            consumer.subscribe( [ args.source_topic ] )
-            done = True
-        else:
-            _logger.warning( f"Topic {args.source_topic} doesn't exist, sleeping 10s and trying again." )
-            time.sleep(10)
-
-    if args.reset:
-        consumer.reset_to_start( args.source_topic )
 
     def handle_message_batch( msgs ):
         for cfer in classifiers:
             cfer.classify_alerts( msgs )
-        
-    consumer.poll_loop( handler = handle_message_batch, stopafter=datetime.timedelta(days=3650) )
-    
+
+    # We're going to restart every 10 minutes or so in order to rescan for topics
+    if args.reset:
+        topicstoreset = set( args.source_topics )
+    else:
+        topicstoreset = set()
+    consumer = None
+    while True:
+        subbed = []
+        if consumer is not None:
+            consumer.close()
+        consumer = MsgConsumer( args.source, args.group_id, [], args.alert_schema, logger=_logger,
+                                consume_nmsgs=100 )
+        # Wait for the topic to exist, and only then subscribe
+        while len(subbed) == 0:
+            topics = consumer.topic_list()
+            _logger.info( f"Topics seen on server: {topics}" )
+            for topic in args.source_topics:
+                if topic in topics:
+                    subbed.append( topic )
+            if len(subbed) > 0:
+                _logger.info( f"Subscribing to topics {subbed}" )
+                if len(subbed) < len( args.source_topics ):
+                    missing = [ i for i in args.source_topics if i not in subbed ]
+                    _logger.info( f"(Didn't see topics: {missing})" )
+                consumer.subscribe( subbed )
+            else:
+                _logger.warning( f"No topics in {args.source_topics} exists, sleeping 10s and trying again." )
+                time.sleep( 10 )
+
+            if len(topicstoreset) > 0:
+                for topic in subbed:
+                    if topic in topicstoreset:
+                        consumer.reset_to_start( topic )
+                        topicstoreset.remove( topic )
+
+        consumer.poll_loop( handler = handle_message_batch, stoponnomessages=(len(subbed)<len(args.source_topics)),
+                            stopafter=datetime.timedelta(minutes=10) )
+        _logger.info( f"Gratuitously sleeping 10s after return from consumer.poll_loop" )
+        time.sleep( 10 )
+
 # ======================================================================
 
 if __name__ == "__main__":

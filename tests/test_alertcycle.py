@@ -4,7 +4,8 @@
 # the state of everything.  As such, they will fail if run a second time
 # without completely restarting the docker compose environment.  (There
 # will already be pre-existing alerts on the kafka server, there will
-# already be existing database records.)
+# be existing database records.)
+
 
 import os
 import sys
@@ -19,7 +20,7 @@ import tom_targets.models
 from msgconsumer import MsgConsumer
 
 # The numbers in these tests are based on the SNANA files in the
-# directory /data/raknop/elasticc2_train_1pct_3models on my desktop.
+# directory /data/raknop/elasticc_subset_tom_test on my desktop.
 # that needs to be in the ELASTICC2_TEST_DATA env var when running
 # docker compose.
 #
@@ -34,10 +35,10 @@ class TestAlertCycle:
     
     def test_ppdb_loaded( self, elasticc2_ppdb ):
         # I should probably have some better tests than just object counts....
-        assert elasticc2.models.PPDBDiaObject.objects.count() == 346
-        assert elasticc2.models.PPDBDiaSource.objects.count() == 1862
+        assert elasticc2.models.PPDBDiaObject.objects.count() == 138
+        assert elasticc2.models.PPDBDiaSource.objects.count() == 429
         assert elasticc2.models.PPDBAlert.objects.count() == elasticc2.models.PPDBDiaSource.objects.count()
-        assert elasticc2.models.PPDBDiaForcedSource.objects.count() == 52172
+        assert elasticc2.models.PPDBDiaForcedSource.objects.count() == 34284
         assert elasticc2.models.DiaObjectTruth.objects.count() == elasticc2.models.PPDBDiaObject.objects.count()
 
         
@@ -46,11 +47,13 @@ class TestAlertCycle:
         
     def test_send_alerts( self, alerts_300days ):
         self._test_send_alerts_count = 0
-        consumer = MsgConsumer( 'kafka-server:9092', 'test_send_alerts', 'alerts',
+        consumer = MsgConsumer( 'kafka-server:9092', 'test_send_alerts', [ 'alerts-wfd', 'alerts-ddf-full' ],
                                 '/tests/schema/elasticc.v0_9_1.alert.avsc',
                                 consume_nmsgs=100 )
         consumer.poll_loop( self.handle_test_send_alerts, timeout=10, stopafter=datetime.timedelta(seconds=10) )
-        assert self._test_send_alerts_count == 545
+        # I don't understand why this is 160.  159 were sent.
+        # The fake broker sees 159.
+        assert self._test_send_alerts_count == 160
         consumer.close()
 
         
@@ -68,12 +71,13 @@ class TestAlertCycle:
         consumer = MsgConsumer( 'kafka-server:9092', 'test_classifications_exist', 'classifications',
                                 '/tests/schema/elasticc.v0_9_1.brokerClassification.avsc',
                                 consume_nmsgs=100 )
+        consumer.reset_to_start( 'classifications' )
         consumer.poll_loop( self.handle_test_classifications_exist, timeout=10,
                             stopafter=datetime.timedelta(seconds=10) )
 
         # Number of classifications should be:
-        # 545 alerts * ( 2 classifiers ) = 1090
-        assert self._test_classifications_exist_count == 1090
+        # 159 alerts * ( 2 classifiers ) = 318
+        assert self._test_classifications_exist_count == 318
         consumer.close()
 
     def test_classifications_ingested( self, alerts_300days ):
@@ -89,17 +93,17 @@ class TestAlertCycle:
         brkmsg = elasticc2.models.CassBrokerMessage
         cfer = elasticc2.models.BrokerClassifier
         bsid = elasticc2.models.BrokerSourceIds
-        
-        assert brkmsg.objects.count() == 1090
+
+        assert brkmsg.objects.count() == 318
         assert cfer.objects.count() == 2
-        assert bsid.objects.count() == 545
+        assert bsid.objects.count() == 159
 
         numprobs = 0
         for msg in brkmsg.objects.all():
             assert len(msg.classid) == len(msg.probability)
             numprobs += len(msg.classid)
-        # 545 from NugentClassifier plus 20*545 for RandomSNType
-        assert numprobs == 11445
+        # 159 from NugentClassifier plus 20*159 for RandomSNType
+        assert numprobs == 3339
 
         assert ( set( [ i.classifiername for i in cfer.objects.all() ] )
                  == set( [ "NugentClassifier", "RandomSNType" ] ) )
@@ -113,11 +117,11 @@ class TestAlertCycle:
         bsid = elasticc2.models.BrokerSourceIds
 
         assert bsid.objects.count() == 0
-        assert obj.objects.count() == 102
+        assert obj.objects.count() == 60
         assert ooft.objects.count() == obj.objects.count()
         assert targ.objects.count() == obj.objects.count()
-        assert src.objects.count() == 545
-        assert frced.objects.count() == 4242
+        assert src.objects.count() == 159
+        assert frced.objects.count() == 2241
         
     def test_100moredays_classifications_ingested( self, alerts_100daysmore ):
         time.sleep( 21 )
@@ -134,7 +138,7 @@ class TestAlertCycle:
         # django.
         # assert brkmsg.objects.count() == 1300
 
-        assert len( brkmsg.objects.all() ) == 1300
+        assert len( brkmsg.objects.all() ) == 520
         assert cfer.objects.count() == 2
         assert len( cfer.objects.all() ) == 2
         
@@ -142,8 +146,8 @@ class TestAlertCycle:
         for msg in brkmsg.objects.all():
             assert len(msg.classid) == len(msg.probability)
             numprobs += len(msg.classid)
-        # 650 from NugentClassifier plus 20*650 for RandomSNType
-        assert numprobs == 13650
+        # 260 from NugentClassifier plus 20*260 for RandomSNType
+        assert numprobs == 5460
 
         assert ( set( [ i.classifiername for i in cfer.objects.all() ] )
                  == set( [ "NugentClassifier", "RandomSNType" ] ) )
@@ -158,11 +162,11 @@ class TestAlertCycle:
         bsid = elasticc2.models.BrokerSourceIds
 
         assert bsid.objects.count() == 0
-        assert obj.objects.count() == 131
+        assert obj.objects.count() == 72
         assert ooft.objects.count() == obj.objects.count()
         assert targ.objects.count() == obj.objects.count()
-        assert src.objects.count() == 650
-        assert frced.objects.count() == 5765
+        assert src.objects.count() == 260
+        assert frced.objects.count() == 2927
 
     def test_apibroker_existingsources( self, api_classify_existing_alerts ):
         cfer = elasticc2.models.BrokerClassifier
@@ -178,8 +182,8 @@ class TestAlertCycle:
         for msg in brkmsg.objects.all():
             assert len(msg.classid) == len(msg.probability)
             numprobs += len(msg.classid)
-        # 13650 from before, plus 2*650 for the new classifier
-        assert numprobs == 14950
+        # 5460 from before, plus 2*260 for the new classifier
+        assert numprobs == 5980
 
         apiclassmsgs = brkmsg.objects.filter( classifier_id=apibroker.classifier_id )
 

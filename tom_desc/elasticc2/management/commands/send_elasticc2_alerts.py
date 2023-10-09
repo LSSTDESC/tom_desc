@@ -41,7 +41,10 @@ class Command(BaseCommand):
                                     "is 8:00 Cero Pachon time, which should be after a night's worth of "
                                     "observations." ) )
         parser.add_argument( '-k', '--kafka-server', default='brahms.lbl.gov:9092', help="Kafka server to stream to" )
-        parser.add_argument( '-t', '--kafka-topic', default='elasticc-test-20230418', help="Kafka topic" )
+        parser.add_argument( '--wfd-topic', default='alerts-wfd', help="Topic to stream WFD alerts to" )
+        parser.add_argument( '--ddf-full-topic', default='alerts-ddf-full', help="Topic to stream full DDF alerts to" )
+        parser.add_argument( '--ddf-limited-topic', default='alerts-ddf-limited',
+                             help="Topic to stream limited DDF alerts to" )
         parser.add_argument( '-s', '--alert-schema', default=f'{_rundir}/elasticc.v0_9_1.alert.avsc',
                              help='File with AVRO schema' )
         parser.add_argument( '--daily-delay', type=float, default=0.,
@@ -62,7 +65,7 @@ class Command(BaseCommand):
         for sa in sentalerts:
             sa.alertsenttimestamp = datetime.datetime.now( datetime.timezone.utc )
             sa.save()
-        
+
     def handle( self, *args, **options ):
 
         # There is a race condition built-in here -- if the file is created by
@@ -81,7 +84,7 @@ class Command(BaseCommand):
                 ofp.write( f"{datetime.datetime.now().isoformat()} on host {socket.gethostname()}\n" )
 
             self.logger.info( "Figuring out starting day" )
-                
+
             if ( ( ( options['through_day'] is None ) == ( options['added_days'] is None ) )
                  or
                  ( ( options['through_day'] is None ) and ( options['added_days'] is None ) ) ):
@@ -107,9 +110,10 @@ class Command(BaseCommand):
                     t = firstalertquery[0].diasource.midpointtai - 1
                     self.logger.info( f"First alert is at MJD {t+1}" )
                 through_day = math.floor( t + 0.5 ) + options['added_days'] + 0.5
-            
+
             self.logger.info( "**** streaming starting ****" )
-            self.logger.info( f"Streaming to {options['kafka_server']} topic {options['kafka_topic']}" )
+            self.logger.info( f"Streaming to {options['kafka_server']} topics "
+                              f"{options['wfd_topic']}, {options['ddf_full_topic']}, {options['ddf_limited_topic']}" )
             self.logger.info( f"Streaming alerts through midPointTai {through_day}" )
 
             alerts = ( PPDBAlert.objects
@@ -133,6 +137,7 @@ class Command(BaseCommand):
             totflushed = 0
             lastmjd = -99999
             nextlog = 0
+            nddf = 0
             for i, alert in enumerate( alerts ):
 
                 if ( options['log_every'] > 0 ) and ( i >= nextlog ):
@@ -153,10 +158,20 @@ class Command(BaseCommand):
                     lastmjd = alert.midPointTai
                     ids_produced = []
 
-                msgio = io.BytesIO()
-                fastavro.write.schemaless_writer( msgio, schema, alert.reconstruct() )
+                fullmsgio = io.BytesIO()
+                limitedmsgio = io.BytesIO()
+                fastavro.write.schemaless_writer( fullmsgio, schema, alert.reconstruct( daysprevious=365 ) )
+                isddf = alert.diaobject.isddf
+                if isddf:
+                    fastavro.write.schemaless_writer( limitedmsgio, schema, alert.reconstruct( daysprevious=30 )  )
+                    nddf += 1
+
                 if options['do']:
-                    producer.produce( options['kafka_topic'], msgio.getvalue() )
+                    if isddf:
+                        producer.produce( options['ddf_full_topic'], fullmsgio.getvalue() )
+                        producer.produce( options['ddf_limited_topic'], limitedmsgio.getvalue() )
+                    else:
+                        producer.produce( options['wfd_topic'], fullmsgio.getvalue() )
                     ids_produced.append( alert.alert_id )
 
                 if len(ids_produced) >= options['flush_every']:
@@ -165,7 +180,7 @@ class Command(BaseCommand):
                         totflushed += len( ids_produced )
                         self.update_alertsent( ids_produced )
                     ids_produced = []
-                    
+
             if len(ids_produced) > 0:
                 if options['do']:
                     producer.flush()
@@ -173,6 +188,13 @@ class Command(BaseCommand):
                     self.update_alertsent( ids_produced )
                 ids_produced = []
 
-            self.logger.info( f"**** Done sending {len(alerts)} alerts; {totflushed} flushed ****" )
+            self.logger.info( f"**** Done sending {len(alerts)} alerts (incl. {nddf} DDF); {totflushed} flushed ****" )
+            self.logger.info( f"Timings:\n"
+                              f"           sourcetime : {PPDBAlert._sourcetime}\n"
+                              f"           objecttime : {PPDBAlert._objecttime}\n"
+                              f"   objectoverheadtime : {PPDBAlert._objectoverheadtime}\n"
+                              f"        prvsourcetime : {PPDBAlert._prvsourcetime}\n"
+                              f"  prvforcedsourcetime : {PPDBAlert._prvforcedsourcetime}\n"
+                             )
         finally:
             runningfile.unlink()

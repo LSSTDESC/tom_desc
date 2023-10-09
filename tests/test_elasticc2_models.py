@@ -49,11 +49,14 @@ class TestElasticc2Models:
         # This IN will be slow if the number of messages is too big (which it won't be)
         BrokerSourceIds.objects.filter( diasource_id__in=sourceids ).delete()
 
-    
+
     def test_hello_world( self ):
         # This is just here so I can get a timestamp to see how long the next test took
         assert True
-    
+
+
+    def test_alert_reconstruct( self, elasticc2_ppdb ):
+        pass
 
     def test_cassbrokermessage_bulk( self, loaded_broker_classifications ):
         assert CassBrokerMessage.objects.count() >= loaded_broker_classifications[ 'addedmsgs' ]

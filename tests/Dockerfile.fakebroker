@@ -31,7 +31,8 @@ COPY msgconsumer.py .
 COPY schema/ ./schema/
 
 ENTRYPOINT [ "python", "/fake/fakebroker.py", \
-             "--source", "kafka-server:9092", "-t", "alerts", \
+             "--source", "kafka-server:9092", "-t", "alerts-wfd", "alerts-ddf-full", \
              "--dest", "kafka-server:9092", "-u", "classifications", \
-             "-s", "/fake/schema/elasticc.v0_9_1.alert.avsc", \
-             "-b", "/fake/schema/elasticc.v0_9_1.brokerClassification.avsc" ]
+             "-b", "/fake/schema/elasticc.v0_9_1.brokerClassification.avsc", \
+             "-s", "/fake/schema/elasticc.v0_9_1.alert.avsc" \
+             ]

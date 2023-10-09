@@ -258,13 +258,19 @@ class BaseAlert(Createable):
         self._objectfields = None
         self._objectfieldmap = None
 
-    def reconstruct( self, objsources=None, objforced=None ):
+    def reconstruct( self, daysprevious=365, nprevious=None, objsources=None, objforced=None ):
         """Reconstruct the dictionary that represents this alert.
 
         It's not just a matter of dumping fields, as it also has to decide if the alert
         should include previous photometry and previous forced photometry, and then
         has to pull all that from the database.
 
+        daysprevious : How many days to go back to pull out previous sources
+           and forced sources.  Defaults to 365 days.
+        nprevious : If None, will include all previous sources and
+           forced sources going back daysprevious days.  If not None,
+           should be an integer; will only include this many previous
+           sources and forcedsources.
         For efficiency, some data can be passed in:
 
         objsources : a list of dictionaries with the fields from the ..DiaSource objects, sorted by midpointtai
@@ -319,15 +325,21 @@ class BaseAlert(Createable):
         if objsources is None:
             objsources = ( self._sourceclass.objects
                            .filter( diaobject_id=self.diasource.diaobject_id )
+                           .filter( midpointtai__gte=self.diasource.midpointtai - daysprevious )
                            .order_by( "midpointtai" )
                            .values() )
+        prvsources = []
         for prevsource in objsources:
             if prevsource['diasource_id'] == self.diasource.diasource_id: break
             newprevsource = {}
             for field in sourcefields:
                 newprevsource[field] = prevsource[ sourcefieldmap[ field ] ]
                                     #= getattr( prevsource, sourcefieldmap[ field ] )
-            alert["prvDiaSources"].append( newprevsource )
+            prvsources.append( newprevsource )
+        if ( nprevious is None ) or ( len(prvsources) < nprevious ):
+            alert["prvDiaSources"] = prvsources
+        else:
+            alert["prvDiaSources"] = prvsources[-nprevious:]
         self.__class__._prvsourcetime += time.perf_counter() - t0 
 
         # If this source is the same night as the original detection, then
@@ -344,15 +356,17 @@ class BaseAlert(Createable):
             if objforced is None:
                 objforced = ( self._forcedsourceclass.objects
                               .filter( diaobject_id=self.diasource.diaobject_id )
+                              .filter( midpointtai__gte=self.diasource.midpointtai - daysprevious )
                               .order_by( 'midpointtai' )
                               .values() )
-                if self.__class__._hackqueryshown < 10:
-                    _logger.info( f"alert reconstruct forced source query: {objforced.query}" )
-                    self.__class__._hackqueryshown += 1
+                # if self.__class__._hackqueryshown < 10:
+                #     _logger.info( f"alert reconstruct forced source query: {objforced.query}" )
+                #     self.__class__._hackqueryshown += 1
             # objforced = [ i for i in objforced if
             #               i['midpointtai'] >= objsources[0]['midpointtai']-30
             #              and i['midpointtai'] <= self.diasource.midpointtai ]
             # _logger.warn( f"Found {len(objforced)} previous" )
+            prvforcedsources= []
             for forced in objforced:
                 if forced['midpointtai'] < objsources[0]['midpointtai'] - 30:
                     continue
@@ -362,7 +376,11 @@ class BaseAlert(Createable):
                 for field in forcedsourcefields:
                     newforced[field] = forced[ forcedsourcefieldmap[ field ] ]
                                     #=getattr( forced, forcedsourcefieldmap[ field ] )
-                alert["prvDiaForcedSources"].append( newforced )
+                prvforcedsources.append( newforced )
+            if ( nprevious is None ) or ( len(prvforcedsources) < nprevious ):
+                alert["prvDiaForcedSources"] = prvforcedsources
+            else:
+                alert["prvDiaForcedSources"] = prvforcedsources[-nprevious:]
         # else:
         #     _logger.warn( "Not adding previous" )
         self.__class__._prvforcedsourcetime += time.perf_counter() - t0
@@ -376,7 +394,7 @@ class BaseAlert(Createable):
 
 class BaseObjectTruth(Createable):
 
-    # IMPORTANT: subclasses need a foreign key into the right diabobject table
+    # IMPORTANT: subclasses need a foreign key into the right diaobject table
     # diaobject = models.OneToOneField( BaseDiaObject, db_column='diaobject_id',
     #                                   on_delete=models.CASCADE, null=False, primary_key=True )
     libid = models.IntegerField( )
@@ -1017,8 +1035,8 @@ class BrokerSourceIds(models.Model):
 
 
 class CassBrokerMessage(DjangoCassandraModel):
-    diasource_id = columns.BigInt( primary_key=True )
     classifier_id = columns.BigInt( primary_key=True )
+    diasource_id = columns.BigInt( primary_key=True )
     id = columns.UUID( primary_key=True, default=uuid.uuid4 )
 
     topicname = columns.Text()

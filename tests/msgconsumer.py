@@ -142,7 +142,7 @@ class MsgConsumer(object):
         ofp.close()
 
     def poll_loop( self, handler=None, timeout=None, stopafter=datetime.timedelta(hours=1),
-                   stopafternsleeps=None ):
+                   stopafternsleeps=None, stoponnomessages=False ):
         """Calls handler with batches of messages."""
         if timeout is None:
             timeout = self.consume_timeout
@@ -157,9 +157,13 @@ class MsgConsumer(object):
                 if ( stopafternsleeps is not None ) and ( nsleeps >= stopafternsleeps ):
                     self.logger.info( f"Stopping after {nsleeps} consecutive sleeps." )
                     done = True
-                self.logger.info( f"No messages, sleeping {self.nomsg_sleeptime} sec" )
-                time.sleep( self.nomsg_sleeptime )
-                nsleeps += 1
+                if stoponnomessages:
+                    self.logger.info( f"No messages, ending poll_loop." )
+                    done = True
+                else:
+                    self.logger.info( f"No messages, sleeping {self.nomsg_sleeptime} sec" )
+                    time.sleep( self.nomsg_sleeptime )
+                    nsleeps += 1
             else:
                 nsleeps = 0
                 if handler is not None:

@@ -66,11 +66,14 @@ def elasticc2_ppdb( tomclient ):
 
 @pytest.fixture( scope="session" )
 def alerts_300days( elasticc2_ppdb ):
-    result = subprocess.run( [ "python", "manage.py", "send_elasticc2_alerts", "-d", "60578",
-                               "-k", "kafka-server:9092", "-t", f"alerts",
+    result = subprocess.run( [ "python", "manage.py", "send_elasticc2_alerts", "-d", "61098",
+                               "-k", "kafka-server:9092",
+                               "--wfd-topic", "alerts-wfd", "--ddf-full-topic", "alerts-ddf-full",
+                               "--ddf-limited-topic", "alerts-ddf-limited",
                                "-s", "/tests/schema/elasticc.v0_9_1.alert.avsc",
                                "-r", "sending_alerts_runningfile", "--do" ],
                                cwd="/tom_desc", capture_output=True )
+    sys.stderr.write( result.stderr.decode( 'utf-8' ) )
     assert result.returncode == 0
 
     yield True
@@ -104,10 +107,13 @@ def update_diasource_300days( alerts_300days ):
 @pytest.fixture( scope="session" )
 def alerts_100daysmore( alerts_300days ):
     result = subprocess.run( [ "python", "manage.py", "send_elasticc2_alerts", "-a", "100",
-                               "-k", "kafka-server:9092", "-t", f"alerts",
+                               "-k", "kafka-server:9092",
+                               "--wfd-topic", "alerts-wfd", "--ddf-full-topic", "alerts-ddf-full",
+                               "--ddf-limited-topic", "alerts-ddf-limited",
                                "-s", "/tests/schema/elasticc.v0_9_1.alert.avsc",
                                "-r", "sending_alerts_runningfile", "--do" ],
                                cwd="/tom_desc", capture_output=True )
+    sys.stderr.write( result.stderr.decode( 'utf-8' ) )
     assert result.returncode == 0
 
     yield True
@@ -126,11 +132,13 @@ def update_diasource_100daysmore( alerts_100daysmore ):
 
 @pytest.fixture( scope="session" )
 def api_classify_existing_alerts( alerts_100daysmore, apibroker_client ):
-    result = subprocess.run( [ "python", "apiclassifier.py", "--source", "kafka-server:9092", "-t", "alerts",
+    result = subprocess.run( [ "python", "apiclassifier.py", "--source", "kafka-server:9092",
+                               "-t", "alerts-wfd", "alerts-ddf-full",
                                "-g", "apibroker", "-u", "apibroker", "-p", "testing", "-s", "2",
                                "-a", "/tests/schema/elasticc.v0_9_1.alert.avsc",
                                "-b", "/tests/schema/elasticc.v0_9_1.brokerClassification.avsc"],
                              cwd="/tests", capture_output=True )
+    sys.stderr.write( result.stderr.decode( 'utf-8' ) )
     assert result.returncode == 0
 
     yield True
