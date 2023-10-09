@@ -1,4 +1,4 @@
-apiVersion: batch/v1beta1
+apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: tom-2-send-alerts
@@ -22,9 +22,13 @@ spec:
         spec:
           containers:
           - command: ['python']
+            # args: ['manage.py', 'send_elasticc2_alerts',
+            #    '-a', '36',
+            #    '-k', 'public.alerts.ztf.uw.edu:9092', '-t', 'elasticc2-pre-test-2023august-i1',
+            #    '--do']
             args: ['manage.py', 'send_elasticc2_alerts',
                '-a', '36',
-               '-k', 'public.alerts.ztf.uw.edu:9092', '-t', 'elasticc2-pre-test-2023august-i1',
+               '-k', 'kafka-server:9092', '-t', 'alerts',
                '--do']
             env:
             - name: DB_HOST
@@ -35,7 +39,15 @@ spec:
               value: fragile
             - name: DB_USER
               value: postgres
-            image: rknop/tom-desc-production
+            - name: CASSANDRA_HOST
+              value: tom-2-cassandra
+            - name: CASSANDRA_DB
+              value: tom_desc
+            - name: CASSANDRA_USER
+              value: cassandra
+            - name: CASSANDRA_PASSWORD
+              value: cassandra
+            image: registry.nersc.gov/m1727/raknop/tom_desc_extcode
             imagePullPolicy: Always
             name: tom-2-send-alerts
             resources: {}
@@ -66,6 +78,8 @@ spec:
           securityContext:
             fsGroup: 57177
           terminationGracePeriodSeconds: 30
+          imagePullSecrets:
+            - name: registry-nersc
           volumes:
           - name: tom-2-secrets
             secret:
@@ -76,6 +90,6 @@ spec:
               path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/production-2/tom_desc/tom_desc
               type: Directory
             name: tom-2-deployment
-  schedule: 0 0 * * *
+  schedule: 23 15 * * *
   successfulJobsHistoryLimit: 3
   suspend: false

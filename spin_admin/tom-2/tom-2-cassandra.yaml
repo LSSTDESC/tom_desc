@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tom-2-cassandra
+  namespace: desc-tom-2
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      workload.user.cattle.io/workloadselector: deployment-desc-tom-2-tom-2-cassandra
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+        cattle.io/timestamp: "2022-10-06T17:57:50Z"
+        field.cattle.io/ports: '[[]]'
+        nersc.gov/collab_uids: "70268"
+        nersc.gov/gid: "95089"
+        nersc.gov/gids: 45703,60152,57177,58102,59318,60070,63477,64483,79186,70268,92576,95089,96414
+        nersc.gov/roles: user
+        nersc.gov/uid: "95089"
+        nersc.gov/username: raknop
+      creationTimestamp: null
+      labels:
+        workload.user.cattle.io/workloadselector: deployment-desc-tom-2-tom-2-cassandra
+    spec:
+      containers:
+      - env:
+        - name: CASSANDRA_DATA_DIR
+          value: /var/lib/cassandra
+        image: registry.nersc.gov/m1727/raknop/tom_cassandra
+        imagePullPolicy: Always
+        name: tom-2-cassandra
+        resources: {}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            add:
+            - CHOWN
+            - DAC_OVERRIDE
+            - FOWNER
+            - SETGID
+            - SETUID
+            drop:
+            - ALL
+          privileged: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: false
+        stdin: true
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        tty: true
+        volumeMounts:
+        - mountPath: /var/lib/cassandra
+          name: tom-2-cassandra-pvc
+        - mountPath: /dev/shm
+          name: dshm
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+      imagePullSecrets:
+        - name: registry-nersc
+      volumes:
+      - name: tom-2-cassandra-pvc
+        persistentVolumeClaim:
+          claimName: tom-2-cassandra-pvc
+      - emptyDir:
+          medium: Memory
+          sizeLimit: 128Gi
+        name: dshm
+

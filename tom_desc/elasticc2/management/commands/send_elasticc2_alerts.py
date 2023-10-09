@@ -105,7 +105,7 @@ class Command(BaseCommand):
                     self.logger.info( "No alerts have been sent yet, figuring out the time of the first one." )
                     firstalertquery = PPDBAlert.objects.order_by( 'diasource__midpointtai' )
                     t = firstalertquery[0].diasource.midpointtai - 1
-                    self.logger.info( "First alert is at MJD {t+1}" )
+                    self.logger.info( f"First alert is at MJD {t+1}" )
                 through_day = math.floor( t + 0.5 ) + options['added_days'] + 0.5
             
             self.logger.info( "**** streaming starting ****" )

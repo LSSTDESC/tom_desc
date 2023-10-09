@@ -32,6 +32,14 @@ spec:
           value: fragile
         - name: DB_USER
           value: postgres
+        - name: CASSANDRA_HOST
+          value: tom-2-cassandra
+        - name: CASSANDRA_DB
+          value: tom_desc
+        - name: CASSANDRA_USER
+          value: cassandra
+        - name: CASSANDRA_PASSWORD
+          value: cassandra
         - name: FINK_GROUP_ID
           value: lsstfr-johann
         - name: FINK_SERVER
@@ -44,7 +52,7 @@ spec:
           value: /secrets/pitt_google_auth_key.json
         - name: GOOGLE_CLOUD_PROJECT
           value: elasticc-challenge
-        image: rknop/tom_desc:tom2
+        image: registry.nersc.gov/m1727/raknop/tom_desc_extcode
         imagePullPolicy: Always
         name: tom-2-app-shell
         resources: {}
@@ -79,6 +87,8 @@ spec:
       securityContext:
         fsGroup: 57177
       terminationGracePeriodSeconds: 30
+      imagePullSecrets:
+        - name: registry-nersc
       volumes:
       - name: tom-2-secrets
         secret:
