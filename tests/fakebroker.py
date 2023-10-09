@@ -85,7 +85,7 @@ class NugentClassifier(Classifier):
         super().__init__( "FakeBroker", "v1.0", "NugentClassifier", "100%", **kwargs )
 
     def determine_types_and_probabilities( self, alert ):
-        return [ ( 111, 1.0 ) ]
+        return [ ( 2222, 1.0 ) ]
 
 # ======================================================================
 
@@ -96,14 +96,19 @@ class RandomSNType(Classifier):
         
     def determine_types_and_probabilities( self, alert ):
         totprob = 0.
-        types = [ 111, 112, 113, 114, 115, 135 ]
+        types = [ 2222, 2223, 2224, 2225, 2226,
+                  2232, 2233, 2234, 2235,
+                  2243, 2244, 2245, 2246,
+                  2322, 2323, 2324, 2325, 2326,
+                  2332 ]
         retval = []
+        random.shuffle( types )
         for sntype in types:
             thisprob = random.random() * ( 1 - totprob )
             totprob += thisprob
             retval.append( ( sntype, thisprob ) )
         # SLSN seems to be the default type....
-        retval.append( ( 131, 1-totprob ) )
+        retval.append( ( 2242, 1-totprob ) )
         return retval
         
 # ======================================================================        

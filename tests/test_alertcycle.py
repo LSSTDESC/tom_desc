@@ -18,10 +18,10 @@ import tom_targets.models
 
 from msgconsumer import MsgConsumer
 
-# The numbers in these tests are based on the SNANA files in
-# the directory /data/raknop/elasticc2_train_1pct_3models;
-# that needs to be in the ELASTICC2_TEST_DATA env var
-# when running docker compose.
+# The numbers in these tests are based on the SNANA files in the
+# directory /data/raknop/elasticc2_train_1pct_3models on my desktop.
+# that needs to be in the ELASTICC2_TEST_DATA env var when running
+# docker compose.
 #
 # HARDCORE TODO: get the test data set integrated into the archive
 # somehow!  Or, at the very least, somewhere it can be downloaded.
@@ -70,6 +70,9 @@ class TestAlertCycle:
                                 consume_nmsgs=100 )
         consumer.poll_loop( self.handle_test_classifications_exist, timeout=10,
                             stopafter=datetime.timedelta(seconds=10) )
+
+        # Number of classifications should be:
+        # 545 alerts * ( 2 classifiers ) = 1090
         assert self._test_classifications_exist_count == 1090
         consumer.close()
 
@@ -79,8 +82,9 @@ class TestAlertCycle:
         # ended up in the database.
         # Sleep another 10 seconds; the broker poller itself has a 10s loop for
         # looking for topics on the kafka server, so potentially that could be a full
-        # 10s later than when the fakebrokers 10s timeout finished.
-        time.sleep( 10 )
+        # 10s later than when the fakebrokers 10s timeout finished.  (Give it
+        # another second to actually run, and/or to deal with roundoff error.)
+        time.sleep( 11 )
 
         brkmsg = elasticc2.models.CassBrokerMessage
         cfer = elasticc2.models.BrokerClassifier
@@ -94,8 +98,8 @@ class TestAlertCycle:
         for msg in brkmsg.objects.all():
             assert len(msg.classid) == len(msg.probability)
             numprobs += len(msg.classid)
-        # 545 from NugentClassifier plus 7*545 for RandomSNType
-        assert numprobs == 4360
+        # 545 from NugentClassifier plus 20*545 for RandomSNType
+        assert numprobs == 11445
 
         assert ( set( [ i.classifiername for i in cfer.objects.all() ] )
                  == set( [ "NugentClassifier", "RandomSNType" ] ) )
@@ -116,7 +120,7 @@ class TestAlertCycle:
         assert frced.objects.count() == 4242
         
     def test_100moredays_classifications_ingested( self, alerts_100daysmore ):
-        time.sleep( 20 )
+        time.sleep( 21 )
 
         brkmsg = elasticc2.models.CassBrokerMessage
         cfer = elasticc2.models.BrokerClassifier
@@ -138,8 +142,8 @@ class TestAlertCycle:
         for msg in brkmsg.objects.all():
             assert len(msg.classid) == len(msg.probability)
             numprobs += len(msg.classid)
-        # 650 from NugentClassifier plus 7*650 for RandomSNType
-        assert numprobs == 5200
+        # 650 from NugentClassifier plus 20*650 for RandomSNType
+        assert numprobs == 13650
 
         assert ( set( [ i.classifiername for i in cfer.objects.all() ] )
                  == set( [ "NugentClassifier", "RandomSNType" ] ) )
@@ -174,8 +178,8 @@ class TestAlertCycle:
         for msg in brkmsg.objects.all():
             assert len(msg.classid) == len(msg.probability)
             numprobs += len(msg.classid)
-        # 5200 from before, plus 2*650 for the new classifier
-        assert numprobs == 6500
+        # 13650 from before, plus 2*650 for the new classifier
+        assert numprobs == 14950
 
         apiclassmsgs = brkmsg.objects.filter( classifier_id=apibroker.classifier_id )
 
