@@ -27,8 +27,11 @@ spec:
             #    '-k', 'public.alerts.ztf.uw.edu:9092', '-t', 'elasticc2-pre-test-2023august-i1',
             #    '--do']
             args: ['manage.py', 'send_elasticc2_alerts',
-               '-a', '36',
-               '-k', 'kafka-server:9092', '-t', 'alerts',
+               '-a', '3',
+               '-k', 'kafka-server:9092',
+               '--wfd-topic', 'alerts-wfd',
+               '--ddf-full-topic', 'alerts-ddf-full',
+               '--ddf-limited-topic', 'alerts-ddf-limited',
                '--do']
             env:
             - name: DB_HOST
@@ -90,6 +93,7 @@ spec:
               path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/production-2/tom_desc/tom_desc
               type: Directory
             name: tom-2-deployment
-  schedule: 23 15 * * *
+  # schedule: 0 0 * * *
+  schedule: 58 21 * * *
   successfulJobsHistoryLimit: 3
   suspend: false

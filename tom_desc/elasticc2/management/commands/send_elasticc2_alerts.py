@@ -111,10 +111,7 @@ class Command(BaseCommand):
                     self.logger.info( f"First alert is at MJD {t+1}" )
                 through_day = math.floor( t + 0.5 ) + options['added_days'] + 0.5
 
-            self.logger.info( "**** streaming starting ****" )
-            self.logger.info( f"Streaming to {options['kafka_server']} topics "
-                              f"{options['wfd_topic']}, {options['ddf_full_topic']}, {options['ddf_limited_topic']}" )
-            self.logger.info( f"Streaming alerts through midPointTai {through_day}" )
+            self.logger.info( "Sending alerts query" )
 
             alerts = ( PPDBAlert.objects
                        .filter( alertsenttimestamp__isnull=True,
@@ -123,10 +120,16 @@ class Command(BaseCommand):
             self.logger.info( f"{alerts.count()} alerts to stream" )
 
             if alerts.count() == 0:
+                self.logger.info( "No alerts found, exiting." )
                 return
 
             # import pdb; pdb.set_trace()
             schema = fastavro.schema.load_schema( options['alert_schema'] )
+
+            self.logger.info( "**** streaming starting ****" )
+            self.logger.info( f"Streaming to {options['kafka_server']} topics "
+                              f"{options['wfd_topic']}, {options['ddf_full_topic']}, {options['ddf_limited_topic']}" )
+            self.logger.info( f"Streaming alerts through midPointTai {through_day}" )
 
             if options['do']:
                 producer = confluent_kafka.Producer( { 'bootstrap.servers': options[ 'kafka_server' ],
@@ -138,6 +141,13 @@ class Command(BaseCommand):
             lastmjd = -99999
             nextlog = 0
             nddf = 0
+            _tottime = 0
+            _flushtime = 0
+            _updatealertsenttime = 0
+            _reconstructtime = 0
+            _avrowritetime = 0
+            _producetime = 0
+            overall_t0 = time.perf_counter()
             for i, alert in enumerate( alerts ):
 
                 if ( options['log_every'] > 0 ) and ( i >= nextlog ):
@@ -147,9 +157,14 @@ class Command(BaseCommand):
                 if ( lastmjd > 0 ) and ( alert.midPointTai - lastmjd > 0.5 ):
                     if len(ids_produced) > 0 :
                         if options['do']:
+                            t0 = time.perf_counter()
                             producer.flush()
                             totflushed += len( ids_produced )
+                            t1 = time.perf_counter()
                             self.update_alertsent( ids_produced )
+                            t2 = time.perf_counter()
+                            _flushtime += t1 - t0
+                            _updatealertsenttime += t2 - t1
                     if options['daily_delay'] > 0:
                         self.logger.info( f"Sleeping {options['daily_delay']} at end of mjd {lastmjd}" )
                         time.sleep( options['daily_delay'] )
@@ -158,14 +173,22 @@ class Command(BaseCommand):
                     lastmjd = alert.midPointTai
                     ids_produced = []
 
+                t0 = time.perf_counter()
+                fullalert = alert.reconstruct( daysprevious=365 )
+                limitedalert = alert.reconstruct( daysprevious=30 )
+                _reconstructtime += time.perf_counter() - t0
+
+                t0 = time.perf_counter()
                 fullmsgio = io.BytesIO()
                 limitedmsgio = io.BytesIO()
-                fastavro.write.schemaless_writer( fullmsgio, schema, alert.reconstruct( daysprevious=365 ) )
+                fastavro.write.schemaless_writer( fullmsgio, schema, fullalert )
                 isddf = alert.diaobject.isddf
                 if isddf:
-                    fastavro.write.schemaless_writer( limitedmsgio, schema, alert.reconstruct( daysprevious=30 )  )
+                    fastavro.write.schemaless_writer( limitedmsgio, schema, limitedalert )
                     nddf += 1
+                _avrowritetime += time.perf_counter() - t0
 
+                t0 = time.perf_counter()
                 if options['do']:
                     if isddf:
                         producer.produce( options['ddf_full_topic'], fullmsgio.getvalue() )
@@ -173,28 +196,48 @@ class Command(BaseCommand):
                     else:
                         producer.produce( options['wfd_topic'], fullmsgio.getvalue() )
                     ids_produced.append( alert.alert_id )
+                _producetime += time.perf_counter()
 
                 if len(ids_produced) >= options['flush_every']:
                     if options['do']:
+                        t0 = time.perf_counter()
                         producer.flush()
                         totflushed += len( ids_produced )
+                        t1 = time.perf_counter()
                         self.update_alertsent( ids_produced )
+                        t2 = time.perf_counter()
+                        _flushtime += t1 - t0
+                        _updatealertsenttime += t2 - t1
                     ids_produced = []
 
             if len(ids_produced) > 0:
                 if options['do']:
+                    t0 = time.perf_counter()
                     producer.flush()
                     totflushed += len( ids_produced )
+                    t1 = time.perf_counter()
                     self.update_alertsent( ids_produced )
+                    t2 = time.perf_counter()
+                    _flushtime += t1 - t0
+                    _updatealertsenttime += t2 - t1
+
                 ids_produced = []
 
+            _tottime += time.perf_counter() - t0
+
             self.logger.info( f"**** Done sending {len(alerts)} alerts (incl. {nddf} DDF); {totflushed} flushed ****" )
-            self.logger.info( f"Timings:\n"
-                              f"           sourcetime : {PPDBAlert._sourcetime}\n"
-                              f"           objecttime : {PPDBAlert._objecttime}\n"
-                              f"   objectoverheadtime : {PPDBAlert._objectoverheadtime}\n"
-                              f"        prvsourcetime : {PPDBAlert._prvsourcetime}\n"
-                              f"  prvforcedsourcetime : {PPDBAlert._prvforcedsourcetime}\n"
+            self.logger.info( f"Timings: overall {_tottime}\n"
+                              f"               _flushtime : {_flushtime}\n"
+                              f"     _updatealertsenttime : {_updatealertsenttime}\n"
+                              f"           _avrowritetime : {_avrowritetime}\n"
+                              f"             _producetime : {_producetime}\n"
+                              f"         _reconstructtime : {_reconstructtime}\n"
+                              f"  Within PPDBAlert.reconstruct:"
+                              f"               sourcetime : {PPDBAlert._sourcetime}\n"
+                              f"               objecttime : {PPDBAlert._objecttime}\n"
+                              f"       objectoverheadtime : {PPDBAlert._objectoverheadtime}\n"
+                              f"            prvsourcetime : {PPDBAlert._prvsourcetime}\n"
+                              f"      prvforcedsourcetime : {PPDBAlert._prvforcedsourcetime}\n"
                              )
         finally:
             runningfile.unlink()

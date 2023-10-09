@@ -124,6 +124,8 @@ class Command(BaseCommand):
                         timingstmp.append( d )
                 _logger.info( f"Done with queries." )
 
+                import pdb; pdb.set_trace()
+
             alltimings = pandas.DataFrame( timingstmp ).set_index( [ 'broker', 'whichweek',
                                                                      'fullbin', 'log10_fulldelay_sec',
                                                                      'brokerbin', 'log10_brokerdelay_sec',
