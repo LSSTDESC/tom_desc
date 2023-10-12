@@ -88,11 +88,22 @@ spec:
           name: tom-2-deployment
         - mountPath: /sample
           name: tom-2-sample
-        command: [ "python" ]
+        command: [ "dumb-init" ]
         args:
+          - -r
+          - 15:10
+          - python
           - manage.py
           - brokerpoll2
-          - --do-test
+          - --do-antares
+          - --antares-topic
+          - elasticc2-st1
+          - --do-pitt
+          - --pitt-project
+          - elasticc-challenge
+          - --pitt-topic
+          - elasticc-SuperNNova
+          # - --do-test
       dnsConfig: {}
       dnsPolicy: ClusterFirst
       restartPolicy: Always

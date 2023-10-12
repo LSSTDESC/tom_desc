@@ -97,6 +97,6 @@ spec:
               type: Directory
             name: tom-2-deployment
   # schedule: 0 0 * * *
-  schedule: 58 21 * * *
+  schedule: 30 19 * * *
   successfulJobsHistoryLimit: 3
   suspend: false

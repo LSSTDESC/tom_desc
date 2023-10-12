@@ -366,7 +366,7 @@ TOM_FACILITY_CLASSES = [
 
 TOM_ALERT_CLASSES = [
     'tom_alerts.brokers.alerce.ALeRCEBroker',
-    'tom_antares.antares.ANTARESBroker',
+#    'tom_antares.antares.ANTARESBroker',
     'tom_alerts.brokers.gaia.GaiaBroker',
     'tom_alerts.brokers.lasair.LasairBroker',
 #    'tom_alerts.brokers.mars.MARSBroker',

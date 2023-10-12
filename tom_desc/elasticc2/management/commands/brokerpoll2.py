@@ -237,10 +237,10 @@ class TestConsumer(BrokerConsumer):
 class AntaresConsumer(BrokerConsumer):
     def __init__( self, grouptag=None,
                   usernamefile='/secrets/antares_username', passwdfile='/secrets/antares_passwd',
-                  loggername="ANTARES", **kwargs ):
+                  loggername="ANTARES", antares_topic='elasticc2-st1-ddf-full', **kwargs ):
         server = "kafka.antares.noirlab.edu:9092"
         groupid = "elasticc-lbnl" + ( "" if grouptag is None else "-" + grouptag )
-        topics = [ 'elasticc-1' ]
+        topics = [ antares_topic ]
         updatetopics = False
         with open( usernamefile ) as ifp:
             username = ifp.readline().strip()
@@ -266,10 +266,10 @@ class AntaresConsumer(BrokerConsumer):
 # ======================================================================
 
 class FinkConsumer(BrokerConsumer):
-    def __init__( self, grouptag=None, loggername="FINK", **kwargs ):
+    def __init__( self, grouptag=None, loggername="FINK", fink_topic='fink_elasticc-2022fall', **kwargs ):
         server = "134.158.74.95:24499"
         groupid = "elasticc-lbnl" + ( "" if grouptag is None else "-" + grouptag )
-        topics = [ 'fink_elasticc-2022fall' ]
+        topics = [ fink_topic ]
         updatetopics = False
         super().__init__( server, groupid, topics=topics, updatetopics=updatetopics,
                           loggername=loggername, **kwargs )
@@ -285,10 +285,12 @@ class AlerceConsumer(BrokerConsumer):
                   passwdfile='/secrets/alerce_passwd',
                   loggername="ALERCE",
                   early_offset=os.getenv( "ALERCE_TOPIC_RELDATEOFFSET", -4 ),
+                  alerce_topic_pattern='^lc_classifier_.*_(\d{4}\d{2}\d{2})$',
                   **kwargs ):
         server = os.getenv( "ALERCE_KAFKA_SERVER", "kafka.alerce.science:9093" )
         groupid = "elasticc-lbnl" + ( "" if grouptag is None else "-" + grouptag )
         self.early_offset = int( early_offset )
+        self.alerce_topic_pattern = alerce_topic_pattern
         topics = None
         updatetopics = True
         with open( usernamefile ) as ifp:
@@ -314,7 +316,7 @@ class AlerceConsumer(BrokerConsumer):
         tosub = []
         topics = self.consumer.get_topics()
         for topic in topics:
-            match = re.search( '^lc_classifier_.*_(\d{4}\d{2}\d{2})$', topic )
+            match = re.search( self.alerce_topic_pattern, topic )
             if match and ( match.group(1) in datestrs ) and ( topic not in self.badtopics ):
                 tosub.append( topic )
         self.topics = tosub
@@ -449,9 +451,13 @@ class Command(BaseCommand):
         self.logger.setLevel( logging.INFO )
 
     def add_arguments( self, parser ):
-        parser.add_argument( '--do-alerce', action='store_true', default=False, help="Poll from ALERCE" )
+        parser.add_argument( '--do-alerce', action='store_true', default=False, help="Poll from ALeRCE" )
+        parser.add_argument( '--alerce-topic-pattern', default=None,
+                             help='Regex for matching ALeRCE topics (warning: custom code, see AlerceBroker)' )
         parser.add_argument( '--do-antares', action='store_true', default=False, help="Poll from ANTARES" )
-        parser.add_argument( '--do-fink', action='store_true', default=False, help="Poll from FINK" )
+        parser.add_argument( '--antares-topic', default=None, help='Topic name for Antares' )
+        parser.add_argument( '--do-fink', action='store_true', default=False, help="Poll from Fink" )
+        parser.add_argument( '--fink-topic', default=None, help='Topic name for Fink' )
         parser.add_argument( '--do-brahms', action='store_true', default=False,
                              help="Poll from Rob's test kafka server" )
         parser.add_argument( '--brahms-topic', default=None,
@@ -588,6 +594,7 @@ class Command(BaseCommand):
                 self.mustdie = True
 
         # I chose 20s since kubernetes sends a TERM and then waits 30s before shutting things down
+        # (Note that the Pitt-Google consumer doesn't handle this message.)
         self.logger.warning( "Shutting down.  Sending die to all processes and waiting 20s" )
         for name, broker in brokers.items():
             broker['pipe'].send( { "command": "die" } )
