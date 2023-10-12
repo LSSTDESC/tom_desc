@@ -8,7 +8,6 @@ import logging
 import traceback
 import collections
 import multiprocessing
-import queue
 import numpy
 import psycopg2.extras
 from astropy.table import Table
@@ -499,6 +498,8 @@ class FITSLoader( ColumnMapper ):
                 doneprocs = set()
                 for pid in busyprocs:
                     try:
+                        # ROB TODO : recv() blocks.
+                        # Use poll()
                         msg = procinfo[pid]['parentconn'].recv()
                     except queue.Empty:
                         continue
