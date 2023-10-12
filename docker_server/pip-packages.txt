@@ -33,6 +33,7 @@ django-postgres-extra~=2.0.8
 gunicorn[gevent]==20.0.4
 psycopg2===2.9.6
 cqlsh
+confluent_kafka
 kafka-python
 avro==1.10.2
 fastavro
@@ -42,9 +43,12 @@ seaborn
 tables
 whitenoise~=5.2
 
-antares-client==1.1
+antares-client==1.4.0
 fink-client~=2.0
-hop-client==0.5.0
+hop-client==0.8.0
+# antares-client==1.1
+# fink-client~=2.0
+# hop-client==0.5.0
 pittgoogle-client==0.2.0
 
 #

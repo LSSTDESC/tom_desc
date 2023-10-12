@@ -1,6 +1,6 @@
 # Have to build this in context of parent directory, with dockerfile docker_server/Dockerfvile
 
-FROM rknop/devuan-chimaera-rknop AS base
+FROM rknop/devuan-daedalus-rknop AS base
 
 RUN mkdir /tom_desc
 WORKDIR /tom_desc
@@ -12,17 +12,20 @@ RUN DEBIAN_FRONTEND="noninteractive" \
    apt-get clean && \
    rm -rf /var/lib/apt/lists/*
 
+# I haven't successfully installed all the pip packages with pypy3
+# pypy3 pypy3-dev pypy3-venv gcc g++ gfortran libopenblas-dev pkg-config \
 RUN DEBIAN_FRONTEND="noninteractive" \
    apt-get update && \
-   apt-get install -y gdal-bin python3 python3-pip librdkafka-dev \
+   apt-get install -y gdal-bin librdkafka-dev cython3 python3 python3-pip \
      libpq-dev postgresql-client \
-     tmux netcat bind9-dnsutils && \
+     tmux netcat-openbsd bind9-dnsutils && \
    apt-get clean && \
    rm -rf /var/lib/apt/lists/*
 
 RUN ln -s /usr/bin/python3 /usr/bin/python
-
-RUN pip install --upgrade pip
+RUN rm /usr/lib/python3.11/EXTERNALLY-MANAGED
+# RUN pypy3 -m venv /venv
+# ENV PATH="/venv/bin:$PATH"
 
 COPY docker_server/pip-packages.txt .
 RUN pip install \
@@ -32,7 +35,7 @@ RUN pip install \
     rm -rf /.cache/pip
 
 COPY docker_server/pubsub.patch /tmp
-RUN patch /usr/local/lib/python3.9/dist-packages/pittgoogle/pubsub.py /tmp/pubsub.patch
+RUN patch /usr/local/lib/python3.11/dist-packages/pittgoogle/pubsub.py /tmp/pubsub.patch
 
 RUN mkdir -p /.astropy
 RUN chmod -R 777 /.astropy
