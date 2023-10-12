@@ -18,7 +18,7 @@ RUN DEBIAN_FRONTEND="noninteractive" \
    apt-get update && \
    apt-get install -y gdal-bin librdkafka-dev cython3 python3 python3-pip \
      libpq-dev postgresql-client \
-     tmux netcat-openbsd bind9-dnsutils && \
+     tmux dumb-init netcat-openbsd bind9-dnsutils && \
    apt-get clean && \
    rm -rf /var/lib/apt/lists/*
 
@@ -28,7 +28,7 @@ RUN rm /usr/lib/python3.11/EXTERNALLY-MANAGED
 # ENV PATH="/venv/bin:$PATH"
 
 COPY docker_server/pip-packages.txt .
-RUN pip install \
+RUN pip -vvv install \
 	--no-cache \
 	--disable-pip-version-check \
 	--requirement pip-packages.txt && \
