@@ -132,11 +132,11 @@ class Command(BaseCommand):
     # Capturing signals doesn't work inside django management commands,
     # and the django post_command thingy has the *class*, not the
     # object, as the argument.
-    _instance = None
+    # _instance = None
 
     def __init__( self, *args, **kwargs ):
         super().__init__( *args, **kwargs )
-        self.__class__._instance = self
+        # self.__class__._instance = self
         self.logger = logging.getLogger( "send_elasticc_alerts" )
         self.logger.propagate = False
         if not self.logger.hasHandlers():
@@ -193,12 +193,16 @@ class Command(BaseCommand):
 
     def cleanup( self ):
         self.logger.info( "In cleanup" )
-        for subproc in multiprocessing.active_children():
-            subproc.kill()
-        for key, val in self.procinfo.items():
-            val['proc'].terminate()
-            val['proc'].close()
         self.runningfile.unlink()
+        # I Kept getting issues where it
+        # yelled at me to call terminate()
+        # before close()... and... yet...
+        # I just give up.
+        # for key, val in self.procinfo.items():
+        #     val['proc'].terminate()
+        #     val['proc'].close()
+        # for subproc in multiprocessing.active_children():
+        #     subproc.kill()
 
     @signalcommand
     def handle( self, *args, **options ):
@@ -313,7 +317,7 @@ class Command(BaseCommand):
             self.logger.info( f'Launching {options["num_reconstruct_processes"]} alert reconstruction subprocesses.' )
             for i in range( options['num_reconstruct_processes'] ):
                 parentconn, childconn = multiprocessing.Pipe()
-                proc = multiprocessing.Process( target=lambda: launchReconstructor( childconn ) )
+                proc = multiprocessing.Process( target=lambda: launchReconstructor( childconn ), daemon=True )
                 proc.start()
                 self.procinfo[ proc.pid ] = { 'proc': proc,
                                               'parentconn': parentconn,
@@ -444,11 +448,14 @@ class Command(BaseCommand):
 
         finally:
             self.logger.info( "I really hope cleanup gets called." )
-            # self.cleanup()
+            self.cleanup()
 
-def post_command_handler( sender, **kwargs ):
-    sys.stderr.write( f"In post_command_handler; sender is a {type(sender)}, "
-                      f"Command._instance is a {type(Command._instance)}\n" )
-    Command._instance.cleanup()
-
-post_command.connect( post_command_handler, Command )
+# This doesn't seem to work right.
+# Probably the games I play with _instance
+# aren't doing really what I want.
+# def post_command_handler( sender, **kwargs ):
+#     sys.stderr.write( f"In post_command_handler; sender is a {type(sender)}, "
+#                       f"Command._instance is a {type(Command._instance)}\n" )
+#     Command._instance.cleanup()
+# 
+# post_command.connect( post_command_handler, Command )
