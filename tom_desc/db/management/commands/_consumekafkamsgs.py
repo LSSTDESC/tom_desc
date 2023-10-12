@@ -235,9 +235,10 @@ class MsgConsumer(object):
                 handler( msgs )
             else:
                 self.default_handle_message_batch( msgs )
+            return msgs
 
     def default_handle_message_batch( self, msgs ):
-        self.logger.info( f'Got {len(msgs)}; have received {self._tot_handled} so far.' )
+        self.logger.info( f'Got {len(msgs)}; have received {self.tot_handled} so far.' )
 
     def echoing_handle_message_batch( self, msgs ):
         self.logger.info( f'Handling {len(msgs)} messages' )

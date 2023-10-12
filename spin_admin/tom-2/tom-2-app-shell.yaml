@@ -78,6 +78,8 @@ spec:
           name: tom-2-deployment
         - mountPath: /sample
           name: tom-2-sample
+        - mountPath: /pgdump
+          name: pgdump
         command: [ "tail" ]
         args: [ "-f", "/etc/issue" ]
       dnsConfig: {}
@@ -103,3 +105,7 @@ spec:
           path: /global/cfs/cdirs/desc-td/ELASTICC2
           type: Directory
         name: tom-2-sample
+      - hostPath:
+          path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/pg_dump
+          type: Directory
+        name: pgdump

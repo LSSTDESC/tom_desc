@@ -8,8 +8,10 @@ import itertools
 import psqlextra.types
 import psqlextra.models
 import psycopg2.extras
+import pandas
 import django.db
 from django.db import models
+from django.db.models import F
 from guardian.shortcuts import assign_perm
 from django.contrib.auth.models import Group
 
@@ -219,6 +221,17 @@ class BaseDiaForcedSource(Createable):
 # all diaSource objects for alerts that have been sent.  (I should
 # probably cache that somewhere, perhaps with a materialized view that I
 # then update daily (or more often?))
+
+# Constants for alert reconstruct
+
+_reconstruct_forcedsourcefields = [ "diaForcedSourceId", "diaObjectId", "midPointTai",
+                                   "filterName", "psFlux", "psFluxErr" ]
+_reconstruct_forcedsourcefieldmap = { i: i.lower() for i in _reconstruct_forcedsourcefields }
+_reconstruct_forcedsourcefieldmap[ "diaForcedSourceId" ] = "diaforcedsource_id"
+_reconstruct_forcedsourcefieldmap[ "diaObjectId" ] = "diaobject_id"
+_reconstruct_forcedkwargs = { f: F(_reconstruct_forcedsourcefieldmap[f]) for f in _reconstruct_forcedsourcefieldmap }
+
+
 class BaseAlert(Createable):
     alert_id = models.BigIntegerField( primary_key=True, unique=True, db_index=True )
     alertsenttimestamp = models.DateTimeField( null=True, db_index=True )
@@ -246,10 +259,16 @@ class BaseAlert(Createable):
     # _forcedsourceclass = BaseDiaForcedSource
 
     _sourcetime = 0
+    _ddfsourcetime = 0
     _objecttime = 0
+    _ddfobjecttime = 0
     _objectoverheadtime = 0
+    _firstsourcetime = 0
+    _ddffirstsourcetime = 0
     _prvsourcetime = 0
+    _ddfprvsourcetime = 0
     _prvforcedsourcetime = 0
+    _ddfprvforcedsourcetime = 0
 
     _hackqueryshown = 0
 
@@ -257,8 +276,10 @@ class BaseAlert(Createable):
         super().__init__( *args, **kwargs )
         self._objectfields = None
         self._objectfieldmap = None
+        self._sourcefields = None
+        self._sourcefieldmap = None
 
-    def reconstruct( self, daysprevious=365, nprevious=None, objsources=None, objforced=None ):
+    def reconstruct( self, daysprevious=365, nprevious=None ):
         """Reconstruct the dictionary that represents this alert.
 
         It's not just a matter of dumping fields, as it also has to decide if the alert
@@ -271,13 +292,6 @@ class BaseAlert(Createable):
            forced sources going back daysprevious days.  If not None,
            should be an integer; will only include this many previous
            sources and forcedsources.
-        For efficiency, some data can be passed in:
-
-        objsources : a list of dictionaries with the fields from the ..DiaSource objects, sorted by midpointtai
-        objforced : same thing, but ...DiaForcedSource
-
-        both objsources and objforced are expected to have *all* sources for the object, not just
-        ones that would be in this alert.  They'll be filtered here.
 
         """
         alert = { "alertId": self.alert_id,
@@ -291,15 +305,20 @@ class BaseAlert(Createable):
         conn = gratuitous.connection
         cursor = conn.cursor( cursor_factory=psycopg2.extras.RealDictCursor )
 
+        isddf = self.diaobject.isddf
+
         t0 = time.perf_counter()
-        sourcefields = [ "diaSourceId", "diaObjectId", "midPointTai",
-                         "filterName", "ra", "decl", "psFlux", "psFluxErr", "snr" ]
-        sourcefieldmap = { i: i.lower() for i in sourcefields }
-        sourcefieldmap["diaSourceId"] = 'diasource_id'
-        sourcefieldmap["diaObjectId"] = 'diaobject_id'
-        for field in sourcefields:
-            alert["diaSource"][field] = getattr( self.diasource, sourcefieldmap[ field ] )
+        if self._sourcefields is None:
+            self._sourcefields = [ "diaSourceId", "diaObjectId", "midPointTai",
+                                   "filterName", "ra", "decl", "psFlux", "psFluxErr", "snr" ]
+            self._sourcefieldmap = { i: i.lower() for i in self._sourcefields }
+            self._sourcefieldmap["diaSourceId"] = 'diasource_id'
+            self._sourcefieldmap["diaObjectId"] = 'diaobject_id'
+        alert["diaSource"] = { f: getattr( self.diasource, self._sourcefieldmap[ f ] ) for f in self._sourcefields }
+        # for field in sourcefields:
+        #     alert["diaSource"][field] = getattr( self.diasource, sourcefieldmap[ field ] )
         self.__class__._sourcetime += time.perf_counter() - t0
+        if isddf: self.__class__._ddfsourcetime += time.perf_counter() - t0
 
         t0 = time.perf_counter()
         if self._objectfields is None:
@@ -317,73 +336,121 @@ class BaseAlert(Createable):
             self._objectfieldmap["diaObjectId"] = "diaobject_id"
         self.__class__._objectoverheadtime += time.perf_counter() - t0
 
-        for field in self._objectfields:
-            alert["diaObject"][field] = getattr( self.diaobject, self._objectfieldmap[ field ] )
+        alert["diaObject"] = { f : getattr( self.diaobject, self._objectfieldmap[ f ] ) for f in self._objectfields }
+        # for field in self._objectfields:
+        #     alert["diaObject"][field] = getattr( self.diaobject, self._objectfieldmap[ field ] )
         self.__class__._objecttime += time.perf_counter() - t0
+        if isddf: self.__class__._ddfobjecttime += time.perf_counter() - t0
 
         t0 = time.perf_counter()
-        if objsources is None:
-            objsources = ( self._sourceclass.objects
-                           .filter( diaobject_id=self.diasource.diaobject_id )
-                           .filter( midpointtai__gte=self.diasource.midpointtai - daysprevious )
-                           .order_by( "midpointtai" )
-                           .values() )
-        prvsources = []
-        for prevsource in objsources:
-            if prevsource['diasource_id'] == self.diasource.diasource_id: break
-            newprevsource = {}
-            for field in sourcefields:
-                newprevsource[field] = prevsource[ sourcefieldmap[ field ] ]
-                                    #= getattr( prevsource, sourcefieldmap[ field ] )
-            prvsources.append( newprevsource )
-        if ( nprevious is None ) or ( len(prvsources) < nprevious ):
-            alert["prvDiaSources"] = prvsources
-        else:
-            alert["prvDiaSources"] = prvsources[-nprevious:]
+        # This statement was sometimes very slow
+        # firstsource = ( self._sourceclass.objects
+        #                 .filter( diaobject_id=self.diasource.diaobject_id )
+        #                 .order_by( "midpointtai" ) ).first()
+        # POSTGRES WEIRDNESS
+        # When I had "LIMIT 1" on this query, it was sometimes MUCH slower (orders of magnitude).
+        q = ( f'SELECT diasource_id, midpointtai FROM {self._sourceclass._meta.db_table} '
+              f'WHERE diaobject_id={self.diasource.diaobject_id} '
+              f'ORDER BY midpointtai' )
+        cursor.execute( q )
+        firstsourcetime = cursor.fetchone()['midpointtai']
+        self.__class__._firstsourcetime += time.perf_counter() - t0
+        if isddf: self.__class__._ddffirstsourcetime += time.perf_counter() - t0
+
+        # objsources = ( self._sourceclass.objects
+        #                .filter( diaobject_id=self.diasource.diaobject_id )
+        #                .filter( midpointtai__gte=self.diasource.midpointtai - daysprevious )
+        #                .filter( midpointtai__lt=self.diasource.midpointtai )
+        #                .order_by( "midpointtai" )
+        #                .values() )
+        # prvsources = [
+        #     { field: prevsource[sourcefieldmap[field]] for field in sourcefields }
+        #     for prevsource in objsources
+        # ]
+        # if ( nprevious is None ) or ( len(prvsources) < nprevious ):
+        #     alert["prvDiaSources"] = prvsources
+        # else:
+        #     alert["prvDiaSources"] = prvsources[-nprevious:]
+        t0 = time.perf_counter()
+        q = ( f'SELECT diasource_id AS "diaSourceId", '
+              f'       diaobject_id AS "diaObjectId", '
+              f'       midpointtai AS "midPointTai", '
+              f'       filtername AS "filterName", '
+              f'       ra, '
+              f'       decl, '
+              f'       psflux AS "psFlux", '
+              f'       psfluxerr AS "psFluxErr", '
+              f'       snr '
+              f'FROM {self._sourceclass._meta.db_table} '
+              f'WHERE diaobject_id={self.diasource.diaobject_id} '
+              f'  AND midpointtai>={self.diasource.midpointtai - daysprevious} '
+              f'  AND midpointtai<{self.diasource.midpointtai} '
+              f'ORDER BY midpointtai' )
+        cursor.execute( q )
+        alert["prvDiaSources"] = [ dict(o) for o in cursor.fetchall() ]
+        if ( nprevious is not None ) and ( len(alert["prvDiaSources"]) > nprevious ):
+            alert["prvDiaSources"] = alert["prvDiaSources"][-nprevious:]
         self.__class__._prvsourcetime += time.perf_counter() - t0 
+        if isddf: self.__class__._ddfprvsourcetime += time.perf_counter() - t0
+
+        # Previous forced sources
+
+        t0 = time.perf_counter()
 
         # If this source is the same night as the original detection, then
         # there will be no forced source information
 
-        t0 = time.perf_counter()
-        forcedsourcefields = [ "diaForcedSourceId", "diaObjectId", "midPointTai",
-                               "filterName", "psFlux", "psFluxErr" ]
-        forcedsourcefieldmap = { i: i.lower() for i in forcedsourcefields }
-        forcedsourcefieldmap[ "diaForcedSourceId" ] = "diaforcedsource_id"
-        forcedsourcefieldmap[ "diaObjectId" ] = "diaobject_id"
+        totjunk = 0
+        if self.diasource.midpointtai - firstsourcetime > 0.5:
+            q = ( f'SELECT diaforcedsource_id as "diaForcedSourceId",'
+                  f'       diaobject_id as "diaObjectId",'
+                  f'       midpointtai as "midPointTai",'
+                  f'       filtername as "filterName",'
+                  f'       psflux as "psFlux",'
+                  f'       psfluxerr as "psFluxErr" '
+                  f'FROM {self._forcedsourceclass._meta.db_table} '
+                  f'WHERE diaobject_id={self.diasource.diaobject_id} '
+                  f'  AND midpointtai>={self.diasource.midpointtai - daysprevious} '
+                  f'  AND midpointtai>={firstsourcetime - 30} '
+                  f'  AND midpointtai<{self.diasource.midpointtai} '
+                  f'ORDER BY midpointtai' )
+            cursor.execute( q )
+            # objforced = ( self._forcedsourceclass.objects
+            #               .filter( diaobject_id=self.diasource.diaobject_id )
+            #               .filter( midpointtai__gte=self.diasource.midpointtai - daysprevious )
+            #               .filter( midpointtai__gte=firstsourcetime - 30 )
+            #               .filter( midpointtai__lt=self.diasource.midpointtai )
+            #               .order_by( 'midpointtai')
+            #               .values( **_reconstruct_forcedkwargs )
+            #              )
+            alert["prvDiaForcedSources"] = [ dict(o) for o in cursor.fetchall() ]
+            if ( nprevious is not None ) and ( len(alert["prvDiaForcedSources"]) > nprevious ):
+                alert["prvDiaForcedSources"] = alert["prvDiaForcedSources"][-nprevious:]
 
-        if self.diasource.midpointtai - objsources[0]['midpointtai'] > 0.5:
-            if objforced is None:
-                objforced = ( self._forcedsourceclass.objects
-                              .filter( diaobject_id=self.diasource.diaobject_id )
-                              .filter( midpointtai__gte=self.diasource.midpointtai - daysprevious )
-                              .order_by( 'midpointtai' )
-                              .values() )
-                # if self.__class__._hackqueryshown < 10:
-                #     _logger.info( f"alert reconstruct forced source query: {objforced.query}" )
-                #     self.__class__._hackqueryshown += 1
+            # if self.__class__._hackqueryshown < 10:
+            #     _logger.info( f"alert reconstruct forced source query: {objforced.query}" )
+            #     self.__class__._hackqueryshown += 1
             # objforced = [ i for i in objforced if
-            #               i['midpointtai'] >= objsources[0]['midpointtai']-30
+            #               i['midpointtai'] >= firstsourcetime-30
             #              and i['midpointtai'] <= self.diasource.midpointtai ]
             # _logger.warn( f"Found {len(objforced)} previous" )
-            prvforcedsources= []
-            for forced in objforced:
-                if forced['midpointtai'] < objsources[0]['midpointtai'] - 30:
-                    continue
-                if forced['midpointtai'] >= self.diasource.midpointtai:
-                    break
-                newforced = {}
-                for field in forcedsourcefields:
-                    newforced[field] = forced[ forcedsourcefieldmap[ field ] ]
-                                    #=getattr( forced, forcedsourcefieldmap[ field ] )
-                prvforcedsources.append( newforced )
-            if ( nprevious is None ) or ( len(prvforcedsources) < nprevious ):
-                alert["prvDiaForcedSources"] = prvforcedsources
-            else:
-                alert["prvDiaForcedSources"] = prvforcedsources[-nprevious:]
+            # if False:
+            #     prvforcedsources= [
+            #         { field: forced[forcedsourcefieldmap[field]] for field in forcedsourcefields }
+            #         for forced in objforced
+            #     ]
+            #     if ( nprevious is None ) or ( len(prvforcedsources) < nprevious ):
+            #         alert["prvDiaForcedSources"] = prvforcedsources
+            #     else:
+            #         alert["prvDiaForcedSources"] = prvforcedsources[-nprevious:]
+            # else:
+            #     tot
         # else:
         #     _logger.warn( "Not adding previous" )
         self.__class__._prvforcedsourcetime += time.perf_counter() - t0
+        if isddf: self.__class__._ddfprvforcedsourcetime += time.perf_counter() - t0
+
+        conn.rollback()
 
         return alert
 
@@ -1037,6 +1104,7 @@ class BrokerSourceIds(models.Model):
 class CassBrokerMessage(DjangoCassandraModel):
     classifier_id = columns.BigInt( primary_key=True )
     diasource_id = columns.BigInt( primary_key=True )
+    descingesttimestamp = columns.DateTime( default=datetime.datetime.utcnow, primary_key=True )
     id = columns.UUID( primary_key=True, default=uuid.uuid4 )
 
     topicname = columns.Text()
@@ -1045,7 +1113,6 @@ class CassBrokerMessage(DjangoCassandraModel):
     msghdrtimestamp = columns.DateTime()
     elasticcpublishtimestamp = columns.DateTime()
     brokeringesttimestamp = columns.DateTime()
-    descingesttimestamp = columns.DateTime( default=datetime.datetime.utcnow )
     classid = columns.List( columns.Integer() )
     probability = columns.List( columns.Float() )
 

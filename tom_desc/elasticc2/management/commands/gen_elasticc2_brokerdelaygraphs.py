@@ -14,6 +14,7 @@ import psycopg2.extras
 import django.db
 from matplotlib import pyplot
 from django.core.management.base import BaseCommand, CommandError
+import cassandra.query
 
 _rundir = pathlib.Path(__file__).parent
 
@@ -26,83 +27,181 @@ _formatter = logging.Formatter( f'[%(asctime)s - %(levelname)s] - %(message)s',
 _logout.setFormatter( _formatter )
 _logger.setLevel( logging.INFO )
 
+class CassBrokerMessagePageHandler:
+    def __init__( self, future, pgcursor, bucketleft, bucketright, dbucket, lowcutoff=1, highcutoff=9.99e5 ):
+        self.future = future
+        self.pgcursor = pgcursor
+        self.bucketleft = bucketleft
+        self.bucketright = bucketright
+        self.dbucket = dbucket
+        self.lowcutoff = lowcutoff
+        self.highcutoff = highcutoff
+
+        self.fullbuckets = {}
+        self.brokerbuckets = {}
+        self.tombuckets = {}
+
+        # Create a temporary postgres table for storing the alert ids we need
+        pgcursor.execute( "CREATE TEMPORARY TABLE temp_alertids( "
+                          "  alert_id bigint,"
+                          "  classifier_id bigint,"
+                          "  brokeringesttimestamp timestamp with timezone,"
+                          "  descingesttimestamp timestamp with timezone,"
+                          "  msghdrtimestamp timestamp with timezone "
+                          ") ON COMMIT DROP" )
+
+        self.finished_event = Event()
+        self.error = None
+
+        self.future.add_callbacks( callback=self.handle_page, errback=self.handle_err )
+
+    def finalize:
+        self.pgcursor.connection.rollback()
+
+    def handle_page( self, rows ):
+        pgcursor.execute( "TRUNCATE TABLE temp_alertids" )
+
+        strio = io.StringIO()
+        for row in rows:
+            strio.write( f"{row['alert_id']}\t"
+                         f"{row['classifier_id']}\t"
+                         f"{row['brokeringesttimestamp'].isoformat()}Z\t"
+                         f"{row['descingesttimestamp'].isoformat()}Z\t"
+                         f"{row['msghdrtimestamp'].isoformat()}Z\n" )
+        strio.seek( 0 )
+        self.pgcursor.copy_from( strio, 'temp_alertids', size=262144 )
+
+        q = ( f"""SELECT fullbucket AS fullbin,
+                           {self.bucketleft}+{self.dbucket}*(fullbucket-1) AS log10_fulldelay_sec,
+                           COUNT(fullbucket) AS nfull,
+                         brokerbucket AS brokerbin,
+                           {self.bucketleft}+{self.dbucket}*(brokerbucket-1) AS log10_brokerdelay_sec,
+                           COUNT(fullbucket) AS nbroker,
+                         tombucket AS tombin,
+                           {self.bucketleft}+{self.dbucket}*(tombucket-1) AS log10_tomdelay_sec,
+                           COUNT(tombucket) AS ntom
+                  FROM (
+                    SELECT width_bucket( LOG( LEAST( GREATEST( {self.lowcutoff},
+                                                               EXTRACT(EPOCH FROM fulldelay) ),
+                                              {self.highcutoff} ) ),
+                                         {self.bucketleft}, {self.bucketright}, {self.nbuckets} ) AS fullbucket,
+                           width_bucket( LOG( LEAST( GREATEST( {self.lowcutoff},
+                                                     EXTRACT(EPOCH FROM brokerdelay) ),
+                                              {self.highcutoff} ) ),
+                                         {self.bucketleft}, {self.bucketright}, {self.nbuckets} ) AS brokerbucket,
+                           width_bucket( LOG( LEAST( GREATEST( {self.lowcutoff},
+                                                               EXTRACT(EPOCH FROM tomdelay) ),
+                                              {self.highcutoff} ) ),
+                                         {self.bucketleft}, {self.bucketright}, {self.nbuckets} ) AS tombucket
+
+                     FROM (
+                        SELECT DISTINCT ON(t.alert_id,t.classifier_id)
+                            t.descingesttimestamp - a.alertsenttimestamp AS fulldelay,
+                            t.msghdrtimestamp - a.alertsenttimestamp AS brokerdelay,
+                            t.descingesttimestamp - t.msghdrtimestamp AS tomdelay
+                         FROM temp_alertids
+                         INNER JOIN elasticc2_ppdbalert a ON t.alert_id=a.alert_id
+                         ORDER BY t.alert_id,t.classifier_id,t.descingesttimestamp
+                     ) subsubq
+                   ) subq
+                   GROUP BY fullbucket, brokerbucket, tombucket
+                   ORDER BY fullbucket, brokerbucket, tombucket
+        """ )
+        self.pgcursor.execute( q )
+
+        for row in self.pgcursor:
+            for which in [ 'full', 'broker', 'tom' ]:
+                buckets = getattr( self, f'{which}buckets' )
+                if row[f'log10_{which}delay_sec'] not in buckets:
+                    buckets[ row[f'log10_{which}delay_sec'] ] = row[ f'n{which}' ]
+                else:
+                    buckets[ row[f'log10_{which}delay_sec'] ] += row[ f'n{which}' ]
+
+        if self.future.has_more_pages:
+            self.future.start_fetching_next_page()
+        else:
+            self.finished_event.set()
+
+    def handle_error( self, exc ):
+        self.error = exc
+        self.finished_event.set()
+
+
 class Command(BaseCommand):
-    help = 'Generate broker completeness-over-time graphs'
+    help = 'Generate broker time delay graphs'
     outdir = _rundir / "../../static/elasticc2/brokertiminggraphs"
 
     def add_arguments( self, parser) :
         pass
 
+
+
+
+
     def get_delayhist( self, brokerids, cursor, bucketleft=0, bucketright=6, dbucket=0.25,
+                       t0=datetime.datetime( 2023, 10, 08, tzinfo=pytz.utc ),
+                       t1=datetime.datetime( 2023, 10, 15, tzinfo=pytz.utc ),
                        lowcutoff=1, highcutoff=9.99e5):
-        queries = []
-        subdicts = []
 
-        # ROB!  Play with Postgres to make sure floor is right here
+        # Get all of the brokermessages from these brokerids from cassandra.
+        # Go through them in batches, extracting the corresponding
+        # timing information from postgres
 
-        nbuckets = int( math.floor( ( bucketright - bucketleft ) / dbucket ) )
+        fullbuckets = {}
+        brokerbuckets = {}
+        tombuckets = {}
 
-        q = ( f"""SELECT whichweek,
-                         fullbucket AS fullbin,
-                           {  bucketleft}+{dbucket}*(fullbucket-1) AS log10_fulldelay_sec,
-                           COUNT(fullbucket) AS nfull,
-                         brokerbucket AS brokerbin,
-                           {bucketleft}+{dbucket}*(brokerbucket-1) AS log10_brokerdelay_sec,
-                           COUNT(fullbucket) AS nbroker,
-                         tombucket AS tombin,
-                           {bucketleft}+{dbucket}*(tombucket-1) AS log10_tomdelay_sec,
-                           COUNT(tombucket) AS ntom
-                  FROM (
-                    SELECT whichweek,
-                           width_bucket( LOG( LEAST( GREATEST( {lowcutoff},
-                                                               EXTRACT(EPOCH FROM fulldelay) ),
-                                              {highcutoff} ) ),
-                                         {bucketleft}, {bucketright}, {nbuckets} ) AS fullbucket,
-                           width_bucket( LOG( LEAST( GREATEST( {lowcutoff},
-                                                     EXTRACT(EPOCH FROM brokerdelay) ),
-                                              {highcutoff} ) ),
-                                         {bucketleft}, {bucketright}, {nbuckets} ) AS brokerbucket,
-                           width_bucket( LOG( LEAST( GREATEST( {lowcutoff},
-                                                               EXTRACT(EPOCH FROM tomdelay) ),
-                                              {highcutoff} ) ),
-                                         {bucketleft}, {bucketright}, {nbuckets} ) AS tombucket
-                                
-                    FROM (
-                      SELECT DISTINCT ON (m."brokermessage_id")
-                         DATE_TRUNC('week',m."descingesttimestamp") AS whichweek,
-                         m."descingesttimestamp"-a."alertsenttimestamp" AS fulldelay,
-                         m."msghdrtimestamp"-a."alertsenttimestamp" AS brokerdelay,
-                         m."descingesttimestamp"-m."msghdrtimestamp" AS tomdelay
-                      FROM elasticc2_brokermessage m
-                      INNER JOIN elasticc2_ppdbalert a ON m."alert_id"=a."alert_id"
-                      INNER JOIN elasticc2_brokerclassification c ON c."brokermessage_id"=m."brokermessage_id"
-                      WHERE c."classifier_id" IN %(brokers)s
-                      ORDER BY m."brokermessage_id"
-                    ) subsubq
-                  ) subq
-                  GROUP BY whichweek,fullbucket,brokerbucket,tombucket
-                  ORDER BY whichweek,fullbucket,brokerbucket,tombucket""" )
-        cursor.execute( q, { 'brokers': tuple( brokerids ) } )
-        return list( cursor.fetchall() )
-    
+
+        weekt0 = t0
+        while weekt0 < t1:
+            weekt1 = weekt0 + datetime.timedelta( days=7 )
+
+            cassq = cassandray.query.SimpleStatement( "SELECT * FROM tom_desc.cass_broker_message "
+                                                      "WHERE classifier_id IN %(ids)s "
+                                                      "  AND descingesttimestamp >= %(t0)s "
+                                                      "  AND descingesttimestamp <= %(t1)s "
+                                                      fetch_size=10000 )
+            future = django.db.connection['cassandra'].execute( cassq, { 'ids': tuple( brokerids ) } )
+            handler = CassBrokerMessagePageHandler( future, cursor, bucketleft, bucketright, dbucket,
+                                                    lowcutoff=lowcutoff, highcutoff=highcutoff )
+            handler.finished_event.wait()
+            if handler.error:
+                raise handler.error
+
+            for mybucket, handlerbucket in zip( [ fullbuckets, brokerbuckets, tombuckets ],
+                                                [ handler.fulbuckets, handler.brokerbuckets, handler.tombuckets ] ):
+                for delay, count in handlerbucket.items():
+                    if delay not in mybucket:
+                        mybucket[ delay ] = count
+                    else:
+                        mybucket[ delay ] += count
+
+                        ROB YOU WERE HERE
+
+
     def handle( self, *args, **options ):
         _logger.info( "Starting genbrokerdelaygraphs" )
-        
+
         self.outdir.mkdir( parents=True, exist_ok=True )
         conn = None
 
         dbucket = 0.25
-        
+
+        # Jump through hoops to get access to the psycopg2 connection from django
+        conn = django.db.connection.cursor().connection
+        orig_autocommit = conn.autocommit
+
         try:
+            conn.autocommit = False
+
             updatetime = datetime.datetime.utcnow().date().isoformat()
-            
-            # Jump through hoops to get access to the psycopg2 connection from django
-            conn = django.db.connection.cursor().connection
+
 
             with conn.cursor( cursor_factory=psycopg2.extras.RealDictCursor ) as cursor:
                 cursor.execute( 'SELECT * FROM elasticc2_brokerclassifier '
                                 'ORDER BY "brokername","brokerversion","classifiername","classifierparams"' )
                 brokers = { row["classifier_id"] : row for row in cursor.fetchall() }
+                conn.rollback()
 
                 brokergroups = {}
                 for brokerid, row in brokers.items():
@@ -153,7 +252,7 @@ class Command(BaseCommand):
 
             weeks = fulltimings.index.get_level_values('whichweek').unique()
             weekdates = { w: w.date().isoformat() for w in weeks }
-            
+
             minx = 0
             maxx = 6
             xticks = range( minx, maxx+1, 1 )
@@ -185,7 +284,7 @@ class Command(BaseCommand):
                 _logger.info( f"Writing {str(outfile)})" )
                 fig.savefig( outfile )
                 pyplot.close( fig )
-            
+
             for brokername in whichgroups:
                 for week in weeks:
                     try:
@@ -196,10 +295,10 @@ class Command(BaseCommand):
 
                 outfile = self.outdir / f'{brokername}_summed.svg'
                 plotit( titles, sumlist, brokername, None, outfile )
-                    
+
             with open( self.outdir / "updatetime.txt", "w" ) as ofp:
                 ofp.write( updatetime )
-                
+
             _logger.info( "Done." )
 
         except Exception as e:
@@ -209,4 +308,4 @@ class Command(BaseCommand):
             if conn is not None:
                 conn.close()
                 conn = None
-            
+
