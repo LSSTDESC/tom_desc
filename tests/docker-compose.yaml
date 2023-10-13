@@ -36,7 +36,7 @@ services:
       dockerfile: Dockerfile.fakebroker
       
   postgres:
-    image: registry.nersc.gov/m1727/raknop/tom-postgres
+    image: registry.nersc.gov/m1727/raknop/tom-postgres:daedalus
     build:
       context: ../docker_postgres
     healthcheck:
@@ -62,11 +62,11 @@ services:
         condition: service_healthy
       cassandra:
          condition: service_healthy
-    image: registry.nersc.gov/m1727/raknop/tom_desc_extcode
+    image: registry.nersc.gov/m1727/raknop/tom_desc_bindmount:chimaera
     build:
       context: ../
       dockerfile: docker_server/Dockerfile
-      target: tom-server-extcode
+      target: tom-server-bindmount
     volumes:
       - ${PWD}/django_secret_key:/secrets/django_secret_key
       - type: bind
@@ -91,11 +91,11 @@ services:
     depends_on:
       createdb:
         condition: service_completed_successfully
-    image: registry.nersc.gov/m1727/raknop/tom_desc_extcode
+    image: registry.nersc.gov/m1727/raknop/tom_desc_bindmount:chimaera
     build:
       context: ../
       dockerfile: docker_server/Dockerfile
-      target: tom-server-extcode
+      target: tom-server-bindmount
     volumes:
       - ${PWD}/django_secret_key:/secrets/django_secret_key
       - type: bind
@@ -116,11 +116,11 @@ services:
         condition: service_started
       fakebroker:
         condition: service_started
-    image: registry.nersc.gov/m1727/raknop/tom_desc_extcode
+    image: registry.nersc.gov/m1727/raknop/tom_desc_bindmount:chimaera
     build:
       context: ../
       dockerfile: docker_server/Dockerfile
-      target: tom-server-extcode
+      target: tom-server-bindmount
     volumes:
       - ${PWD}/django_secret_key:/secrets/django_secret_key
       - type: bind
@@ -146,7 +146,7 @@ services:
        condition: service_started
       brokerpoll:
         condition: service_started
-    image: registry.nersc.gov/m1727/raknop/tom_desc_extcode
+    image: registry.nersc.gov/m1727/raknop/tom_desc_extcode:chimaera
     build:
       context: ../
       dockerfile: docker_server/Dockerfile
@@ -180,7 +180,7 @@ services:
         condition: service_started
       brokerpoll:
         condition: service_started
-    image: registry.nersc.gov/m1727/raknop/tom_desc_extcode
+    image: registry.nersc.gov/m1727/raknop/tom_desc_extcode:chimaera
     build:
       context: ../
       dockerfile: docker_server/Dockerfile
