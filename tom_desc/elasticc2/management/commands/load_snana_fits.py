@@ -319,7 +319,7 @@ class FITSLoader( ColumnMapper ):
 
         if self.tableset == 'training':
             tables = [ 'elasticc2_trainingalert', 'elasticc2_trainingdiaobject',
-                       'elasticc2_trainingdiasource', 'elasticc2_trainingdiaforcedsource,'
+                       'elasticc2_trainingdiasource', 'elasticc2_trainingdiaforcedsource',
                        'elasticc2_trainingdiaobjecttruth' ]
         else:
             tables = [ 'elasticc2_ppdbalert', 'elasticc2_ppdbdiaobject',
