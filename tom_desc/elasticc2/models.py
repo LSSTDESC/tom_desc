@@ -263,8 +263,6 @@ class BaseAlert(Createable):
     _objecttime = 0
     _ddfobjecttime = 0
     _objectoverheadtime = 0
-    _firstsourcetime = 0
-    _ddffirstsourcetime = 0
     _prvsourcetime = 0
     _ddfprvsourcetime = 0
     _prvforcedsourcetime = 0
@@ -294,6 +292,9 @@ class BaseAlert(Createable):
            sources and forcedsources.
 
         """
+        # Bobby Tables
+        daysprevious = float( daysprevious )
+
         alert = { "alertId": self.alert_id,
                   "diaSource": {},
                   "prvDiaSources": [],
@@ -307,6 +308,8 @@ class BaseAlert(Createable):
 
         isddf = self.diaobject.isddf
 
+        # Extract the soruce that triggered this ale0rt
+
         t0 = time.perf_counter()
         if self._sourcefields is None:
             self._sourcefields = [ "diaSourceId", "diaObjectId", "midPointTai",
@@ -319,6 +322,8 @@ class BaseAlert(Createable):
         #     alert["diaSource"][field] = getattr( self.diasource, sourcefieldmap[ field ] )
         self.__class__._sourcetime += time.perf_counter() - t0
         if isddf: self.__class__._ddfsourcetime += time.perf_counter() - t0
+
+        # Extract the object of this source
 
         t0 = time.perf_counter()
         if self._objectfields is None:
@@ -342,35 +347,8 @@ class BaseAlert(Createable):
         self.__class__._objecttime += time.perf_counter() - t0
         if isddf: self.__class__._ddfobjecttime += time.perf_counter() - t0
 
-        t0 = time.perf_counter()
-        # This statement was sometimes very slow
-        # firstsource = ( self._sourceclass.objects
-        #                 .filter( diaobject_id=self.diasource.diaobject_id )
-        #                 .order_by( "midpointtai" ) ).first()
-        # POSTGRES WEIRDNESS
-        # When I had "LIMIT 1" on this query, it was sometimes MUCH slower (orders of magnitude).
-        q = ( f'SELECT diasource_id, midpointtai FROM {self._sourceclass._meta.db_table} '
-              f'WHERE diaobject_id={self.diasource.diaobject_id} '
-              f'ORDER BY midpointtai' )
-        cursor.execute( q )
-        firstsourcetime = cursor.fetchone()['midpointtai']
-        self.__class__._firstsourcetime += time.perf_counter() - t0
-        if isddf: self.__class__._ddffirstsourcetime += time.perf_counter() - t0
+        # Extract previous sources
 
-        # objsources = ( self._sourceclass.objects
-        #                .filter( diaobject_id=self.diasource.diaobject_id )
-        #                .filter( midpointtai__gte=self.diasource.midpointtai - daysprevious )
-        #                .filter( midpointtai__lt=self.diasource.midpointtai )
-        #                .order_by( "midpointtai" )
-        #                .values() )
-        # prvsources = [
-        #     { field: prevsource[sourcefieldmap[field]] for field in sourcefields }
-        #     for prevsource in objsources
-        # ]
-        # if ( nprevious is None ) or ( len(prvsources) < nprevious ):
-        #     alert["prvDiaSources"] = prvsources
-        # else:
-        #     alert["prvDiaSources"] = prvsources[-nprevious:]
         t0 = time.perf_counter()
         q = ( f'SELECT diasource_id AS "diaSourceId", '
               f'       diaobject_id AS "diaObjectId", '
@@ -383,68 +361,99 @@ class BaseAlert(Createable):
               f'       snr '
               f'FROM {self._sourceclass._meta.db_table} '
               f'WHERE diaobject_id={self.diasource.diaobject_id} '
-              f'  AND midpointtai>={self.diasource.midpointtai - daysprevious} '
-              f'  AND midpointtai<{self.diasource.midpointtai} '
               f'ORDER BY midpointtai' )
         cursor.execute( q )
-        alert["prvDiaSources"] = [ dict(o) for o in cursor.fetchall() ]
-        if ( nprevious is not None ) and ( len(alert["prvDiaSources"]) > nprevious ):
-            alert["prvDiaSources"] = alert["prvDiaSources"][-nprevious:]
-        self.__class__._prvsourcetime += time.perf_counter() - t0 
+        allsources = [ dict(row) for row in cursor.fetchall() ]
+        firstsourcetime = allsources[0]['midPointTai']
+        alert["prvDiaSources"] = [ row for row in allsources
+                                   if row['midPointTai'] >= self.diasource.midpointtai - daysprevious
+                                   and row['midPointTai'] < self.diasource.midpointtai ]
+        self.__class__._prvsourcetime += time.perf_counter() - t0
         if isddf: self.__class__._ddfprvsourcetime += time.perf_counter() - t0
 
-        # Previous forced sources
+        # Extra previous forced sources
 
         t0 = time.perf_counter()
 
         # If this source is the same night as the original detection, then
         # there will be no forced source information
 
-        totjunk = 0
         if self.diasource.midpointtai - firstsourcetime > 0.5:
-            q = ( f'SELECT diaforcedsource_id as "diaForcedSourceId",'
-                  f'       diaobject_id as "diaObjectId",'
-                  f'       midpointtai as "midPointTai",'
-                  f'       filtername as "filterName",'
-                  f'       psflux as "psFlux",'
-                  f'       psfluxerr as "psFluxErr" '
-                  f'FROM {self._forcedsourceclass._meta.db_table} '
-                  f'WHERE diaobject_id={self.diasource.diaobject_id} '
-                  f'  AND midpointtai>={self.diasource.midpointtai - daysprevious} '
-                  f'  AND midpointtai>={firstsourcetime - 30} '
+            # EXPLAIN on the commented query shows that it's doing a
+            # parallel index scan on diaobject_id midpointtai, and then
+            # ANDing the results of those two scans together.  This is
+            # absurd, however, because the diaobject_id query is
+            # simpler, and cuts the list down WAY more (by orders of
+            # magnitude)... and EXPLAIN ANALYZE shows that it runs a two
+            # orders of magnitude faster.  And, of course, I could have
+            # predicted this ahead of time because I know that the
+            # diaobject filter is going to cut the number of rows down
+            # by (to first approximation) 4 million (the number of
+            # different objects), whereas the midpointtai query is going
+            # to cut the number of rows down by a factor of ~3 or ~30 (1
+            # year, or 0.1 year, out of 3 years).
+            #
+            # As such, it makes more sense to do the diaobject_id scan
+            # first, *then* filter by midpointtai.  But, the postgres
+            # query optimizer didn't seem to recognize that.  The
+            # postgres developers, from what I've read, are morally
+            # opposed to query hints. (Evidently, they say the problem
+            # is people will sometimes make things worse by using hints
+            # poorly, so they won't provide those tools. Cases where the
+            # postgres query optimizer makes stupid decisions like here
+            # are treated not as evidence that the postgresquery
+            # optimizer isn't adequate to all situations, but rather
+            # evidence that the data is organized badly.  MAYBE I could
+            # have defined my indexes differently so that the query
+            # optimizer would do the right thing, but, you know, I could
+            # also have just told the query optimizer, "hey, dude, just
+            # filter on object id first".  Or, maybe, I could have gone
+            # through and figured out how to convince postgres to
+            # collect the right statistics so that it could figure out
+            # what I knew already about what the different parts of the
+            # filtering would do.  But, it turns out that the most
+            # practical solution is to *trick* the query compiler into
+            # filtering on object id first.
+            #
+            # My worry is that a future version of the postgres query
+            # optimizer will get "smarter" and will realize that it can
+            # unpack my trick and just go back to what it was doing with
+            # the simpler query.  If we could be explicit with a
+            # documented hints interface, that would be much more robust
+            # and future proof.
+
+            # q = ( f'SELECT diaforcedsource_id as "diaForcedSourceId",'
+            #       f'       diaobject_id as "diaObjectId",'
+            #       f'       midpointtai as "midPointTai",'
+            #       f'       filtername as "filterName",'
+            #       f'       psflux as "psFlux",'
+            #       f'       psfluxerr as "psFluxErr" '
+            #       f'FROM {self._forcedsourceclass._meta.db_table} '
+            #       f'WHERE diaobject_id={self.diasource.diaobject_id} '
+            #       f'  AND midpointtai>={self.diasource.midpointtai - daysprevious} '
+            #       f'  AND midpointtai>={firstsourcetime - 30} '
+            #       f'  AND midpointtai<{self.diasource.midpointtai} '
+            #       f'ORDER BY midpointtai' )
+
+            q = ( f'SELECT s1.diaforcedsource_id AS "diaForcedSourceId", '
+                  f'       diaobject_id AS "diaObjectId", '
+                  f'       midpointtai AS "midPointTai", '
+                  f'       filtername AS "filterName", '
+                  f'       psflux AS "psFlux", '
+                  f'       psfluxerr AS "psFluxErr" '
+                  f'FROM {self._forcedsourceclass._meta.db_table} s1 '
+                  f'INNER JOIN '
+                  f'  ( SELECT diaforcedsource_id,COUNT(midpointtai) FROM {self._forcedsourceclass._meta.db_table} s2 '
+                  f'    WHERE diaobject_id={self.diasource.diaobject_id} GROUP BY diaforcedsource_id ) subq '
+                  f'  ON s1.diaforcedsource_id=subq.diaforcedsource_id '
+                  f'WHERE midpointtai>={self.diasource.midpointtai} - {daysprevious} '
                   f'  AND midpointtai<{self.diasource.midpointtai} '
                   f'ORDER BY midpointtai' )
             cursor.execute( q )
-            # objforced = ( self._forcedsourceclass.objects
-            #               .filter( diaobject_id=self.diasource.diaobject_id )
-            #               .filter( midpointtai__gte=self.diasource.midpointtai - daysprevious )
-            #               .filter( midpointtai__gte=firstsourcetime - 30 )
-            #               .filter( midpointtai__lt=self.diasource.midpointtai )
-            #               .order_by( 'midpointtai')
-            #               .values( **_reconstruct_forcedkwargs )
-            #              )
             alert["prvDiaForcedSources"] = [ dict(o) for o in cursor.fetchall() ]
             if ( nprevious is not None ) and ( len(alert["prvDiaForcedSources"]) > nprevious ):
                 alert["prvDiaForcedSources"] = alert["prvDiaForcedSources"][-nprevious:]
 
-            # if self.__class__._hackqueryshown < 10:
-            #     _logger.info( f"alert reconstruct forced source query: {objforced.query}" )
-            #     self.__class__._hackqueryshown += 1
-            # objforced = [ i for i in objforced if
-            #               i['midpointtai'] >= firstsourcetime-30
-            #              and i['midpointtai'] <= self.diasource.midpointtai ]
-            # _logger.warn( f"Found {len(objforced)} previous" )
-            # if False:
-            #     prvforcedsources= [
-            #         { field: forced[forcedsourcefieldmap[field]] for field in forcedsourcefields }
-            #         for forced in objforced
-            #     ]
-            #     if ( nprevious is None ) or ( len(prvforcedsources) < nprevious ):
-            #         alert["prvDiaForcedSources"] = prvforcedsources
-            #     else:
-            #         alert["prvDiaForcedSources"] = prvforcedsources[-nprevious:]
-            # else:
-            #     tot
         # else:
         #     _logger.warn( "Not adding previous" )
         self.__class__._prvforcedsourcetime += time.perf_counter() - t0

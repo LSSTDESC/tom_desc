@@ -47,9 +47,30 @@ class AlertReconstructor():
 
     def go( self ):
         done = False
+        self.logger.info( f'Subprocess starting.' )
         overall_t0 = time.perf_counter()
+        # An experiment.  The backend postgres processes
+        # were getting big.  Maybe this was normal, but I
+        # also wonder if there is a transaction leak somewhere.
+        # Django being web software, you can't really trust
+        # it to do the right thing for somethying long-running....
+        # Try closing the postgres connection every so often.
+        # (Disable this by setting deltareconnect to 0.)
+        # ...this didn't seem to help
+        ndone = 0
+        deltareconnect = 0
+        nextreconnect = 1000
+        # ****
+        nlongs = 0
+        nlongsddf = 0 
+        # ****
         while not done:
             try:
+                if ( deltareconnect > 0 ) and ( ndone >= nextreconnect ):
+                    self.logger.info( f"Reconnecting to postgres after {ndone} alerts reconstructed" )
+                    nextreconnect += deltareconnect
+                    django.db.connections.close_all()
+
                 msg = self.pipe.recv()
                 if msg['command'] == 'die':
                     # self.logger.debug( f'Got die' )
@@ -71,6 +92,20 @@ class AlertReconstructor():
                     # self.logger.debug( "done reconstructing" )
 
                     t2 = time.perf_counter()
+
+                    # ****
+                    if ( nlongs < 5 ) or ( nlongsddf < 5 ):
+                        if ( t2 - t1 ) > 0.03:
+                            if ( not isddf ) and ( nlongs < 5 ):
+                                self.logger.info( f'source {alert.diasource_id} object {alert.diaobject_id}\n'
+                                                  f'took {1000*(t2-t1):.0f} ms' )
+                                nlongs += 1
+                            elif ( isddf ) and ( nlongsddf < 5 ):
+                                self.logger.info( f'DDF source {alert.diasource_id} object {alert.diaobject_id}\n'
+                                                  f'took {1000*(t2-t1):.0f} ms' )
+                                nlongsddf += 1
+                    # ****
+
                     fullmsgio = io.BytesIO()
                     fastavro.write.schemaless_writer( fullmsgio, self.schema, fullalert )
                     fullmsg = fullmsgio.getvalue()
@@ -97,10 +132,13 @@ class AlertReconstructor():
                                      } )
                 else:
                     raise ValueError( f"Unknown message {msg['command']}" )
+
+                ndone += 1
             except Exception as ex:
                 # Should I be sending an error message back to the
                 # parent process instead of just raising?
                 raise ex
+
         self.pipe.send( { 'response': 'finished',
                           'tottime': time.perf_counter() - overall_t0,
                           'getalerttime': self._getalerttime,
@@ -113,8 +151,6 @@ class AlertReconstructor():
                           'PPDBAlert._objectoverheadtime': PPDBAlert._objectoverheadtime,
                           'PPDBAlert._objecttime': PPDBAlert._objecttime,
                           'PPDBAlert._ddfobjecttime': PPDBAlert._ddfobjecttime,
-                          'PPDBAlert._firstsourcetime': PPDBAlert._firstsourcetime,
-                          'PPDBAlert._ddffirstsourcetime': PPDBAlert._ddffirstsourcetime,
                           'PPDBAlert._prvsourcetime': PPDBAlert._prvsourcetime,
                           'PPDBAlert._ddfprvsourcetime': PPDBAlert._ddfprvsourcetime,
                           'PPDBAlert._prvforcedsourcetime': PPDBAlert._prvforcedsourcetime,

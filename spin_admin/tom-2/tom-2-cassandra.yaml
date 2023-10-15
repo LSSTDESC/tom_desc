@@ -1,3 +1,4 @@
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -76,4 +77,25 @@ spec:
           medium: Memory
           sizeLimit: 128Gi
         name: dshm
-
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tom-2-cassandra
+  namespace: desc-tom-2
+spec:
+  clusterIP: None
+  clusterIPs:
+  - None
+  ports:
+  - name: default
+    port: 42
+    protocol: TCP
+    targetPort: 42
+  selector:
+    workload.user.cattle.io/workloadselector: deployment-desc-tom-2-tom-2-cassandra
+  sessionAffinity: None
+  type: ClusterIP
+status:
+  loadBalancer: {}
+---

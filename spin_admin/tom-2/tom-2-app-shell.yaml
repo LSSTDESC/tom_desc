@@ -52,7 +52,7 @@ spec:
           value: /secrets/pitt_google_auth_key.json
         - name: GOOGLE_CLOUD_PROJECT
           value: elasticc-challenge
-        image: registry.nersc.gov/m1727/raknop/tom_desc_extcode
+        image: registry.nersc.gov/m1727/raknop/tom_desc_extcode:chimaera
         imagePullPolicy: Always
         name: tom-2-app-shell
         resources: {}
@@ -102,7 +102,7 @@ spec:
           type: Directory
         name: tom-2-deployment
       - hostPath:
-          path: /global/cfs/cdirs/desc-td/ELASTICC2
+          path: /global/cfs/cdirs/desc-td/ELASTICC2-old/20230903
           type: Directory
         name: tom-2-sample
       - hostPath:

@@ -59,6 +59,7 @@ class MsgConsumer(object):
             consumerconfig.update( extraconsumerconfig )
         self.logger.debug( f'Initializing Kafka consumer with\n{json.dumps(consumerconfig, indent=4)}' )
         self.consumer = confluent_kafka.Consumer( consumerconfig )
+        self.logger.debug( f"Consumer initialized" )
         atexit.register( close_msg_consumer, self )
 
         self.subscribed = False
@@ -84,7 +85,9 @@ class MsgConsumer(object):
         else:
             raise ValueError( f'topics must be either a string or a list' )
 
+        self.logger.debug( "Asking server for topics" )
         servertopics = self.get_topics()
+        self.logger.debug( f"Topics found on server: {servertopics}" )
         subtopics = []
         for topic in self.topics:
             if topic not in servertopics:

@@ -62,7 +62,7 @@ spec:
           value: /secrets/pitt_google_auth_key.json
         - name: GOOGLE_CLOUD_PROJECT
           value: elasticc-challenge
-        image: registry.nersc.gov/m1727/raknop/tom_desc_extcode
+        image: registry.nersc.gov/m1727/raknop/tom_desc_extcode:chimaera
         imagePullPolicy: Always
         name: tom-2-brokerpoll
         resources: {}
