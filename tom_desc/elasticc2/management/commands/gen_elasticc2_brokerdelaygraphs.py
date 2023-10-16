@@ -1,12 +1,16 @@
 import sys
+import io
 import re
 import math
 import pathlib
+import traceback
+import time
 import datetime
 import dateutil.parser
 import dateutil.tz
 import pytz
 import logging
+import threading
 import numpy
 import pandas
 import psycopg2
@@ -25,7 +29,7 @@ _logger.addHandler( _logout )
 _formatter = logging.Formatter( f'[%(asctime)s - %(levelname)s] - %(message)s',
                                 datefmt='%Y-%m-%d %H:%M:%S' )
 _logout.setFormatter( _formatter )
-_logger.setLevel( logging.INFO )
+_logger.setLevel( logging.DEBUG )
 
 class CassBrokerMessagePageHandler:
     def __init__( self, future, pgcursor, bucketleft, bucketright, dbucket, lowcutoff=1, highcutoff=9.99e5 ):
@@ -34,9 +38,20 @@ class CassBrokerMessagePageHandler:
         self.bucketleft = bucketleft
         self.bucketright = bucketright
         self.dbucket = dbucket
+        self.nbuckets = int( ( bucketright - bucketleft ) / dbucket + 0.5 )
         self.lowcutoff = lowcutoff
         self.highcutoff = highcutoff
-
+        self.nhandled = 0
+        self.printevery = 20000
+        self.nextprint = 20000
+        self.trunctime = 0
+        self.striotime = 0
+        self.copyfromtime = 0
+        self.executetime = 0
+        self.rowintime = 0
+        self.tottime = None
+        self.debugfirst = _logger.getEffectiveLevel() >= logging.DEBUG
+        
         self.fullbuckets = {}
         self.brokerbuckets = {}
         self.tombuckets = {}
@@ -45,32 +60,10 @@ class CassBrokerMessagePageHandler:
         pgcursor.execute( "CREATE TEMPORARY TABLE temp_alertids( "
                           "  alert_id bigint,"
                           "  classifier_id bigint,"
-                          "  brokeringesttimestamp timestamp with timezone,"
-                          "  descingesttimestamp timestamp with timezone,"
-                          "  msghdrtimestamp timestamp with timezone "
+                          "  brokeringesttimestamp timestamptz,"
+                          "  descingesttimestamp timestamptz,"
+                          "  msghdrtimestamp timestamptz "
                           ") ON COMMIT DROP" )
-
-        self.finished_event = Event()
-        self.error = None
-
-        self.future.add_callbacks( callback=self.handle_page, errback=self.handle_err )
-
-    def finalize:
-        self.pgcursor.connection.rollback()
-
-    def handle_page( self, rows ):
-        pgcursor.execute( "TRUNCATE TABLE temp_alertids" )
-
-        strio = io.StringIO()
-        for row in rows:
-            strio.write( f"{row['alert_id']}\t"
-                         f"{row['classifier_id']}\t"
-                         f"{row['brokeringesttimestamp'].isoformat()}Z\t"
-                         f"{row['descingesttimestamp'].isoformat()}Z\t"
-                         f"{row['msghdrtimestamp'].isoformat()}Z\n" )
-        strio.seek( 0 )
-        self.pgcursor.copy_from( strio, 'temp_alertids', size=262144 )
-
         q = ( f"""SELECT fullbucket AS fullbin,
                            {self.bucketleft}+{self.dbucket}*(fullbucket-1) AS log10_fulldelay_sec,
                            COUNT(fullbucket) AS nfull,
@@ -93,22 +86,72 @@ class CassBrokerMessagePageHandler:
                                                                EXTRACT(EPOCH FROM tomdelay) ),
                                               {self.highcutoff} ) ),
                                          {self.bucketleft}, {self.bucketright}, {self.nbuckets} ) AS tombucket
-
                      FROM (
                         SELECT DISTINCT ON(t.alert_id,t.classifier_id)
                             t.descingesttimestamp - a.alertsenttimestamp AS fulldelay,
                             t.msghdrtimestamp - a.alertsenttimestamp AS brokerdelay,
                             t.descingesttimestamp - t.msghdrtimestamp AS tomdelay
-                         FROM temp_alertids
+                         FROM temp_alertids t
                          INNER JOIN elasticc2_ppdbalert a ON t.alert_id=a.alert_id
-                         ORDER BY t.alert_id,t.classifier_id,t.descingesttimestamp
                      ) subsubq
                    ) subq
                    GROUP BY fullbucket, brokerbucket, tombucket
-                   ORDER BY fullbucket, brokerbucket, tombucket
         """ )
-        self.pgcursor.execute( q )
+#                         ORDER BY t.alert_id,t.classifier_id,t.descingesttimestamp
+#                   ORDER BY fullbucket, brokerbucket, tombucket
+        _logger.debug( f"Ugly query: {q}" )
+        pgcursor.execute( f"PREPARE bucket_join_alert_tempids AS {q}" )
+        
+        self.finished_event = threading.Event()
+        self.error = None
 
+        self.future.add_callbacks( callback=self.handle_page, errback=self.handle_error )
+
+    def finalize( self ):
+        self.pgcursor.connection.rollback()
+        resid = None
+        if self.tottime is not None:
+            self.tottime = time.perf_counter() - self.tottime
+            resid = ( self.tottime - self.trunctime - self.striotime
+                      - self.copyfromtime - self.executetime - self.rowintime )
+        outstr = io.StringIO()
+        _logger.info( f"Overall: handled {self.nhandled} rows in {self.tottime} sec:\n"
+                      f"      trunctime : {self.trunctime}\n"
+                      f"      striotime : {self.striotime}\n"
+                      f"   copyfromtime : {self.copyfromtime}\n"
+                      f"    executetime : {self.executetime}\n"
+                      f"      rowintime : {self.rowintime}\n"
+                      f"     (residual) : {resid}\n" )
+
+    def handle_page( self, rows ):
+        if self.tottime is None:
+            self.tottime = time.perf_counter()
+        t0 = time.perf_counter()
+        self.pgcursor.execute( "TRUNCATE TABLE temp_alertids" )
+
+        t1 = time.perf_counter()
+        strio = io.StringIO()
+        for row in rows:
+            strio.write( f"{row['alert_id']}\t"
+                         f"{row['classifier_id']}\t"
+                         f"{row['brokeringesttimestamp'].isoformat()}Z\t"
+                         f"{row['descingesttimestamp'].isoformat()}Z\t"
+                         f"{row['msghdrtimestamp'].isoformat()}Z\n" )
+        strio.seek( 0 )
+        t2 = time.perf_counter()
+        self.pgcursor.copy_from( strio, 'temp_alertids', size=262144 )
+
+        t3 = time.perf_counter()
+        if self.debugfirst:
+            self.debugfirst = False
+            self.pgcursor.execute( "EXPLAIN ANALYZE EXECUTE bucket_join_alert_tempids" )
+            analrows = self.pgcursor.fetchall()
+            nl = '\n'
+            _logger.debug( f'Analyzed query:\n{nl.join( [ r["QUERY PLAN"] for r in analrows ] )}' )
+        self.pgcursor.execute( "EXECUTE bucket_join_alert_tempids" )
+        import pdb; pdb.set_trace()
+        
+        t4 = time.perf_counter()
         for row in self.pgcursor:
             for which in [ 'full', 'broker', 'tom' ]:
                 buckets = getattr( self, f'{which}buckets' )
@@ -122,6 +165,18 @@ class CassBrokerMessagePageHandler:
         else:
             self.finished_event.set()
 
+        t5 = time.perf_counter()
+        self.nhandled += len( rows )
+        self.trunctime += t1 - t0
+        self.striotime += t2 - t1
+        self.copyfromtime += t3 - t2
+        self.executetime += t4 - t3
+        self.rowintime += t5 - t4
+
+        if self.nhandled >= self.nextprint:
+            self.nextprint += self.printevery
+            _logger.info( f"Handled {self.nhandled} rows" )
+
     def handle_error( self, exc ):
         self.error = exc
         self.finished_event.set()
@@ -132,51 +187,109 @@ class Command(BaseCommand):
     outdir = _rundir / "../../static/elasticc2/brokertiminggraphs"
 
     def add_arguments( self, parser) :
+        self.bucketleft = 0
+        self.bucketright = 6
+        self.dbucket = 0.25
+        self.lowcutoff = 1
+        self.highcutoff = 9.99e5
         pass
 
-
-
-
-
-    def get_delayhist( self, brokerids, cursor, bucketleft=0, bucketright=6, dbucket=0.25,
-                       t0=datetime.datetime( 2023, 10, 08, tzinfo=pytz.utc ),
-                       t1=datetime.datetime( 2023, 10, 15, tzinfo=pytz.utc ),
-                       lowcutoff=1, highcutoff=9.99e5):
+    def makeplot( fullbuckets, brokerbuckets, tombuckets, brokername, weektitle, outfile ):
+        fig = pyplot.figure( figsize=(18,4), tight_layout=True )
+        for i, ( which, bucket ) in enumerate( zip( [ fullbuckets, brokerbuckets, tombuckets ],
+                                                    [ 'Original Alert to Classification Ingest',
+                                                      'Broker Delay',
+                                                      'TOM Delay' ] ) ):
+            ax = fig.add_subplot( 1, 3, i+1 )
+            ax.set_title( f'' )
+            ax.set_xlim( self.bucketleft, self.bucketright + self.dbucket )
+            ax.set_xlabel( r"$\log_{10}(\Delta t (\mathrm{s}))$", fontsize=14 )
+            ax.set_ylabel( "N", fontsize=14 )
+            xticks = range( 0, 7, 1 )
+            xlabels[0] = f'≤{xlabels[0]}'
+            xlabels[-1] = f'≥{xlabels[-1]}'
+            xlabels = [ str(i) for i in xticks ]
+            ax.set_xticks( xticks, labels=xlabels )
+            ax.tick_params( 'both', labelsize=12 )
+            ax.bar( bucket.keys(), bucket.items(), width=dbucket, align='edge' )
+        _logger.info( f"Writing {str(outfile)})" )
+        fig.suptitle( f"{brokername} {weektitle}" )
+        fig.savefig( outfile )
+        pyplot.close( fig )
+            
+    
+    def get_delayhist( self, brokerids, cursor,
+                       t0=datetime.datetime( 2023, 10,  8, tzinfo=pytz.utc ),
+                       t1=datetime.datetime( 2023, 10, 15, tzinfo=pytz.utc ) ):
 
         # Get all of the brokermessages from these brokerids from cassandra.
         # Go through them in batches, extracting the corresponding
         # timing information from postgres
 
-        fullbuckets = {}
-        brokerbuckets = {}
-        tombuckets = {}
-
+        casssession = django.db.connections['cassandra'].connection.session
+        casssession.default_fetch_size = 10000
+        # Perversely, it took longer per page using the PreparedStatement
+        # than it did using a simple statementbelow. ???
+        # cassq = casssession.prepare( "SELECT * FROM tom_desc.cass_broker_message "
+        #                              "WHERE classifier_id IN ? "
+        #                              "  AND descingesttimestamp >= ? "
+        #                              "  AND descingesttimestamp < ? "
+        #                              "ALLOW FILTERING" )
+        
+        weeklyfullbuckets = {}
+        weeklybrokerbuckets = {}
+        weeklytombuckets = {}
+        
+        cumulfullbuckets = {}
+        cumulbrokerbuckets = {}
+        cumultombuckets = {}
 
         weekt0 = t0
         while weekt0 < t1:
             weekt1 = weekt0 + datetime.timedelta( days=7 )
 
-            cassq = cassandray.query.SimpleStatement( "SELECT * FROM tom_desc.cass_broker_message "
-                                                      "WHERE classifier_id IN %(ids)s "
-                                                      "  AND descingesttimestamp >= %(t0)s "
-                                                      "  AND descingesttimestamp <= %(t1)s "
-                                                      fetch_size=10000 )
-            future = django.db.connection['cassandra'].execute( cassq, { 'ids': tuple( brokerids ) } )
-            handler = CassBrokerMessagePageHandler( future, cursor, bucketleft, bucketright, dbucket,
-                                                    lowcutoff=lowcutoff, highcutoff=highcutoff )
+            fullbuckets = {}
+            brokerbuckets = {}
+            tombuckets = {}
+
+            # future = casssession.execute_async( cassq, ( tuple( brokerids ), weekt0, weekt1 ) )
+            cassq = ( "SELECT * FROM tom_desc.cass_broker_message "
+                      "WHERE classifier_id IN %(id)s "
+                      "  AND descingesttimestamp >= %(t0)s "
+                      "  AND descingesttimestamp < %(t1)s "
+                      "ALLOW FILTERING" )
+            future = casssession.execute_async( cassq, { 'id': tuple(brokerids), 't0': weekt0, 't1': weekt1 } )
+            handler = CassBrokerMessagePageHandler( future, cursor, self.bucketleft, self.bucketright, self.dbucket,
+                                                    lowcutoff=self.lowcutoff, highcutoff=self.highcutoff )
             handler.finished_event.wait()
+            handler.finalize()
             if handler.error:
+                _logger.error( handler.error )
                 raise handler.error
 
-            for mybucket, handlerbucket in zip( [ fullbuckets, brokerbuckets, tombuckets ],
-                                                [ handler.fulbuckets, handler.brokerbuckets, handler.tombuckets ] ):
+            for mybucket, cumulbucket, handlerbucket in zip( [ fullbuckets, brokerbuckets, tombuckets ],
+                                                             [ cumulfullbuckets, cumulbrokerbuckets,
+                                                               cumultombuckets ],
+                                                             [ handler.fullbuckets, handler.brokerbuckets,
+                                                               handler.tombuckets ] ):
                 for delay, count in handlerbucket.items():
                     if delay not in mybucket:
                         mybucket[ delay ] = count
                     else:
                         mybucket[ delay ] += count
+                    if delay not in cumulbucket:
+                        cumulbucket[ delay ] = count
+                    else:
+                        cumulbucket[ delay ] += count
 
-                        ROB YOU WERE HERE
+            weeklyfullbuckets[ weekt0 ] = fullbuckets
+            weeklybrokerbuckets[ weekt0 ] = brokerbuckets
+            weeklytombuckets[ weekt0 ] = tombuckets
+
+            weekt0 = weekt1
+            
+        return ( weeklyfullbuckets, weeklybrokerbuckets, weeklytombuckets,
+                 cumulfullbuckets, cumulbrokerbuckets, cumultombuckets )
 
 
     def handle( self, *args, **options ):
@@ -186,7 +299,9 @@ class Command(BaseCommand):
         conn = None
 
         dbucket = 0.25
-
+        t0 = datetime.datetime( 2023, 10, 16, tzinfo=pytz.utc )
+        t1 = datetime.datetime( 2023, 10, 23, tzinfo=pytz.utc )
+        
         # Jump through hoops to get access to the psycopg2 connection from django
         conn = django.db.connection.cursor().connection
         orig_autocommit = conn.autocommit
@@ -209,103 +324,36 @@ class Command(BaseCommand):
                         brokergroups[row['brokername']] = []
                     brokergroups[row['brokername']].append( row['classifier_id'] )
 
-                whichgroups = [ k for k in brokergroups.keys() ]
-                # whichgroups = [ 'Fink' ]
+            whichgroups = [ k for k in brokergroups.keys() ]
+            # whichgroups = [ 'Fink' ]
 
-                timingstmp = []
-                for brokername in whichgroups:
-                    brokerids = brokergroups[ brokername ]
-                    _logger.info( f"Sending timings query for {brokername}" ) 
-                    rows = self.get_delayhist( brokerids, cursor, dbucket=dbucket )
-                    for row in rows:
-                        d = { 'broker': brokername }
-                        d.update( row )
-                        timingstmp.append( d )
-                _logger.info( f"Done with queries." )
+            for broker in whichgroups:
+                _logger.info( f"Doing broker {broker}" )
 
-                import pdb; pdb.set_trace()
+                with conn.cursor( cursor_factory=psycopg2.extras.RealDictCursor ) as cursor:
+                    ( weeklyfullbuckets,
+                      weeklybrokerbuckets,
+                      weeklytombuckets,
+                      cumulfullbuckets,
+                      cumulbrokerbuckets,
+                      cumultombuckets ) = self.get_delayhist( brokergroups[ broker ], cursor, t0, t1 )
 
-            alltimings = pandas.DataFrame( timingstmp ).set_index( [ 'broker', 'whichweek',
-                                                                     'fullbin', 'log10_fulldelay_sec',
-                                                                     'brokerbin', 'log10_brokerdelay_sec',
-                                                                     'tombin', 'log10_tomdelay_sec' ] )
+                    self.makeplot( cumulfullbuckets, cumulbrokerbuckets, cumultombuckets, broker,
+                                   '— Cumulative', f'{broker}-cumul.svg' )
+                    for week in weeklyfullbuckets.keys():
+                        self.makeplot( weeklyfullbuckets[week], weeklybrokerbuckets[week], weeklytombuckets[week],
+                                       '— Week of {week.year:4d}-{week.month:02d}-{week.day:02d}',
+                                       f'{broker}-{week.year:4d}-{week.month:02d}-{week.day:02d}' )
 
-            fulltimings = ( alltimings.groupby( [ 'broker', 'whichweek',
-                                                  'fullbin', 'log10_fulldelay_sec' ] )['nfull'].apply('sum')
-                            .reset_index().drop( columns='fullbin' )
-                            .rename( columns={ 'log10_fulldelay_sec': 'log10_delay_sec', 'nfull': 'n' } )
-                            .set_index( ['broker', 'whichweek', 'log10_delay_sec'] ) )
-            brokertimings = ( alltimings.groupby( [ 'broker', 'whichweek',
-                                                    'brokerbin', 'log10_brokerdelay_sec' ] )['nbroker'].apply('sum')
-                             .reset_index().drop( columns='brokerbin' )
-                             .rename( columns={ 'log10_brokerdelay_sec': 'log10_delay_sec', 'nbroker': 'n' } )
-                             .set_index( ['broker', 'whichweek', 'log10_delay_sec'] ) )
-            tomtimings = ( alltimings.groupby( [ 'broker', 'whichweek',
-                                                 'tombin', 'log10_tomdelay_sec' ] )['ntom'].apply('sum')
-                           .reset_index().drop( columns='tombin' )
-                           .rename( columns={ 'log10_tomdelay_sec': 'log10_delay_sec', 'ntom': 'n' } )
-                           .set_index( ['broker', 'whichweek', 'log10_delay_sec'] ) )
-
-            sumfulltimings = fulltimings.groupby( ['broker', 'log10_delay_sec'] ).apply('sum')
-            sumbrokertimings = brokertimings.groupby( ['broker', 'log10_delay_sec'] ).apply('sum')
-            sumtomtimings = tomtimings.groupby( ['broker', 'log10_delay_sec'] ).apply('sum')
-
-            weeks = fulltimings.index.get_level_values('whichweek').unique()
-            weekdates = { w: w.date().isoformat() for w in weeks }
-
-            minx = 0
-            maxx = 6
-            xticks = range( minx, maxx+1, 1 )
-            xlabels = [ str(i) for i in xticks ]
-            xlabels[0] = f"≤{xlabels[0]}"
-            xlabels[-1] = f"≥{xlabels[-1]}"
-
-            timingslist = [ fulltimings, brokertimings, tomtimings ]
-            sumlist = [ sumfulltimings, sumbrokertimings, sumtomtimings ]
-            titles = [ 'Original Alert to Classification Ingest',
-                       'Broker Delay',
-                       'TOM Delay' ]
-
-            def plotit( titles, timingslist, brokername, week, outfile ):
-                fig = pyplot.figure( figsize=(5*len(timingslist), 4), tight_layout=True )
-                for i, timings in enumerate( timingslist ):
-                    if week is None:
-                        df = timings.xs( brokername )
-                    else:
-                        df = timings.xs( ( brokername, week ) )
-                    ax = fig.add_subplot( 1, len(timingslist), i+1 )
-                    ax.set_title( titles[i], fontsize=16 )
-                    ax.set_xlabel( r"$\log_{10}(\Delta t (\mathrm{s}))$", fontsize=14 )
-                    ax.set_xlim( minx, maxx )
-                    ax.set_ylabel( "N", fontsize=14 )
-                    ax.bar( df.index.values, df['n'].values, width=dbucket, align='edge' )
-                    ax.set_xticks( xticks, labels=xlabels )
-                    ax.tick_params( 'both', labelsize=12 )
-                _logger.info( f"Writing {str(outfile)})" )
-                fig.savefig( outfile )
-                pyplot.close( fig )
-
-            for brokername in whichgroups:
-                for week in weeks:
-                    try:
-                        outfile = self.outdir / f'{brokername}_{weekdates[week]}.svg'
-                        plotit( titles, timingslist, brokername, week, outfile )
-                    except KeyError as e:
-                        _logger.warning( f"Key error for broker {brokername}, week {week}" )
-
-                outfile = self.outdir / f'{brokername}_summed.svg'
-                plotit( titles, sumlist, brokername, None, outfile )
-
-            with open( self.outdir / "updatetime.txt", "w" ) as ofp:
-                ofp.write( updatetime )
-
-            _logger.info( "Done." )
-
+            _logger.info( "All done." )
         except Exception as e:
             _logger.exception( e )
+            _logger.exception( traceback.format_exc() )
+            import pdb; pdb.set_trace()
             raise e
         finally:
             if conn is not None:
+                conn.autocommit = orig_autocommit
                 conn.close()
                 conn = None
 
