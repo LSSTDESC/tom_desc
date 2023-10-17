@@ -42,7 +42,10 @@ def calcbucks( bucketleft, bucketright, dbucket ):
     # Given postgres' width_bucket handling, everything *less than* bucketleft will be in bucket 0
     # Anything between bucketleft + (n-1)*dbucket and bucketleft + n*dbucket will be in bucket n
     # Anything >= bucketleft + nbuckets*dbucket will be in bucket nbuckets + 1
-    nbuckets = int( ( bucketright - bucketleft ) / dbucket + 0.5 )
+    nbuckets = ( bucketright - bucketleft ) / dbucket
+    if ( float(int(nbuckets)) != nbuckets ):
+        raise ValueError( f"Can't divide {bucketleft} to {bucketright} evenly by {dbucket}" )
+    nbuckets = int( nbuckets )
     bucketnums = numpy.array( range( nbuckets+2 ) )
     bucketleftedges = bucketleft + ( bucketnums - 1 ) * dbucket
     return nbuckets, bucketnums, bucketleftedges
@@ -83,30 +86,14 @@ class CassBrokerMessagePageHandler:
 
         # Precompile the postgres query we're going to use
         pgcursor.execute( "DEALLOCATE ALL" )
-        q = ( f"""  SELECT width_bucket( LOG( LEAST( GREATEST( {self.lowcutoff},
-                                                               EXTRACT(EPOCH FROM fulldelay) ),
-                                              {self.highcutoff} ) ),
-                                         {self.bucketleft}, {self.bucketright}, {self.nbuckets} ) AS fullbucket,
-                           width_bucket( LOG( LEAST( GREATEST( {self.lowcutoff},
-                                                     EXTRACT(EPOCH FROM brokerdelay) ),
-                                              {self.highcutoff} ) ),
-                                         {self.bucketleft}, {self.bucketright}, {self.nbuckets} ) AS brokerbucket,
-                           width_bucket( LOG( LEAST( GREATEST( {self.lowcutoff},
-                                                               EXTRACT(EPOCH FROM tomdelay) ),
-                                              {self.highcutoff} ) ),
-                                         {self.bucketleft}, {self.bucketright}, {self.nbuckets} ) AS tombucket
-                     FROM (
-                        SELECT DISTINCT ON(t.alert_id,t.classifier_id)
-                            t.descingesttimestamp - a.alertsenttimestamp AS fulldelay,
-                            t.msghdrtimestamp - a.alertsenttimestamp AS brokerdelay,
-                            t.descingesttimestamp - t.msghdrtimestamp AS tomdelay
-                         FROM temp_alertids t
-                         INNER JOIN elasticc2_ppdbalert a ON t.alert_id=a.alert_id
-                     ) subsubq
+        q = ( f"""SELECT DISTINCT ON(t.alert_id,t.classifier_id)
+                         EXTRACT(EPOCH FROM t.descingesttimestamp - a.alertsenttimestamp)::float AS fulldelay,
+                         EXTRACT(EPOCH FROM t.msghdrtimestamp - a.alertsenttimestamp)::float AS brokerdelay,
+                         EXTRACT(EPOCH FROM t.descingesttimestamp - t.msghdrtimestamp)::float AS tomdelay
+                  FROM temp_alertids t
+                  INNER JOIN elasticc2_ppdbalert a ON t.alert_id=a.alert_id
         """ )
-#                         ORDER BY t.alert_id,t.classifier_id,t.descingesttimestamp
-#                   ORDER BY fullbucket, brokerbucket, tombucket
-        _logger.debug( f"Ugly query: {q}" )
+        _logger.debug( f"(no-longer-so-) Ugly query: {q}" )
         pgcursor.execute( f"PREPARE bucket_join_alert_tempids AS {q}" )
 
         self.df = makesubdf( self.bucketnums ).set_index( [ 'which', 'buck' ] )
@@ -162,12 +149,24 @@ class CassBrokerMessagePageHandler:
 
         t4 = time.perf_counter()
         tmpdf = pandas.DataFrame( self.pgcursor.fetchall() )
+        tmpdf.clip( lower=10**self.bucketleft, upper=10**self.bucketright, inplace=True )
+        tmpdf = tmpdf.apply( numpy.log10 )
+        fullhist, binedges = numpy.histogram( tmpdf['fulldelay'],
+                                              range=(self.bucketleft,self.bucketright+self.dbucket),
+                                              bins=self.nbuckets+1 )
+        if not ( binedges == numpy.arange( self.bucketleft, self.bucketright+2*self.dbucket, self.dbucket ) ).all():
+            raise ValueError( "Unexpected bins." )
+        brokerhist, binedges = numpy.histogram( tmpdf['brokerdelay'],
+                                                range=(self.bucketleft,self.bucketright+self.dbucket),
+                                                bins=self.nbuckets+1 )
+        tomhist, binedges = numpy.histogram( tmpdf['tomdelay'],
+                                             range=(self.bucketleft,self.bucketright+self.dbucket),
+                                             bins=self.nbuckets+1 )
         curdf = None
-        for which in [ 'full', 'broker', 'tom' ]:
-            counts = tmpdf[f'{which}bucket'].value_counts()
+        for which, hist in zip( [ 'full', 'broker', 'tom' ], [ fullhist, brokerhist, tomhist ] ):
             whichdf = pandas.DataFrame( { 'which': which,
-                                          'buck': counts.index.values,
-                                          'count': counts.values } )
+                                          'buck': numpy.array( ( binedges / self.dbucket + 1 )[:-1], dtype=int ),
+                                          'count': hist } )
             if curdf is None:
                 curdf = whichdf
             else:
