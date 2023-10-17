@@ -5,6 +5,7 @@ import datetime
 import pytz
 import logging
 import itertools
+import uuid
 import psqlextra.types
 import psqlextra.models
 import psycopg2.extras
@@ -15,7 +16,6 @@ from django.db.models import F
 from guardian.shortcuts import assign_perm
 from django.contrib.auth.models import Group
 
-import uuid
 from cassandra.cqlengine import columns
 from django_cassandra_engine.models import DjangoCassandraModel
 
@@ -1109,7 +1109,8 @@ class BrokerSourceIds(models.Model):
         addedsources = BrokerSourceIds.objects.bulk_create( objs, len(objs), ignore_conflicts=True )
 
 
-
+# This table is deprecated, is just here until I can
+# do a manual move
 class CassBrokerMessage(DjangoCassandraModel):
     classifier_id = columns.BigInt( primary_key=True )
     diasource_id = columns.BigInt( primary_key=True )
@@ -1139,6 +1140,8 @@ class CassBrokerMessage(DjangoCassandraModel):
         the repeated network overhead, but we'll see how it goes.
 
         """
+
+        raise RuntimeError( "Deprecated" )
 
         cfers = {}
         sourceids = []
@@ -1235,6 +1238,156 @@ class CassBrokerMessage(DjangoCassandraModel):
                  "addedclassifications": None,
                  "firstbrokermessage_id": None }
 
+
+class CassBrokerMessageBySource(DjangoCassandraModel):
+    classifier_id = columns.BigInt( primary_key=True )
+    diasource_id = columns.BigInt( primary_key=True )
+    id = columns.UUID( primary_key=True, default=uuid.uuid4 )
+
+    topicname = columns.Text()
+    streammessage_id = columns.BigInt()
+    alert_id = columns.BigInt()
+    msghdrtimestamp = columns.DateTime()
+    elasticcpublishtimestamp = columns.DateTime()
+    brokeringesttimestamp = columns.DateTime()
+    descingesttimestamp = columns.DateTime( default=datetime.datetime.utcnow, primary_key=True )
+    classid = columns.List( columns.Integer() )
+    probability = columns.List( columns.Float() )
+
+    class Meta:
+        get_pk_field = 'id'
+
+    @staticmethod
+    def load_batch( messages, logger=_logger ):
+        """Load an array of broker classification messages.
+
+        Loads things to *both* CassBrokerMessageBySource and
+        CassBrokerMessageByTime
+
+        This doesn't actually do any batching operation, because there's
+        no bulk_create in the Django Cassandra interface, and because I
+        don't understand Cassandra well enough to know how to do this --
+        I've read that batching can be a bad idea.  I'm worried about
+        the repeated network overhead, but we'll see how it goes.
+
+        """
+
+        cfers = {}
+        sourceids = []
+        for i, msgmeta in enumerate(messages):
+            msg = msgmeta['msg']
+            if len( msg['classifications'] ) == 0:
+                logger.debug( 'Message with no classifications' )
+                continue
+            keycfer = f"{msg['brokerName']}_{msg['brokerVersion']}_{msg['classifierName']}_{msg['classifierParams']}"
+            if keycfer not in cfers.keys():
+                cfers[ keycfer ] = { 'brokername': msg['brokerName'],
+                                     'brokerversion': msg['brokerVersion'],
+                                     'classifiername': msg['classifierName'],
+                                     'classifierparams': msg['classifierParams'],
+                                     'classifier_id': None }
+            sourceids.append( msg['diaSourceId'] )
+
+        # Create any classifiers that don't already exist; this
+        # is one place where we do get efficiency by calling
+        # this batch method.
+        cferconds = models.Q()
+        logger.debug( f"Looking for pre-existing classifiers" )
+        cferconds = models.Q()
+        i = 0
+        for cferkey, cfer in cfers.items():
+            newcond = ( models.Q( brokername = cfer['brokername'] ) &
+                        models.Q( brokerversion = cfer['brokerversion'] ) &
+                        models.Q( classifiername = cfer['classifiername'] ) &
+                        models.Q( classifierparams = cfer['classifierparams'] ) )
+            cferconds |= newcond
+        curcfers = BrokerClassifier.objects.filter( cferconds )
+        numknown = 0
+        for cur in curcfers:
+            keycfer = f"{cur.brokername}_{cur.brokerversion}_{cur.classifiername}_{cur.classifierparams}"
+            cfers[ keycfer ][ 'classifier_id' ] = cur.classifier_id
+            numknown += 1
+        logger.debug( f'Found {numknown} existing classifiers that match the ones in this batch.' )
+
+        # Create new classifiers as necessary
+
+        kwargses = []
+        ncferstoadd = 0
+        for keycfer, cfer in cfers.items():
+            if cfer[ 'classifier_id' ] is None:
+                kwargses.append( { 'brokername': cfer['brokername'],
+                                   'brokerversion': cfer['brokerversion'],
+                                   'classifiername': cfer['classifiername'],
+                                   'classifierparams': cfer['classifierparams'] } )
+                ncferstoadd += 1
+        ncferstoadd = len(kwargses)
+        logger.debug( f'Adding {ncferstoadd} new classifiers.' )
+        if ncferstoadd > 0:
+            objs = ( BrokerClassifier( **k ) for k in kwargses )
+            batch = list( itertools.islice( objs, len(kwargses) ) )
+            newcfers = BrokerClassifier.objects.bulk_create( batch, len(kwargses) )
+            for newcfer in newcfers:
+                keycfer = ( f'{newcfer.brokername}_{newcfer.brokerversion}_'
+                            f'{newcfer.classifiername}_{newcfer.classifierparams}' )
+                cfers[keycfer]['classifier_id'] = newcfer.classifier_id
+
+        for i, msgmeta in enumerate( messages ):
+            msg = msgmeta['msg']
+            if len( msg['classifications' ] ) == 0:
+                    continue
+            keycfer = f"{msg['brokerName']}_{msg['brokerVersion']}_{msg['classifierName']}_{msg['classifierParams']}"
+            classes = []
+            probs = []
+            for cification in msg['classifications']:
+                classes.append( cification['classId'] )
+                probs.append( cification['probability'] )
+
+            cassid = uuid.uuid4()
+            descingesttimestamp = datetime.datetime.now()
+            cassmsgbysource = CassBrokerMessageBySource(
+                classifier_id=cfers[ keycfer ][ 'classifier_id' ],
+                diasource_id=msg['diaSourceId'],
+                id = cassid,
+                topicname=msgmeta['topic'],
+                streammessage_id=msgmeta['msgoffset'],
+                alert_id=msg['alertId'],
+                msghdrtimestamp=msgmeta['timestamp'],
+                elasticcpublishtimestamp=msg['elasticcPublishTimestamp'],
+                brokeringesttimestamp=msg['brokerIngestTimestamp'],
+                descingestimestamp=descingesttimestamp,
+                classid=classes,
+                probability=probs
+            )
+            cassmsgbysource.save()
+
+            cassmsgbytime =  CassBrokerMessageByTime(
+                classifier_id=cfers[ keycfer ][ 'classifier_id' ],
+                descingestimestamp=descingesttimestamp,
+                id = cassid,
+                topicname=msgmeta['topic'],
+                streammessage_id=msgmeta['msgoffset'],
+                diasource_id=msg['diaSourceId'],
+                alert_id=msg['alertId'],
+                msghdrtimestamp=msgmeta['timestamp'],
+                elasticcpublishtimestamp=msg['elasticcPublishTimestamp'],
+                brokeringesttimestamp=msg['brokerIngestTimestamp'],
+                classid=classes,
+                probability=probs
+            )
+            cassmsgbytime.save()
+
+        # Update the log of new broker source ids
+        BrokerSourceIds.add_batch( sourceids )
+
+        logger.debug( f"Classifiers in the messages just loaded: {list(cfers.keys())}" )
+
+
+        # return newcfications
+        return { "addedmsgs": len(messages),
+                 "addedclassifiers": ncferstoadd,
+                 "addedclassifications": None,
+                 "firstbrokermessage_id": None }
+
 class CassBrokerMessageByTime(DjangoCassandraModel):
     classifier_id = columns.BigInt( primary_key=True )
     descingesttimestamp = columns.DateTime( default=datetime.datetime.utcnow, primary_key=True )
@@ -1253,6 +1406,11 @@ class CassBrokerMessageByTime(DjangoCassandraModel):
     class Meta:
         get_pk_field = 'id'
 
+    @staticmethod
+    def load_batch( messages, logger=_logger ):
+        """Calls CassBrokerMessageBySource.load_batch"""
+
+        CassBrokerMessageBySource.load_batch( messages, logger )
 
 # This is a thing I use as a "don't run twice at once" lock
 

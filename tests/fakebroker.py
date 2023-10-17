@@ -183,8 +183,8 @@ def main():
 
         consumer.poll_loop( handler = handle_message_batch, stoponnomessages=(len(subbed)<len(args.source_topics)),
                             stopafter=datetime.timedelta(minutes=10) )
-        _logger.info( f"Gratuitously sleeping 10s after return from consumer.poll_loop" )
-        time.sleep( 10 )
+        # _logger.info( f"Gratuitously sleeping 10s after return from consumer.poll_loop" )
+        # time.sleep( 10 )
 
 # ======================================================================
 

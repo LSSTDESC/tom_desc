@@ -4,7 +4,7 @@ import datetime
 import dateutil.parser
 import pytz
 
-from elasticc2.models import CassBrokerMessage, BrokerSourceIds, BrokerClassifier
+from elasticc2.models import CassBrokerMessageBySource, CassBrokerMessageByTime, BrokerSourceIds, BrokerClassifier
 
 #TODO : lots more
 
@@ -37,14 +37,17 @@ class TestElasticc2Models:
                              'msg': alertdict
                             } )
 
-        yield CassBrokerMessage.load_batch( alerts )
+        yield CassBrokerMessageBySource.load_batch( alerts )
 
         cfers = BrokerClassifier.objects.filter( brokername__in=[ 'rbc_test1', 'rbc_test2'] )
         
         # This doesn't work; Cassandra is picky about deleting stuff in bulk
         # CassBrokerMessage.objects.filter( brokername__in=[ 'rbc_test1', 'rbc_test2' ] ).delete()
         # So we do the slow thing, which will be OK given the small number of messages
-        msgs = CassBrokerMessage.objects.filter( classifier_id__in=[ i.classifier_id for i in cfers ] )
+        msgs = CassBrokerMessageByTime.objects.filter( classifier_id__in=[ i.classifier_id for i in cfers ] )
+        for msg in msgs:
+            msg.delete()
+        msgs = CassBrokerMessageBySource.objects.filter( classifier_id__in= [ i.classifier_id for i in cfers ] )
         for msg in msgs:
             msg.delete()
 
@@ -62,9 +65,10 @@ class TestElasticc2Models:
     #     pass
 
     def test_cassbrokermessage_bulk( self, loaded_broker_classifications ):
-        assert CassBrokerMessage.objects.count() >= loaded_broker_classifications[ 'addedmsgs' ]
+        assert CassBrokerMessageBySource.objects.count() >= loaded_broker_classifications[ 'addedmsgs' ]
+        assert CassBrokerMessageBySource.objects.count() == CassBrokerMessageByTime.objects.count()
         cfers = BrokerClassifier.objects.filter( brokername__in=[ 'rbc_test1', 'rbc_test2' ] )
-        msgs = CassBrokerMessage.objects.filter( classifier_id__in=[ i.classifier_id for i in cfers ] )
+        msgs = CassBrokerMessageBySource.objects.filter( classifier_id__in=[ i.classifier_id for i in cfers ] )
         assert msgs.count() == loaded_broker_classifications[ 'addedmsgs' ]
         sources = set()
         for msg in msgs.all():
