@@ -311,9 +311,8 @@ class Command(BaseCommand):
                 weekns = list( range( len( weeks ) ) )
                 weeklabs = [ f'{w.year:04d}-{w.month:02d}-{w.day:02d}' for w in weeks ]
 
-                # Figure out which brokers we have
-
                 with conn.cursor( cursor_factory=psycopg2.extras.RealDictCursor ) as cursor:
+                    # Figure out which brokers we have
                     cursor.execute( 'SELECT * FROM elasticc2_brokerclassifier '
                                     'ORDER BY "brokername","brokerversion","classifiername","classifierparams"' )
                     brokers = { row["classifier_id"] : row for row in cursor.fetchall() }
@@ -368,6 +367,14 @@ class Command(BaseCommand):
                             self.df = self.df.add( df, fill_value=0 )
 
 
+                # It seems like there should be a more elegant way to do this
+                summeddf = ( self.df.query( 'week!="cumlative"' )
+                             .groupby( [ 'broker', 'which', 'buck' ] )
+                             .sum().reset_index() )
+                summeddf['week'] = 'cumulative'
+                summeddf.set_index( [ 'broker', 'week', 'which', 'buck' ], inplace=True )
+                self.df.loc[ ( slice(None), 'cumulative', slice(None), slice(None) ), : ] = summeddf
+
                 # self.df.set_index( [ 'broker', 'week', 'which', 'buck' ], inplace=True )
                 _logger.info( "Writing gen_elasticc2_brokerdelaygraphs.pkl" )
                 self.df.to_pickle( "gen_elasticc2_brokerdelaygraphs.pkl" )
@@ -375,14 +382,6 @@ class Command(BaseCommand):
                 _logger.info( "Reading gen_elasticc2_brokerdelaygraphs.pkl" )
                 self.df = pandas.read_pickle( "gen_elasticc2_brokerdelaygraphs.pkl" )
 
-            # It seems like there should be a more elegant way to do this
-            summeddf = ( self.df.query( 'week!="cumlative"' )
-                         .groupby( [ 'broker', 'which', 'buck' ] )
-                         .sum().reset_index() )
-            summeddf['week'] = 'cumulative'
-            summeddf.set_index( [ 'broker', 'week', 'which', 'buck' ], inplace=True )
-            self.df.loc[ ( slice(None), 'cumulative', slice(None), slice(None) ), : ] = summeddf
-            
             _logger.info( "Saving plots." )
             self.makeplots()
             if updatetime is not None:
