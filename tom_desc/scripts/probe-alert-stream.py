@@ -10,12 +10,13 @@ from _consumekafkamsgs import MsgConsumer
 def main():
 
     
-    consumer = MsgConsumer( 'kafka-server:9092', 'probe-alert-stream-4',
+    consumer = MsgConsumer( 'public.alerts.ztf.uw.edu:9092', 'probe-alert-stream-4',
                             '../elasticc2/management/commands/elasticc.v0_9_1.alert.avsc',
-                            topics=[ 'alerts-ddf-limited' ] )
+                            topics=[ 'elasticc2-st2-ddf-limited' ] )
 
     def msghandler( msgs ):
         alert = fastavro.schemaless_reader( io.BytesIO( msgs[0].value() ), consumer.schema )
+        print( f'alert id : {alert["alertId"]}' )
         print( f'{len(alert["prvDiaSources"])} previous sources, '
                f'{len(alert["prvDiaForcedSources"])} previous forced sources' )
         if len( alert['prvDiaForcedSources'] ) > 0 :

@@ -50,6 +50,17 @@ spec:
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
         tty: true
+        command: [ "python" ]
+        args: [ "/fake/fakebroker.py", 
+          "--source", "public.alerts.ztf.uw.edu:9092", "-t", "elasticc2-st2-wfd", "elasticc2-st2-ddf-limited",
+          "--dest", "kafka-server:9092", "-u", "classifications",
+          "-b", "/fake/schema/elasticc.v0_9_1.brokerClassification.avsc",
+          "-s", "/fake/schema/elasticc.v0_9_1.alert.avsc" ]
+        # args: [ "/fake/fakebroker.py", 
+        #   "--source", "kafka-server9092", "-t", "alerts-wfd", "alerts-ddf-full",
+        #   "--dest", "kafka-server:9092", "-u", "classifications",
+        #   "-b", "/fake/schema/elasticc.v0_9_1.brokerClassification.avsc",
+        #   "-s", "/fake/schema/elasticc.v0_9_1.alert.avsc" ]
       dnsConfig: {}
       dnsPolicy: ClusterFirst
       restartPolicy: Always

@@ -1235,7 +1235,23 @@ class CassBrokerMessage(DjangoCassandraModel):
                  "addedclassifications": None,
                  "firstbrokermessage_id": None }
 
+class CassBrokerMessageByTime(DjangoCassandraModel):
+    classifier_id = columns.BigInt( primary_key=True )
+    descingesttimestamp = columns.DateTime( default=datetime.datetime.utcnow, primary_key=True )
+    id = columns.UUID( primary_key=True, default=uuid.uuid4 )
 
+    topicname = columns.Text()
+    streammessage_id = columns.BigInt()
+    diasource_id = columns.BigInt( primary_key=True )
+    alert_id = columns.BigInt()
+    msghdrtimestamp = columns.DateTime()
+    elasticcpublishtimestamp = columns.DateTime()
+    brokeringesttimestamp = columns.DateTime()
+    classid = columns.List( columns.Integer() )
+    probability = columns.List( columns.Float() )
+
+    class Meta:
+        get_pk_field = 'id'
 
 
 # This is a thing I use as a "don't run twice at once" lock

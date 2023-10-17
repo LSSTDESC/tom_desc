@@ -187,11 +187,11 @@ class Elasticc2BrokerTimeDelayGraphs( LoginRequiredMixin, django.views.View, Bro
             with open( graphdir / "updatetime.txt" ) as ifp:
                 context['updatetime'] = ifp.readline().strip()
         except FileNotFoundError:
-            context['updatetime'] == "(unknown)"
+            context['updatetime'] = "(unknown)"
         files = list( graphdir.glob( "*.svg" ) )
         files.sort()
-        weekmatch = re.compile( '^(.*)_(\d{4}-\d{2}-\d{2})\.svg$' )
-        summedmatch = re.compile( '^(.*)_summed\.svg$' )
+        weekmatch = re.compile( '^(.*)-(\d{4}-\d{2}-\d{2})\.svg$' )
+        summedmatch = re.compile( '^(.*)-cumulative\.svg$' )
         brokers = set()
         for fname in files:
             match = summedmatch.search( fname.name )
@@ -203,13 +203,16 @@ class Elasticc2BrokerTimeDelayGraphs( LoginRequiredMixin, django.views.View, Bro
         context['brokers'] = {}
         
         for broker in brokers:
-            context['brokers'][broker] = { 'sum': f'{broker}_summed.svg', 'weeks': {} }
+            context['brokers'][broker] = { 'sum': f'{broker}-cumulative.svg', 'weeks': {} }
             for fname in files:
                 match = weekmatch.search( fname.name )
                 if ( match is not None ) and ( match.group(1) == broker ):
                     week = match.group(2)
                     context['brokers'][broker]['weeks'][week] = fname.name
-            
+
+        # ****
+        sys.stderr.write( f"context = {context}\n" )
+        # ****
         return HttpResponse( templ.render( context, request ) )
     
 
