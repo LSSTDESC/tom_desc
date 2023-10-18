@@ -15,6 +15,7 @@ from django.db import models
 from django.db.models import F
 from guardian.shortcuts import assign_perm
 from django.contrib.auth.models import Group
+from django.contrib.postgres.fields import ArrayField
 
 from cassandra.cqlengine import columns
 from django_cassandra_engine.models import DjangoCassandraModel
@@ -793,237 +794,6 @@ class DiaObjectOfTarget(models.Model):
 # ======================================================================
 # Broker information
 
-# Brokers send avro alerts (or the equivalent) with schema in:
-# https://github.com/LSSTDESC/elasticc/blob/main/alert_schema/elasticc.v0_9.brokerClassification.avsc
-#
-# Each one of these alerts will be saved as a BrokerMessage
-#
-# The classifications array of that message will be saved as many rows to BrokerClassifications,
-# creating new entries in BrokerClassifier as necessary.
-#
-# We will also call DiaObjectOfTarget.maybe_new_elasticc_targets the object in the broker message
-
-class BrokerMessage(models.Model):
-    """Model for the message attributes of an ELAsTiCC broker alert."""
-
-    brokermessage_id = models.BigAutoField(primary_key=True)
-    streammessage_id = models.BigIntegerField(null=True)
-    topicname = models.CharField(max_length=200, null=True)
-
-    alert_id = models.BigIntegerField()
-    diasource_id = models.BigIntegerField()
-    # diaSource = models.ForeignKey( DiaSource, on_delete=models.PROTECT, null=True )
-
-    # timestamps as datetime.datetime (DateTimeField)
-    msghdrtimestamp = models.DateTimeField(null=True)
-    descingesttimestamp = models.DateTimeField(auto_now_add=True)  # auto-generated
-    elasticcpublishtimestamp = models.DateTimeField(null=True)
-    brokeringesttimestamp = models.DateTimeField(null=True)
-
-    modified = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        indexes = [
-            models.Index( fields=[ 'topicname', 'streammessage_id' ] ),
-            models.Index( fields=[ 'alert_id' ] ),
-            models.Index( fields=[ 'diasource_id' ] ),
-        ]
-
-
-    def to_dict( self ):
-        resp = {
-            'brokermessage_id': self.brokermessage_id,
-            'streammessage_id': self.streammessage_id,
-            'alert_id': self.alert_id,
-            'diasource_id': self.diasource_id,
-            'msghdrtimestamp': self.msghdrtimestamp.isoformat(),
-            'descingesttimestamp': self.descingesttimestamp.isoformat(),
-            'elasticcpublishtimestamp': int( self.elasticcpublishtimestamp.timestamp() * 1e3 ),
-            'brokeringesttimestamp': int( self.brokeringesttimestamp.timestamp() * 1e3 ),
-            'brokername': "<unknown>",
-            'brokerversion': "<unknown>",
-            'classifications': []
-            }
-        clsfctions = BrokerClassification.objects.all().filter( dbmessage=self )
-        first = True
-        for classification in clsfctions:
-            clsifer = classification.classifier
-            if first:
-                resp['brokername'] = clsifer.brokername
-                resp['brokerversion'] = clsifer.brokerversion
-                first = False
-            else:
-                if ( ( clsifer.brokername != resp['brokername'] ) or
-                     ( clsifer.brokerversion != resp['brokerversion'] ) ):
-                    raise ValueError( "Mismatching brokername and brokerversion in the database! "
-                                      "This shouldn't happen!" )
-            resp['classifications'].append( { 'classifiername': clsifer.classifiername,
-                                              'classifierparams': clsifer.classifierparams,
-                                              'classid': classification.classid,
-                                              'probability': classification.probability } )
-        return resp
-
-
-    @staticmethod
-    def load_batch( messages, logger=_logger ):
-        """Load an array of messages into BrokerMessage and associated tables.
-
-        This is the ONLY way you should add BrokerMessages.  Creating one manually and
-        using save will bypass the tom target creation.  I should really add a post-save
-        hook to do that so it works, huh.  TODO ROB: figure out how to do that in django.
-
-        messages is an array of dicts with keys topic, msgoffset, and msg.
-        topic is string, msgoffset is an integer, and msg is a dict that should
-        match the elasticc.v0_9.brokerClassification.avsc schema
-
-        Returns information about numbers of things actually added.
-        """
-
-        # It's a hard problem to decide if a message already
-        # exists.  The things that are in the BrokerMessage object
-        # could (by chance) be duplicated for different brokers.
-        # I need to think about this, but for now I'm going to assume
-        # that all messages coming in are new messages.  In pratice,
-        # this does mean that we get duplicate messages, but we'll
-        # just have to deal with that when processing the data.
-
-        # NOTE: See https://docs.djangoproject.com/en/3.0/ref/models/querysets/#bulk-create
-        # the caveats on bulk-create.  I'm assuming that addedmsgs will have the right
-        # value of brokermessage_id.  According to that page, this is only true for
-        # Postgres... which is what I'm using...
-
-        logger.debug( f'In BrokerMessage.load_batch, received {len(messages)} messages.' );
-
-        messageobjects = {}
-        kwargses = []
-        sourceids = set()
-        utc = pytz.timezone( "UTC" )
-        for msg in messages:
-            timestamp = msg['timestamp']
-            if len( msg['msg']['classifications'] ) == 0:
-                logger.debug( "Message with no classifications" )
-                continue
-            keymess = ( f"{msg['msgoffset']}_{msg['topic']}_{msg['msg']['alertId']}" )
-            if keymess not in messageobjects.keys():
-                kwargs = { 'streammessage_id': msg['msgoffset'],
-                           'topicname': msg['topic'],
-                           'alert_id': msg['msg']['alertId'],
-                           'diasource_id': msg['msg']['diaSourceId'],
-                           'msghdrtimestamp': timestamp,
-                           'descingesttimestamp': datetime.datetime.now(),
-                           'elasticcpublishtimestamp': msg['msg']['elasticcPublishTimestamp'],
-                           'brokeringesttimestamp': msg['msg']['brokerIngestTimestamp'],
-                }
-                kwargses.append( kwargs )
-                sourceids.add( msg['msg']['diaSourceId'] )
-            else:
-                logger.error( f'Key {keymess} showed up more than once in a message batch!' )
-        logger.debug( f'Adding {len(sourceids)} sourceids to the brokersourceids table' )
-        BrokerSourceIds.add_batch( sourceids )
-        logger.debug( f'Bulk creating {len(kwargses)} messages.' )
-        if len(kwargses) > 0:
-            # This is byzantine, but I'm copying django documentation here
-            objs = ( BrokerMessage( **k ) for k in kwargses )
-            batch = list( itertools.islice( objs, len(kwargses) ) )
-            if batch is None:
-                raise RunTimeError( "Something bad has happened." )
-            addedmsgs = BrokerMessage.objects.bulk_create( batch, len(kwargses) )
-            for addedmsg in addedmsgs:
-                keymess = f"{addedmsg.streammessage_id}_{addedmsg.topicname}_{addedmsg.alert_id}"
-                messageobjects[ keymess ] = addedmsg
-        else:
-            addedmsgs = []
-
-
-        # Figure out which classifiers already exist.
-        # I need to figure out if there's a way to tell Django
-        # to do a WHERE...IN on tuples.  For now, hopefully this
-        # Q object thing won't be a disaster
-
-        classifiers = {}
-
-        logger.debug( f"Looking for pre-existing classifiers" )
-        cferconds = models.Q()
-        i = 0
-        condcache = set()
-        for msg in messages:
-            i += 1
-            sigstr = ( f"{msg['msg']['brokerName']}_{msg['msg']['brokerVersion']}_"
-                       f"{msg['msg']['classifierName']}_{msg['msg']['classifierParams']}" )
-            if sigstr not in condcache:
-                newcond = ( models.Q( brokername = msg['msg']['brokerName'] ) &
-                            models.Q( brokerversion = msg['msg']['brokerVersion'] ) &
-                            models.Q( classifiername = msg['msg']['classifierName'] ) &
-                            models.Q( classifierparams = msg['msg']['classifierParams'] ) )
-                cferconds |= newcond
-            condcache.add( sigstr )
-        curcfers = BrokerClassifier.objects.filter( cferconds )
-        for cur in curcfers:
-            keycfer = ( f"{cur.brokername}_{cur.brokerversion}_"
-                        f"{cur.classifiername}_{cur.classifierparams}" )
-            classifiers[ keycfer ] = cur
-        logger.debug( f'Found {len(classifiers)} existing classifiers.' )
-
-        # Create new classifiers as necessary
-
-        addedkeys = set()
-        kwargses = []
-        for msg in messages:
-            keycfer = ( f"{msg['msg']['brokerName']}_{msg['msg']['brokerVersion']}_"
-                        f"{msg['msg']['classifierName']}_{msg['msg']['classifierParams']}" )
-            if ( keycfer not in classifiers.keys() ) and ( keycfer not in addedkeys ):
-                kwargses.append( { 'brokername': msg['msg']['brokerName'],
-                                   'brokerversion': msg['msg']['brokerVersion'],
-                                   'classifiername': msg['msg']['classifierName'],
-                                   'classifierparams': msg['msg']['classifierParams'] } )
-                addedkeys.add( keycfer )
-        ncferstoadd = len(kwargses)
-        logger.debug( f'Adding {ncferstoadd} new classifiers.' )
-        if ncferstoadd > 0:
-            objs = ( BrokerClassifier( **k ) for k in kwargses )
-            batch = list( itertools.islice( objs, len(kwargses) ) )
-            newcfers = BrokerClassifier.objects.bulk_create( batch, len(kwargses) )
-            for curcfer in newcfers:
-                keycfer = ( f"{curcfer.brokername}_{curcfer.brokerversion}_"
-                            f"{curcfer.classifiername}_{curcfer.classifierparams}" )
-                classifiers[ keycfer ] = curcfer
-                # logger.debug( f'key: {keycfer}; brokerName: {curcfer.brokerName}; '
-                #                f'brokerVersion: {curcfer.brokerVersion}; classifierName: {curcfer.ClassifierName}; '
-                #                f'classifierParams: {curcfer.classifierParams}' )
-
-
-        # Add the new classifications
-        #
-        # ROB TODO : think about duplication!  Right now I'm just
-        # assuming I won't get any.
-
-        kwargses = []
-        for msg in messages:
-            if len( msg['msg']['classifications'] ) == 0:
-                continue
-            keymess = ( f"{msg['msgoffset']}_{msg['topic']}_{msg['msg']['alertId']}" )
-            keycfer = ( f"{msg['msg']['brokerName']}_{msg['msg']['brokerVersion']}_"
-                        f"{msg['msg']['classifierName']}_{msg['msg']['classifierParams']}" )
-            for cfication in msg['msg']['classifications']:
-                kwargs = { 'dbmessage': messageobjects[keymess],
-                           'classifier_id': classifiers[keycfer].classifier_id,
-                           'classid': cfication['classId'],
-                           'probability': cfication['probability'] }
-                kwargses.append( kwargs )
-                # logger.debug( f"Adding {kwargs}" )
-        logger.debug( f'Adding {len(kwargses)} new classifications.' )
-        objs = ( BrokerClassification( **k ) for k in kwargses )
-        batch = list( itertools.islice( objs, len(kwargses) ) )
-        newcfications = BrokerClassification.objects.bulk_create( batch, len(kwargses) )
-
-        # return newcfications
-        return { "addedmsgs": len(addedmsgs),
-                 "addedclassifiers": ncferstoadd,
-                 "addedclassifications": len(newcfications),
-                 "firstbrokermessage_id": None if len(addedmsgs)==0 else addedmsgs[0].brokermessage_id }
-
-
-
 class BrokerClassifier(models.Model):
     """Model for a classifier producing an ELAsTiCC broker classification."""
 
@@ -1045,48 +815,101 @@ class BrokerClassifier(models.Model):
             models.Index(fields=["brokername", "brokerversion", "classifiername", "classifierparams"]),
         ]
 
-class BrokerClassification(psqlextra.models.PostgresPartitionedModel):
-    """Model for a classification from an ELAsTiCC broker."""
+class BrokerMessage( models.Model ):
+    brokermessage_id = models.BigAutoField( primary_key=True )
+    streammessage_id = models.BigIntegerField( null=True )
+    topicname = models.CharField( max_length=200, null=True )
+    alert_id = models.BigIntegerField( index=True )
+    diasource_id = models.BigIntegerField( index=True )
 
-    class PartitioningMeta:
-        method = psqlextra.types.PostgresPartitioningMethod.LIST
-        key = [ 'classifier_id' ]
+    msghdrtimestamp = models.DateTimeField( null=True )
+    descingesttimestamp = models.DateTimeField( index=True, null=False )
+    elasticcpublishtimestamp = models.DateTimeField( null=True )
+    brokeringesttimestamp = models.DataTimeField( null=True )
 
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                name="unique_constarint_elasticc2_brokerclassification_partitionkey",
-                fields=( 'classifier_id', 'classification_id' )
-            ),
-        ]
+    classifier_id = models.BigIntegerField( index=True, null=False )
+    classid = ArrayField( models.SmallIntegerField )
+    probability = ArrayField( Float32Field )
 
-    classification_id = models.BigAutoField(primary_key=True)
-    dbmessage = models.ForeignKey( BrokerMessage, db_column='brokermessage_id', on_delete=models.CASCADE, null=True )
-    # I really want to make a foreign key here, but I haven't figured
-    # out how to get Django to succesfully create a unique
-    # constraint and a partition on a foreign key.  Either I get try to
-    # partition on "classifier_id" and I get an error from Django saying
-    # that that field doesn't exist, or I try to partition on
-    # "classifier" and I get an error from Postgres saying that that
-    # field doesn't exist.  (ORM considered harmful.)
-    # classifier = models.ForeignKey( BrokerClassifier, db_column='classifier_id',
-    #                                   on_delete=models.CASCADE, null=True )
-    classifier_id = models.BigIntegerField()
-    # These next three can be determined by looking back at the linked dbMessage
-    # alert_id = models.BigIntegerField()
-    # diaobject_id = models.BigIntegerField()
-    # diasource_id = models.ForeignKey( DiaSource, on_delete=models.PROTECT, null=True )
+    @staticmethod
+    def load_batch( messages, logger=_logger ):
 
-    classid = models.IntegerField( db_index=True )
-    probability = Float32Field()
+        # Identify classifiers, create new ones as necessary
 
-    # JSON blob of additional information from the broker?
-    # Here or in a separate table?
-    # (As is, the schema doesn't define such a thing.)
+        classifiers = {}
+        seenbrokers = set()
+        cferconds = models.Q()
+        for msg in messages:
+            brokertag = ( msg['msg']['brokerName'], msg['msg']['brokerVersion'],
+                          msg['msg']['classifierName'], msg['msg']['classifierParams'] )
+            if brokertag not in seenbrokers:
+                seenbrokers.add( brokertag )
+                newcond = ( models.Q( brokername = msg['msg']['brokerName'] ) &
+                            models.Q( brokerversion = msg['msg']['brokerVersion'] ) &
+                            models.Q( classifiername = msg['msg']['classifierName'] ) &
+                            models.Q( classifierparams = msg['msg']['classifierParams'] ) )
+                cferconds |= newcond
+        curcfers = BrokerClassifier.objects.filter( cferconds )
+        for cur in curcfers:
+            brokertag = ( cur.brokername, cur.brokerversion, cur.classifiername, cur.classifierparams )
+            classifiers[ brokertag ] = cur
 
-    # Don't need this, timestamps are all in the brokermessage table
-    # And, this table will have many rows, so we want to keep it skinny
-    # modified = models.DateTimeField(auto_now=True)
+        kwargses = []
+        for brokertag in seenbrokers:
+            if brokertag not in classifiers.keys():
+                kwargses.append( { 'brokername': msg['msg']['brokerName']
+                                   'brokerversion': msg['msg']['brokerVersion'],
+                                   'classifiername': msg['msg']['classifierName'],
+                                   'classifierparams': msg['msg']['classifierParams'] } )
+        ncferstoadd = len(kwargses)
+        logger.debug( f"Adding {ncferstoadd} new classifiers" )
+        if ncferstoadd > 0:
+            objs = ( BrokerClassifier( **k ) for k in kwargses )
+            batch = list( itertools.islice( objs, len(kwargses ) ) )
+            newcfers = BrokerClassifier.objects.bulk_create( batch, len(kwargses) )
+            for cfer in newcfers:
+                brokertag = ( cfer.brokername, cfer.brokerversion, cfer.classifiername, cfer.classifierparams )
+                classifiers[ brokertag ] = cfer
+
+        # Now add the messages
+
+        kwargses = []
+        messtags = set()
+        sourceids = set()
+        for msg in messages:
+            brokertag = ( msg['msg']['brokerName'], msg['msg']['brokerVersion'],
+                          msg['msg']['classifierName'], msg['msg']['classifierParams'] )
+            msgtag = ( brokertag, msg['msgoffset'], msg['topic'], msg['msg']['alertId'] )
+            if msgtag not in messtags:
+                messtags.add( msgtag )
+                kwargs = { 'streammessage_id': msg['msgoffset'],
+                           'topicname': msg['topic'],
+                           'alert_id': msg['msg']['alertId'],
+                           'diasource_id': msg['msg']['diaSourceId'],
+                           'msghdrtimestamp': timestamp,
+                           'descingesttimestamp': datetime.datetime.now(),
+                           'elasticcpublishtimestamp': msg['msg']['elasticcPublishTimestamp'],
+                           'brokeringesttimestamp': msg['msg']['brokerIngestTimestamp'],
+                           'classifier_id': classifiers[brokertag].classifier_id,
+                           'classid': msg['msg']['classId'],
+                           'probability': msg['msg']['probability']
+                          }
+                kwargses.append( kwargs )
+                sourceids.add( msg['msg']['diaSoruceId'] )
+        BrokerSoruceIds.add_batch( sourceids )
+        if len(kwargses) > 0:
+            # This is byzantine, but I'm copying django documentation here
+            objs = ( BrokerMessage( **k ) for k in kwargses )
+            batch = list( itertools.islice( objs, len(kwargses) ) )
+            if batch is None:
+                raise RunTimeError( "Something bad has happened." )
+            addedmsgs = BrokerMessage.objects.bulk_create( batch, len(kwargses) )
+
+        return { "addedmsgs": len(addedmsgs),
+                 "addedclassifiers": ncferstoadd,
+                 "addedclassifications": None,
+                 "firstbrokermessage_id": None if len(addedmsgs)==0 else addedmsgs[0].brokermessage_id }
+
 
 
 # This table is intended to be wiped out all the time.  When broker
@@ -1109,135 +932,6 @@ class BrokerSourceIds(models.Model):
         addedsources = BrokerSourceIds.objects.bulk_create( objs, len(objs), ignore_conflicts=True )
 
 
-# This table is deprecated, is just here until I can
-# do a manual move
-class CassBrokerMessage(DjangoCassandraModel):
-    classifier_id = columns.BigInt( primary_key=True )
-    diasource_id = columns.BigInt( primary_key=True )
-    descingesttimestamp = columns.DateTime( default=datetime.datetime.utcnow, primary_key=True )
-    id = columns.UUID( primary_key=True, default=uuid.uuid4 )
-
-    topicname = columns.Text()
-    streammessage_id = columns.BigInt()
-    alert_id = columns.BigInt()
-    msghdrtimestamp = columns.DateTime()
-    elasticcpublishtimestamp = columns.DateTime()
-    brokeringesttimestamp = columns.DateTime()
-    classid = columns.List( columns.Integer() )
-    probability = columns.List( columns.Float() )
-
-    class Meta:
-        get_pk_field = 'id'
-
-    @staticmethod
-    def load_batch( messages, logger=_logger ):
-        """Load an array of broker classification messages.
-
-        This doesn't actually do any batching operation, because there's
-        no bulk_create in the Django Cassandra interface, and because I
-        don't understand Cassandra well enough to know how to do this --
-        I've read that batching can be a bad idea.  I'm worried about
-        the repeated network overhead, but we'll see how it goes.
-
-        """
-
-        raise RuntimeError( "Deprecated" )
-
-        cfers = {}
-        sourceids = []
-        for i, msgmeta in enumerate(messages):
-            msg = msgmeta['msg']
-            if len( msg['classifications'] ) == 0:
-                logger.debug( 'Message with no classifications' )
-                continue
-            keycfer = f"{msg['brokerName']}_{msg['brokerVersion']}_{msg['classifierName']}_{msg['classifierParams']}"
-            if keycfer not in cfers.keys():
-                cfers[ keycfer ] = { 'brokername': msg['brokerName'],
-                                     'brokerversion': msg['brokerVersion'],
-                                     'classifiername': msg['classifierName'],
-                                     'classifierparams': msg['classifierParams'],
-                                     'classifier_id': None }
-            sourceids.append( msg['diaSourceId'] )
-
-        # Create any classifiers that don't already exist; this
-        # is one place where we do get efficiency by calling
-        # this batch method.
-        cferconds = models.Q()
-        logger.debug( f"Looking for pre-existing classifiers" )
-        cferconds = models.Q()
-        i = 0
-        for cferkey, cfer in cfers.items():
-            newcond = ( models.Q( brokername = cfer['brokername'] ) &
-                        models.Q( brokerversion = cfer['brokerversion'] ) &
-                        models.Q( classifiername = cfer['classifiername'] ) &
-                        models.Q( classifierparams = cfer['classifierparams'] ) )
-            cferconds |= newcond
-        curcfers = BrokerClassifier.objects.filter( cferconds )
-        numknown = 0
-        for cur in curcfers:
-            keycfer = f"{cur.brokername}_{cur.brokerversion}_{cur.classifiername}_{cur.classifierparams}"
-            cfers[ keycfer ][ 'classifier_id' ] = cur.classifier_id
-            numknown += 1
-        logger.debug( f'Found {numknown} existing classifiers that match the ones in this batch.' )
-
-        # Create new classifiers as necessary
-
-        kwargses = []
-        ncferstoadd = 0
-        for keycfer, cfer in cfers.items():
-            if cfer[ 'classifier_id' ] is None:
-                kwargses.append( { 'brokername': cfer['brokername'],
-                                   'brokerversion': cfer['brokerversion'],
-                                   'classifiername': cfer['classifiername'],
-                                   'classifierparams': cfer['classifierparams'] } )
-                ncferstoadd += 1
-        ncferstoadd = len(kwargses)
-        logger.debug( f'Adding {ncferstoadd} new classifiers.' )
-        if ncferstoadd > 0:
-            objs = ( BrokerClassifier( **k ) for k in kwargses )
-            batch = list( itertools.islice( objs, len(kwargses) ) )
-            newcfers = BrokerClassifier.objects.bulk_create( batch, len(kwargses) )
-            for newcfer in newcfers:
-                keycfer = ( f'{newcfer.brokername}_{newcfer.brokerversion}_'
-                            f'{newcfer.classifiername}_{newcfer.classifierparams}' )
-                cfers[keycfer]['classifier_id'] = newcfer.classifier_id
-
-        for i, msgmeta in enumerate( messages ):
-            msg = msgmeta['msg']
-            if len( msg['classifications' ] ) == 0:
-                    continue
-            keycfer = f"{msg['brokerName']}_{msg['brokerVersion']}_{msg['classifierName']}_{msg['classifierParams']}"
-            classes = []
-            probs = []
-            for cification in msg['classifications']:
-                classes.append( cification['classId'] )
-                probs.append( cification['probability'] )
-            cassmsg = CassBrokerMessage(
-                diasource_id=msg['diaSourceId'],
-                classifier_id=cfers[ keycfer ][ 'classifier_id' ],
-                topicname=msgmeta['topic'],
-                streammessage_id=msgmeta['msgoffset'],
-                alert_id=msg['alertId'],
-                msghdrtimestamp=msgmeta['timestamp'],
-                elasticcpublishtimestamp=msg['elasticcPublishTimestamp'],
-                brokeringesttimestamp=msg['brokerIngestTimestamp'],
-                classid=classes,
-                probability=probs
-            )
-            cassmsg.save()
-
-        # Update the log of new broker source ids
-        BrokerSourceIds.add_batch( sourceids )
-
-        logger.debug( f"Classifiers in the messages just loaded: {list(cfers.keys())}" )
-
-
-        # return newcfications
-        return { "addedmsgs": len(messages),
-                 "addedclassifiers": ncferstoadd,
-                 "addedclassifications": None,
-                 "firstbrokermessage_id": None }
-
 
 class CassBrokerMessageBySource(DjangoCassandraModel):
     classifier_id = columns.BigInt( primary_key=True )
@@ -1250,7 +944,7 @@ class CassBrokerMessageBySource(DjangoCassandraModel):
     msghdrtimestamp = columns.DateTime()
     elasticcpublishtimestamp = columns.DateTime()
     brokeringesttimestamp = columns.DateTime()
-    descingesttimestamp = columns.DateTime( default=datetime.datetime.utcnow, primary_key=True )
+    descingesttimestamp = columns.DateTime( default=datetime.datetime.utcnow )
     classid = columns.List( columns.Integer() )
     probability = columns.List( columns.Float() )
 
@@ -1395,7 +1089,7 @@ class CassBrokerMessageByTime(DjangoCassandraModel):
 
     topicname = columns.Text()
     streammessage_id = columns.BigInt()
-    diasource_id = columns.BigInt( primary_key=True )
+    diasource_id = columns.BigInt()
     alert_id = columns.BigInt()
     msghdrtimestamp = columns.DateTime()
     elasticcpublishtimestamp = columns.DateTime()

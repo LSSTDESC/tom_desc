@@ -2,6 +2,7 @@ import sys
 import io
 import re
 import math
+import copy
 import pathlib
 import traceback
 import time
@@ -149,32 +150,35 @@ class CassBrokerMessagePageHandler:
 
         t4 = time.perf_counter()
         tmpdf = pandas.DataFrame( self.pgcursor.fetchall() )
-        tmpdf.clip( lower=10**self.bucketleft, upper=10**self.bucketright, inplace=True )
-        tmpdf = tmpdf.apply( numpy.log10 )
-        fullhist, binedges = numpy.histogram( tmpdf['fulldelay'],
-                                              range=(self.bucketleft,self.bucketright+self.dbucket),
-                                              bins=self.nbuckets+1 )
-        if not ( binedges == numpy.arange( self.bucketleft, self.bucketright+2*self.dbucket, self.dbucket ) ).all():
-            raise ValueError( "Unexpected bins." )
-        brokerhist, binedges = numpy.histogram( tmpdf['brokerdelay'],
-                                                range=(self.bucketleft,self.bucketright+self.dbucket),
-                                                bins=self.nbuckets+1 )
-        tomhist, binedges = numpy.histogram( tmpdf['tomdelay'],
-                                             range=(self.bucketleft,self.bucketright+self.dbucket),
-                                             bins=self.nbuckets+1 )
-        curdf = None
-        for which, hist in zip( [ 'full', 'broker', 'tom' ], [ fullhist, brokerhist, tomhist ] ):
-            whichdf = pandas.DataFrame( { 'which': which,
-                                          'buck': numpy.array( ( binedges / self.dbucket + 1 )[:-1], dtype=int ),
-                                          'count': hist } )
-            if curdf is None:
-                curdf = whichdf
-            else:
-                curdf = pandas.concat( [ curdf, whichdf ] )
 
-        curdf.set_index( [ 'which', 'buck' ], inplace=True )
-        # Sadly, this will convert ints to floats, but, oh well
-        self.df = self.df.add( curdf, fill_value=0 )
+        if len(tmpdf) > 0:
+            tmpdf.clip( lower=10**self.bucketleft, upper=10**self.bucketright, inplace=True )
+            tmpdf = tmpdf.apply( numpy.log10 )
+            fullhist, binedges = numpy.histogram( tmpdf['fulldelay'],
+                                                  range=(self.bucketleft,self.bucketright+self.dbucket),
+                                                  bins=self.nbuckets+1 )
+            if not ( binedges == numpy.arange( self.bucketleft, self.bucketright+2*self.dbucket,
+                                               self.dbucket ) ).all():
+                raise ValueError( "Unexpected bins." )
+            brokerhist, binedges = numpy.histogram( tmpdf['brokerdelay'],
+                                                    range=(self.bucketleft,self.bucketright+self.dbucket),
+                                                    bins=self.nbuckets+1 )
+            tomhist, binedges = numpy.histogram( tmpdf['tomdelay'],
+                                                 range=(self.bucketleft,self.bucketright+self.dbucket),
+                                                 bins=self.nbuckets+1 )
+            curdf = None
+            for which, hist in zip( [ 'full', 'broker', 'tom' ], [ fullhist, brokerhist, tomhist ] ):
+                whichdf = pandas.DataFrame( { 'which': which,
+                                              'buck': numpy.array( ( binedges / self.dbucket + 1 )[:-1], dtype=int ),
+                                              'count': hist } )
+                if curdf is None:
+                    curdf = whichdf
+                else:
+                    curdf = pandas.concat( [ curdf, whichdf ] )
+
+            curdf.set_index( [ 'which', 'buck' ], inplace=True )
+            # Sadly, this will convert ints to floats, but, oh well
+            self.df = self.df.add( curdf, fill_value=0 )
 
         t5 = time.perf_counter()
         if self.future.has_more_pages:
@@ -244,14 +248,14 @@ class Command(BaseCommand):
                 if week == 'cumulative':
                     fig.suptitle( broker, fontsize=20 )
                 else:
-                    fig.suptitle( f"{broker}, week of {week}", fontsize=20 )
+                    fig.suptitle( f"{broker}, {week} UTC", fontsize=20 )
                 fig.savefig( outfile )
                 pyplot.close( fig )
 
-    def makedf( self, weeks, brokernames ):
+    def makedf( self, weeklabs, brokernames ):
         self.df = None
         rows = []
-        weeklabs = [ f'{w.year:04d}-{w.month:02d}-{w.day:02d}' for w in weeks ]
+        weeklabs = copy.deepcopy( weeklabs )
         weeklabs.insert( 0, 'cumulative' )
         for week in weeklabs:
             for bname in brokernames:
@@ -301,15 +305,15 @@ class Command(BaseCommand):
                                                                                   self.dbucket )
 
                 t0 = datetime.datetime( 2023, 10, 16, tzinfo=pytz.utc )
-                t1 = datetime.datetime( 2023, 10, 23, tzinfo=pytz.utc )
-                dt = datetime.timedelta( days=7 )
+                t1 = datetime.datetime( 2023, 10, 19, tzinfo=pytz.utc )
+                dt = datetime.timedelta( days=1 )
                 weeks = []
                 week = t0
                 while ( week < t1 ):
                     weeks.append( week )
                     week += dt
-                weekns = list( range( len( weeks ) ) )
-                weeklabs = [ f'{w.year:04d}-{w.month:02d}-{w.day:02d}' for w in weeks ]
+                weeklabs = [ f'[{w.year:04d}-{w.month:02d}-{w.day:02d} , '
+                             f'{(w+dt).year:04d}-{(w+dt).month:02d}-{(w+dt).day:02d})' for w in weeks ]
 
                 with conn.cursor( cursor_factory=psycopg2.extras.RealDictCursor ) as cursor:
                     # Figure out which brokers we have
@@ -330,19 +334,18 @@ class Command(BaseCommand):
 
                     # This is the master df that we'll append to as we
                     # iterate through brokers and weeks
-                    self.makedf( weeks, whichgroups )
+                    self.makedf( weeklabs, whichgroups )
 
                     for broker in whichgroups:
-                        # I don't think I need weekn
-                        for weekn, week, weeklab in zip( weekns, weeks, weeklabs ):
-                            _logger.info( f"Doing broker {broker} week {weeklab}" )
+                        for week, weeklab in zip( weeks, weeklabs ):
+                            _logger.info( f"Doing broker {broker} week {weeklab}..." )
 
                             # Extract the data from the database for this broker
                             # and week (the CassBrokerMessagePageHandler will
                             # send a postgres query for each page returned from
                             # Cassandra)
 
-                            cassq = ( "SELECT * FROM tom_desc.cass_broker_message "
+                            cassq = ( "SELECT * FROM tom_desc.cass_broker_message_by_time "
                                       "WHERE classifier_id IN %(id)s "
                                       "  AND descingesttimestamp >= %(t0)s "
                                       "  AND descingesttimestamp < %(t1)s "
@@ -354,17 +357,20 @@ class Command(BaseCommand):
                                                                     self.bucketleft, self.bucketright, self.dbucket,
                                                                     lowcutoff=self.lowcutoff,
                                                                     highcutoff=self.highcutoff )
+                            _logger.info( "...waiting for finished..." )
                             handler.finished_event.wait()
+                            _logger.info( "...done." )
                             handler.finalize()
                             if handler.error:
                                 _logger.error( handler.error )
                                 raise handler.error
 
-                            df = handler.df.reset_index()
-                            df[ 'broker' ] = broker
-                            df[ 'week' ] = weeklab
-                            df.set_index( [ 'broker', 'week', 'which', 'buck' ], inplace=True )
-                            self.df = self.df.add( df, fill_value=0 )
+                            if len( handler.df ) > 0:
+                                df = handler.df.reset_index()
+                                df[ 'broker' ] = broker
+                                df[ 'week' ] = weeklab
+                                df.set_index( [ 'broker', 'week', 'which', 'buck' ], inplace=True )
+                                self.df = self.df.add( df, fill_value=0 )
 
 
                 # It seems like there should be a more elegant way to do this
@@ -391,7 +397,7 @@ class Command(BaseCommand):
         except Exception as e:
             _logger.exception( e )
             _logger.exception( traceback.format_exc() )
-            import pdb; pdb.set_trace()
+            # import pdb; pdb.set_trace()
             raise e
         finally:
             if conn is not None:

@@ -52,10 +52,10 @@ ELAsTiCC2 Broker Time Delays
        width=1200 alt=["{{ broker }}"]>
   <h4><button id="{{ broker }}button"
               onclick="hideOrShow('{{ broker }}button', '{{ broker }}div')">Show
-    </button> by week</h4>
+    </button> subdivided by time</h4>
   <div id="{{ broker }}div" style="display: none">
     {% for week, fname in brokerdata.weeks.items %}
-      <p><b>{{broker}}, week of {{ week }}:</b></p>
+      <p><b>{{broker}}, {{ week }} UTC:</b></p>
       <img src="{% static 'elasticc2/brokertiminggraphs' %}/{{ fname }}"
            width=1200 alt="[ {{ broker }} {{ week }} ]" >
     {% endfor %}

@@ -190,13 +190,13 @@ class Elasticc2BrokerTimeDelayGraphs( LoginRequiredMixin, django.views.View, Bro
             context['updatetime'] = "(unknown)"
         files = list( graphdir.glob( "*.svg" ) )
         files.sort()
-        weekmatch = re.compile( '^(.*)-(\d{4}-\d{2}-\d{2})\.svg$' )
-        summedmatch = re.compile( '^(.*)-cumulative\.svg$' )
+        weekmatch = re.compile( '^(?P<base>.*)-(?P<trange>\[\d{4}-\d{2}-\d{2}\s*,\s*\d{4}-\d{2}-\d{2}\))\.svg$' )
+        summedmatch = re.compile( '^(?P<base>.*)-cumulative\.svg$' )
         brokers = set()
         for fname in files:
             match = summedmatch.search( fname.name )
             if match is not None:
-                brokers.add( match.group(1) )
+                brokers.add( match.group('base') )
         brokers = list(brokers)
         brokers.sort()
 
@@ -207,7 +207,7 @@ class Elasticc2BrokerTimeDelayGraphs( LoginRequiredMixin, django.views.View, Bro
             for fname in files:
                 match = weekmatch.search( fname.name )
                 if ( match is not None ) and ( match.group(1) == broker ):
-                    week = match.group(2)
+                    week = match.group('trange')
                     context['brokers'][broker]['weeks'][week] = fname.name
 
         # ****
