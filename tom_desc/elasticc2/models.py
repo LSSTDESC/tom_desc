@@ -1,4 +1,5 @@
 import sys
+import io
 import math
 import time
 import datetime
@@ -279,7 +280,7 @@ class BaseAlert(Createable):
         self._sourcefields = None
         self._sourcefieldmap = None
 
-    def reconstruct( self, daysprevious=365, nprevious=None ):
+    def reconstruct( self, daysprevious=365, nprevious=None, debug=False ):
         """Reconstruct the dictionary that represents this alert.
 
         It's not just a matter of dumping fields, as it also has to decide if the alert
@@ -364,6 +365,13 @@ class BaseAlert(Createable):
               f'FROM {self._sourceclass._meta.db_table} '
               f'WHERE diaobject_id={self.diasource.diaobject_id} '
               f'ORDER BY midpointtai' )
+        if debug:
+            strio = io.StringIO()
+            strio.write( f"Query: {q}\n" )
+            cursor.execute( f"EXPLAIN ANALYZE {q}" )
+            for r in cursor.fetchall():
+                strio.write( f"{r['QUERY PLAN']}\n" )
+            _logger.info( strio.getvalue() )
         cursor.execute( q )
         allsources = [ dict(row) for row in cursor.fetchall() ]
         firstsourcetime = allsources[0]['midPointTai']
@@ -451,6 +459,13 @@ class BaseAlert(Createable):
                   f'WHERE midpointtai>={self.diasource.midpointtai} - {daysprevious} '
                   f'  AND midpointtai<{self.diasource.midpointtai} '
                   f'ORDER BY midpointtai' )
+            if debug:
+                strio = io.StringIO()
+                strio.write( f"Query: {q}\n" )
+                cursor.execute( f"EXPLAIN ANALYZE {q}" )
+                for r in cursor.fetchall():
+                    strio.write( f"{r['QUERY PLAN']}\n" )
+                _logger.info( strio.getvalue() )
             cursor.execute( q )
             alert["prvDiaForcedSources"] = [ dict(o) for o in cursor.fetchall() ]
             if ( nprevious is not None ) and ( len(alert["prvDiaForcedSources"]) > nprevious ):
