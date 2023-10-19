@@ -1026,8 +1026,25 @@ class CassBrokerMessageBySource(DjangoCassandraModel):
                             f'{newcfer.classifiername}_{newcfer.classifierparams}' )
                 cfers[keycfer]['classifier_id'] = newcfer.classifier_id
 
+        # It's pretty clear that django really wants
+        # to mediate your database access... otherwise
+        # there wouldn't be so many periods here
+        casssession = django.db.connections['cassandra'].connection.session
+        qm = ( "INSERT INTO tom_desc.cass_broker_message_by_source(classifier_id,diasource_id,id,"
+               "topicname,streammessage_id,alert_id,msghdrtimestamp,elasticcpublishtimestamp,"
+               "brokeringesttimestamp,descingesttimestamp,classid,probability) "
+               "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)" )
+        qt = ( "INSERT INTO tom_desc.cass_broker_message_by_time(classifier_id,diasource_id,id,"
+               "topicname,streammessage_id,alert_id,msghdrtimestamp,elasticcpublishtimestamp,"
+               "brokeringesttimestamp,descingesttimestamp,classid,probability) "
+               "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)" )
+        cassqm = casssession.prepare( qm )
+        cassqt = casssession.prepare( qt )
 
-                
+        # TODO - MAKE THIS BETTER -- this parameter should be configurable somewhere
+        batchsize = 1000
+        nbatch = 0
+        batch = None
         for i, msgmeta in enumerate( messages ):
             msg = msgmeta['msg']
             if len( msg['classifications' ] ) == 0:
@@ -1042,46 +1059,32 @@ class CassBrokerMessageBySource(DjangoCassandraModel):
             cassid = uuid.uuid4()
             descingesttimestamp = datetime.datetime.now()
 
-            # Since the django cassandra thingy doesn't have (as far as
-            # I've found) a way to do stuff in bulk, do it manually.
-            #
-            # What I've read about Cassandra suggests that doing stuff
-            # in bulk isn't supposed to be effcient.  But, I suspect
-            # this is also assuming that there's not various python
-            # overheads.  I really don't know.
+            args = ( cfers[ keycfer][ 'classifier_id' ],
+                     msg[ 'diaSourceId' ],
+                     cassid,
+                     msgmeta[ 'topic' ],
+                     msgmeta[ 'msgoffset' ],
+                     msg[ 'alertId' ],
+                     msgmeta[ 'timestamp' ],
+                     msg[ 'elasticcPublishTimestamp' ],
+                     msg[ 'brokerIngestTimestamp' ],
+                     descingesttimestamp,
+                     classes,
+                     probs )
+            if batch is None:
+                batch = cassandra.query.BatchStatement()
+                nbatch = 0
+            batch.add( cassqm.bind( args ) )
+            batch.add( cassqt.bind( args ) )
+            nbatch += 1
+            if nbatch >= batchsize:
+                casssession.execute( batch )
+                batch = None
+                nbatch = 0
+
+        if ( batch is not None ) and ( nbatch > 0 ):
+            casssession.execute( batch )
             
-            # cassmsgbysource = CassBrokerMessageBySource(
-            #     classifier_id=cfers[ keycfer ][ 'classifier_id' ],
-            #     diasource_id=msg['diaSourceId'],
-            #     id = cassid,
-            #     topicname=msgmeta['topic'],
-            #     streammessage_id=msgmeta['msgoffset'],
-            #     alert_id=msg['alertId'],
-            #     msghdrtimestamp=msgmeta['timestamp'],
-            #     elasticcpublishtimestamp=msg['elasticcPublishTimestamp'],
-            #     brokeringesttimestamp=msg['brokerIngestTimestamp'],
-            #     descingestimestamp=descingesttimestamp,
-            #     classid=classes,
-            #     probability=probs
-            # )
-            # cassmsgbysource.save()
-
-            # cassmsgbytime =  CassBrokerMessageByTime(
-            #     classifier_id=cfers[ keycfer ][ 'classifier_id' ],
-            #     descingestimestamp=descingesttimestamp,
-            #     id = cassid,
-            #     topicname=msgmeta['topic'],
-            #     streammessage_id=msgmeta['msgoffset'],
-            #     diasource_id=msg['diaSourceId'],
-            #     alert_id=msg['alertId'],
-            #     msghdrtimestamp=msgmeta['timestamp'],
-            #     elasticcpublishtimestamp=msg['elasticcPublishTimestamp'],
-            #     brokeringesttimestamp=msg['brokerIngestTimestamp'],
-            #     classid=classes,
-            #     probability=probs
-            # )
-            # cassmsgbytime.save()
-
         # Update the log of new broker source ids
         BrokerSourceIds.add_batch( sourceids )
 

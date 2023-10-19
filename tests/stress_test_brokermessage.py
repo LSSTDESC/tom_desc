@@ -7,6 +7,8 @@ import pytz
 import random
 import pytest
 import logging
+import threading
+import subprocess
 
 import django.db
 
@@ -14,7 +16,10 @@ from elasticc2.models import ( CassBrokerMessageBySource,
                                CassBrokerMessageByTime,
                                BrokerSourceIds,
                                BrokerClassifier,
-                               BrokerMessage )
+                               BrokerMessage,
+                               PPDBDiaObject,
+                               PPDBDiaSource,
+                               PPDBAlert )
 
 
 _logger = logging.getLogger("main")
@@ -29,7 +34,9 @@ _logger.setLevel( logging.INFO )
 def lots_of_alerts():
     # Goal is to get a million classifications
     # 2 brokers * 2 ( classifiers / broker ) * ( 250,000 sources ) * ( 1 alert / (classifier*source )
-    
+
+    alertsenttime = datetime.datetime.now( tz=pytz.utc ) - datetime.timedelta( hours=1 )
+
     brokers = {
         'lots_test1': {
             '0.1': {
@@ -45,7 +52,7 @@ def lots_of_alerts():
         }
     }
 
-    nsrc = 25000
+    nsrc = 100000
     mincls = 1
     maxcls = 20
 
@@ -88,81 +95,188 @@ def lots_of_alerts():
                          'msgoffset': i,
                          'timestamp': datetime.datetime.now( tz=pytz.utc ),
                          'msg': msg } )
-    
-                        
+
+
     _logger.info( f"...done generating {len(alerts)} random alerts" )
 
+    # Load fake alerts into the database
+
+    obj = PPDBDiaObject( diaobject_id=1, isddf=False, ra=2., decl=2. )
+    obj.save()
+    srcs = []
+    for msg in msgs:
+        srcs.append( { 'diasource_id': msg['diaSourceId'],
+                       'midpointtai': 60000.,
+                       'filtername': 'r',
+                       'ra': 2.,
+                       'decl': 2.,
+                       'psflux': 1000.,
+                       'psfluxerr': 10.,
+                       'snr': 100.,
+                       'diaobject_id': obj.diaobject_id } )
+    PPDBDiaSource.bulk_load_or_create( srcs )
+    alobjs = []
+    for msg in msgs:
+        alobjs.append( { 'alert_id': msg['alertId'],
+                         'alertsenttimestamp': alertsenttime,
+                         'diasource_id': msg['diaSourceId'],
+                         'diaobject_id': obj.diaobject_id } )
+    PPDBAlert.bulk_load_or_create( alobjs )
+    # bulk_load_or_create wont actually set alertsenttimestamp
+    cur = django.db.connection.cursor()
+    cur.execute( "UPDATE elasticc2_ppdbalert SET alertsenttimestamp=%(t)s", { 't': alertsenttime } )
+
+    _logger.info( f"...done loading fake alerts into database" )
+
     yield alerts
-    
-@pytest.fixture
-def load_cass( lots_of_alerts ):
-    tinit = time.perf_counter()
-    t0 = tinit
-    n = 0
-    delta = 2000
-    printevery = 20000
-    nextprint = printevery
-
-    while n < len(lots_of_alerts):
-        n1 = n + delta if n + delta < len(lots_of_alerts) else len(lots_of_alerts)
-        CassBrokerMessageBySource.load_batch( lots_of_alerts[n:n1] )
-        n = n1
-
-        if n >= nextprint:
-            t1 = time.perf_counter()
-            _logger.info( f"Cass: loaded {n} of {len(lots_of_alerts)} alerts "
-                          f"in {t1-tinit:.2f} sec (current rate {printevery/(t1-t0):.0f} s⁻¹)" )
-            nextprint += printevery
-            t0 = t1
-
-    t1 = time.perf_counter()
-    _logger.info( f"Cass: done loading {len(lots_of_alerts)} alerts in {t1-tinit:.2f} sec "
-                  f"({len(lots_of_alerts)/(t1-tinit):.0f} s⁻¹)" )
-        
-    yield True
 
     cur = django.db.connection.cursor()
-    cur.execute( "TRUNCATE TABLE elasticc2_brokersourceids" )
-    cur.execute( "TRUNCATE TABLE elasticc2_brokerclassifier" )
-    casscur = django.db.connections['cassandra'].connection.cursor()
-    casscur.execute( "TRUNCATE TABLE tom_desc.cass_broker_message_by_time" )
-    casscur.execute( "TRUNCATE TABLE tom_desc.cass_broker_message_by_source" )
+    cur.execute( "TRUNCATE TABLE elasticc2_ppdbdiaobject CASCADE" )
+    cur.execute( "TRUNCATE TABLE elasticc2_ppdbdiasource CASCADE" )
+    cur.execute( "TRUNCATE TABLE elasticc2_ppdbalert" )
 
-    
-@pytest.fixture(scope='module')
-def load_pg( lots_of_alerts ):
-    tinit = time.perf_counter()
-    t0 = tinit
-    n = 0
-    delta = 2000
-    printevery = 20000
-    nextprint = printevery
 
-    while n < len(lots_of_alerts):
-        n1 = n + delta if n + delta < len(lots_of_alerts) else len(lots_of_alerts)
-        BrokerMessage.load_batch( lots_of_alerts[n:n1] )
-        n = n1
+class TestCassandra:
 
-        if n >= nextprint:
-            t1 = time.perf_counter()
-            _logger.info( f"PG: loaded {n} of {len(lots_of_alerts)} alerts "
-                          f"in {t1-tinit:.2f} sec (current rate {printevery/(t1-t0)} s⁻¹)" )
-            nextprint += printevery
-            t0 = t1
-            
-    t1 = time.perf_counter()
-    _logger.info( f"PG: done loading {len(lots_of_alerts)} alerts in {t1-tinit:.2f} sec "
-                  f"({len(lots_of_alerts)/(t1-tinit):.0f} s⁻¹)" )
-        
-    yield True
+    @pytest.fixture(scope='class')
+    def load_cass( self, lots_of_alerts ):
+        tinit = time.perf_counter()
+        t0 = tinit
+        n = 0
+        delta = 2000
+        printevery = 20000
+        nextprint = printevery
 
-    cur = django.db.connection.cursor()
-    cur.execute( "TRUNCATE TABLE elasticc2_brokersourceids" )
-    cur.execute( "TRUNCATE TABLE elasticc2_brokerclassifier" )
-    cur.execute( "TRUNCATE TABLE elasticc2_brokermessage" )
+        while n < len(lots_of_alerts):
+            n1 = n + delta if n + delta < len(lots_of_alerts) else len(lots_of_alerts)
+            CassBrokerMessageBySource.load_batch( lots_of_alerts[n:n1] )
+            n = n1
 
-def test_cass( load_cass ):
-    pass
+            if n >= nextprint:
+                t1 = time.perf_counter()
+                _logger.info( f"Cass: loaded {n} of {len(lots_of_alerts)} alerts "
+                              f"in {t1-tinit:.2f} sec (current rate {printevery/(t1-t0):.0f} s⁻¹)" )
+                nextprint += printevery
+                t0 = t1
 
-def test_pg( load_pg ):
-    pass
+        t1 = time.perf_counter()
+        _logger.info( f"Cass: done loading {len(lots_of_alerts)} alerts in {t1-tinit:.2f} sec "
+                      f"({len(lots_of_alerts)/(t1-tinit):.0f} s⁻¹)" )
+
+        yield lots_of_alerts
+
+        cur = django.db.connection.cursor()
+        cur.execute( "TRUNCATE TABLE elasticc2_brokersourceids" )
+        cur.execute( "TRUNCATE TABLE elasticc2_brokerclassifier" )
+        casscur = django.db.connections['cassandra'].connection.cursor()
+        casscur.execute( "TRUNCATE TABLE tom_desc.cass_broker_message_by_time" )
+        casscur.execute( "TRUNCATE TABLE tom_desc.cass_broker_message_by_source" )
+
+    def counter( self, rows ):
+        self.tot += len( rows )
+        if self.future.has_more_pages:
+            self.future.start_fetching_next_page()
+        else:
+            self.done.set()
+
+    def err( self, exc ):
+        self.error = exc
+        self.done.set()
+
+    def test_cass( self, load_cass ):
+        # This doesn't work.  I think we're getting paged or
+        #  something.  The django cassandra interface
+        #  dissapoints me
+        # bysrc = CassBrokerMessageBySource.objects.all()
+        # assert len(bysrc) == len(load_cass)
+        # bytim = CassBrokerMessageByTime.objects.all()
+        # assert len(bytim) == len(load_cass )
+
+        casssession = django.db.connections['cassandra'].connection.session
+
+        self.tot = 0
+        self.error = None
+        self.done = threading.Event()
+        self.future = casssession.execute_async( "SELECT * FROM tom_desc.cass_broker_message_by_source" )
+        self.future.add_callbacks( callback=self.counter, errback=self.err )
+        self.done.wait()
+        if self.error:
+            raise self.error
+        assert self.tot == len(load_cass)
+
+        self.tot = 0
+        self.error = None
+        self.done = threading.Event()
+        self.future = casssession.execute_async( "SELECT * FROM tom_desc.cass_broker_message_by_time" )
+        self.future.add_callbacks( callback=self.counter, errback=self.err )
+        self.done.wait()
+        if self.error:
+            raise self.error
+        assert self.tot == len(load_cass)
+
+    def test_gen_brokerdelay( self, load_cass ):
+        t0 = ( datetime.datetime.now( tz=pytz.utc ) + datetime.timedelta( days=-1 ) ).date().isoformat()
+        t1 = ( datetime.datetime.now( tz=pytz.utc ) + datetime.timedelta( days=2 ) ).date().isoformat()
+        dt = 1
+
+        tstart = time.perf_counter()
+        res = subprocess.run( [ "python", "manage.py", "gen_elasticc2_brokerdelaygraphs",
+                                "--t0", t0, "--t1", t1, "--dt", str(dt) ],
+                              cwd="/tom_desc", capture_output=True )
+        assert res.returncode == 0
+        tend = time.perf_counter()
+        _logger.info( f"gen_elasticc2_brokerdelaygraphs took {tend-tstart:.1f} sec" )
+
+
+class TestPostgres:
+
+    @pytest.fixture(scope='class')
+    def load_pg( self, lots_of_alerts ):
+        tinit = time.perf_counter()
+        t0 = tinit
+        n = 0
+        delta = 2000
+        printevery = 20000
+        nextprint = printevery
+
+        while n < len(lots_of_alerts):
+            n1 = n + delta if n + delta < len(lots_of_alerts) else len(lots_of_alerts)
+            BrokerMessage.load_batch( lots_of_alerts[n:n1] )
+            n = n1
+
+            if n >= nextprint:
+                t1 = time.perf_counter()
+                _logger.info( f"PG: loaded {n} of {len(lots_of_alerts)} alerts "
+                              f"in {t1-tinit:.2f} sec (current rate {printevery/(t1-t0):.0f} s⁻¹)" )
+                nextprint += printevery
+                t0 = t1
+
+        t1 = time.perf_counter()
+        _logger.info( f"PG: done loading {len(lots_of_alerts)} alerts in {t1-tinit:.2f} sec "
+                      f"({len(lots_of_alerts)/(t1-tinit):.0f} s⁻¹)" )
+
+        yield lots_of_alerts
+
+        cur = django.db.connection.cursor()
+        cur.execute( "TRUNCATE TABLE elasticc2_brokersourceids" )
+        cur.execute( "TRUNCATE TABLE elasticc2_brokerclassifier" )
+        cur.execute( "TRUNCATE TABLE elasticc2_brokermessage" )
+
+    def test_pg( self, load_pg ):
+        bms = BrokerMessage.objects.all()
+        assert len(bms) == len(load_pg)
+
+    def test_gen_brokerdelay( self, load_pg ):
+        t0 = ( datetime.datetime.now( tz=pytz.utc ) + datetime.timedelta( days=-1 ) ).date().isoformat()
+        t1 = ( datetime.datetime.now( tz=pytz.utc ) + datetime.timedelta( days=2 ) ).date().isoformat()
+        dt = 1
+
+        tstart = time.perf_counter()
+        res = subprocess.run( [ "python", "manage.py", "gen_elasticc2_brokerdelaygraphs_pg",
+                                "--t0", t0, "--t1", t1, "--dt", str(dt) ],
+                              cwd="/tom_desc", capture_output=True )
+        assert res.returncode == 0
+        tend = time.perf_counter()
+        _logger.info( f"gen_elasticc2_brokerdelaygraphs took {tend-tstart:.1f} sec" )
+
+

@@ -50,7 +50,7 @@ def calcbucks( bucketleft, bucketright, dbucket ):
     bucketnums = numpy.array( range( nbuckets+2 ) )
     bucketleftedges = bucketleft + ( bucketnums - 1 ) * dbucket
     return nbuckets, bucketnums, bucketleftedges
-    
+
 
 class CassBrokerMessagePageHandler:
     def __init__( self, future, pgcursor, bucketleft, bucketright, dbucket, lowcutoff=1, highcutoff=9.99e5 ):
@@ -75,7 +75,7 @@ class CassBrokerMessagePageHandler:
         self.futuretime = 0
         self.tottime = None
         self.debugfirst = _logger.getEffectiveLevel() >= logging.DEBUG
-        
+
         # Create a temporary postgres table for storing the alert ids we need
         pgcursor.execute( "CREATE TEMPORARY TABLE temp_alertids( "
                           "  alert_id bigint,"
@@ -98,7 +98,7 @@ class CassBrokerMessagePageHandler:
         pgcursor.execute( f"PREPARE bucket_join_alert_tempids AS {q}" )
 
         self.df = makesubdf( self.bucketnums ).set_index( [ 'which', 'buck' ] )
-                
+
         self.finished_event = threading.Event()
         self.error = None
 
@@ -209,12 +209,17 @@ class Command(BaseCommand):
     outdir = _rundir / "../../static/elasticc2/brokertiminggraphs"
 
     def add_arguments( self, parser) :
+        parser.add_argument( "--t0", default="2023-10-16",
+                             help="First day to look at (YYYY-MM-DD) (default: 2023-10=16)" )
+        parser.add_argument( "--t1", default="2023-10-19",
+                             help="One past the last day to look at (YYYY-MM-DD) (default: 2023-10-19)" )
+        parser.add_argument( "--dt", default=7, type=int, help="Step in days (default: 7)" )
+
         self.bucketleft = 0
         self.bucketright = 6
         self.dbucket = 0.25
         self.lowcutoff = 1
         self.highcutoff = 9.99e5
-        pass
 
     def makeplots( self ):
         brokers = set( self.df.index.get_level_values( 'broker' ) )
@@ -222,8 +227,9 @@ class Command(BaseCommand):
 
         whichtitle = { 'full': "Orig. Alert to Tom Ingestion",
                        'broker': "Broker Delay",
+
                        'tom': "Tom Delay" }
-        
+
         for broker in brokers:
             for week in weeks:
                 fig = pyplot.figure( figsize=(18,4), tight_layout=True )
@@ -269,6 +275,8 @@ class Command(BaseCommand):
         self.df.set_index( [ 'broker', 'week', 'which', 'buck' ], inplace=True )
 
     def handle( self, *args, **options ):
+        raise RuntimeError( "Deprecated.  Run gen_elasticc2_brokerdelaygraphs_pg" )
+
         _logger.info( "Starting genbrokerdelaygraphs" )
 
         conn = None
@@ -279,7 +287,7 @@ class Command(BaseCommand):
         try:
             just_read_pickle = False
             updatetime = None
-            
+
             if not just_read_pickle:
 
                 casssession = django.db.connections['cassandra'].connection.session
@@ -304,9 +312,9 @@ class Command(BaseCommand):
                                                                                   self.bucketright,
                                                                                   self.dbucket )
 
-                t0 = datetime.datetime( 2023, 10, 16, tzinfo=pytz.utc )
-                t1 = datetime.datetime( 2023, 10, 19, tzinfo=pytz.utc )
-                dt = datetime.timedelta( days=1 )
+                t0 = pytz.utc.localize( datetime.datetime.fromisoformat( options['t0'] ) )
+                t1 = pytz.utc.localize( datetime.datetime.fromisoformat( options['t1'] ) )
+                dt = datetime.timedelta( days=options['dt'] )
                 weeks = []
                 week = t0
                 while ( week < t1 ):

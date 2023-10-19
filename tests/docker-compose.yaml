@@ -50,7 +50,6 @@ services:
     build:
       context: ../docker_cassandra
     healthcheck:
-#       test: [ "CMD-SHELL", "[ $$(nodetool statusgossip) = running ]" ]
        test: cqlsh -u cassandra -p cassandra cassandra < /dev/null
        interval: 10s
        timeout: 2s
@@ -61,7 +60,7 @@ services:
       postgres:
         condition: service_healthy
       cassandra:
-         condition: service_healthy
+        condition: service_healthy
     image: registry.nersc.gov/m1727/raknop/tom_desc_bindmount:chimaera
     build:
       context: ../
@@ -83,9 +82,9 @@ services:
       - -c
       - |
         python tom_desc/manage.py migrate
-        python tom_desc/manage.py sync_cassandra
         python tom_desc/manage.py create_test_superuser
         python tom_desc/manage.py create_test_apibroker
+        python tom_desc/manage.py sync_cassandra
 
   tom:
     depends_on:

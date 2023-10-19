@@ -16,7 +16,7 @@ import pittgoogle
 from concurrent.futures import ThreadPoolExecutor  # for pittgoogle
 import django.db
 from django.core.management.base import BaseCommand, CommandError
-from elasticc2.models import CassBrokerMessageBySource
+from elasticc2.models import BrokerMessage
 
 _rundir = pathlib.Path(__file__).parent
 sys.path.insert(0, str(_rundir) )
@@ -155,7 +155,7 @@ class BrokerConsumer:
                                    'msgoffset': msg.offset(),
                                    'timestamp': timestamp,
                                    'msg': alert } )
-        added = CassBrokerMessageBySource.load_batch( messagebatch, logger=self.logger )
+        added = BrokerMessage.load_batch( messagebatch, logger=self.logger )
         self.countlogger.info( f"...added {added['addedmsgs']} messages, "
                                f"{added['addedclassifiers']} classifiers, "
                                f"{added['addedclassifications']} classifications. " )
@@ -408,7 +408,7 @@ class PittGoogleBroker(BrokerConsumer):
         logger.info( "In handle_message_batch" )
         # import pdb; pdb.set_trace()
         
-        added = CassBrokerMessageBySource.load_batch(messagebatch, logger=logger)
+        added = BrokerMessage.load_batch(messagebatch, logger=logger)
         countlogger.info(
             f"...added {added['addedmsgs']} messages, "
             f"{added['addedclassifiers']} classifiers, "
@@ -487,7 +487,7 @@ class Command(BaseCommand):
         consumer = brokerclass( pipe=pipe, **options )
         # Make sure this subprocess has a cassandra connection
         # (Search for "connection.unregsiter" and see the comments there.)
-        django.db.connections['cassandra'].connection.register()
+        # django.db.connections['cassandra'].connection.register()
         # Do
         consumer.poll()
 
@@ -531,7 +531,7 @@ class Command(BaseCommand):
         # documentation (which is very sparse), it's entirely possible
         # that a future version of the django cassandra engine will
         # break this code.
-        django.db.connections['cassandra'].connection.unregister()
+        # django.db.connections['cassandra'].connection.unregister()
         
         brokers = {}
         for name,brokerclass in brokerstodo.items():

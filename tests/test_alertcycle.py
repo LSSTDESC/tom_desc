@@ -90,27 +90,35 @@ class TestAlertCycle:
         # another second to actually run, and/or to deal with roundoff error.)
         time.sleep( 11 )
 
-        brkmsgsrc = elasticc2.models.CassBrokerMessageBySource
-        brkmsgtim = elasticc2.models.CassBrokerMessageByTime
+        # brkmsgsrc = elasticc2.models.CassBrokerMessageBySource
+        # brkmsgtim = elasticc2.models.CassBrokerMessageByTime
+        brkmsg = elasticc2.models.BrokerMessage
         cfer = elasticc2.models.BrokerClassifier
         bsid = elasticc2.models.BrokerSourceIds
 
-        assert brkmsgsrc.objects.count() == 318
-        assert brkmsgtim.objects.count() == brkmsgsrc.objects.count()
+        # assert brkmsgsrc.objects.count() == 318
+        # assert brkmsgtim.objects.count() == brkmsgsrc.objects.count()
+        assert brkmsg.objects.count() == 318
         assert cfer.objects.count() == 2
         assert bsid.objects.count() == 159
 
-        numprobssrc = 0
-        numprobstim = 0
-        for msg in brkmsgsrc.objects.all():
+        # numprobssrc = 0
+        # numprobstim = 0
+        numprobs = 0
+        # for msg in brkmsgsrc.objects.all():
+        #     assert len(msg.classid) == len(msg.probability)
+        #     numprobssrc += len(msg.classid)
+        # for msg in brkmsgtim.objects.all():
+        #     assert len(msg.classid) == len(msg.probability)
+        #     numprobstim += len(msg.classid)
+        for msg in brkmsg.objects.all():
             assert len(msg.classid) == len(msg.probability)
-            numprobssrc += len(msg.classid)
-        for msg in brkmsgtim.objects.all():
-            assert len(msg.classid) == len(msg.probability)
-            numprobstim += len(msg.classid)
+            numprobs += len(msg.classid)
+
         # 159 from NugentClassifier plus 20*159 for RandomSNType
-        assert numprobssrc == 3339
-        assert numprobssrc == numprobstim
+        # assert numprobssrc == 3339
+        # assert numprobssrc == numprobstim
+        assert numprobs == 3339
 
         # TODO : check that the data is identicay for
         # corresponding entries in the two cassbroker
@@ -137,8 +145,9 @@ class TestAlertCycle:
     def test_100moredays_classifications_ingested( self, alerts_100daysmore ):
         time.sleep( 21 )
 
-        brkmsgsrc = elasticc2.models.CassBrokerMessageBySource
-        brkmsgtim = elasticc2.models.CassBrokerMessageByTime
+        # brkmsgsrc = elasticc2.models.CassBrokerMessageBySource
+        # brkmsgtim = elasticc2.models.CassBrokerMessageByTime
+        brkmsg = elasticc2.models.BrokerMessage
         cfer = elasticc2.models.BrokerClassifier
 
         # THIS DOES NOT WORK
@@ -150,22 +159,28 @@ class TestAlertCycle:
         # django.
         # assert brkmsg.objects.count() == 1300
 
-        assert len( brkmsgsrc.objects.all() ) == 520
-        assert len( brkmsgtim.objects.all() ) == 520
+        # assert len( brkmsgsrc.objects.all() ) == 520
+        # assert len( brkmsgtim.objects.all() ) == 520
+        assert len( brkmsg.objects.all() ) == 520
         assert cfer.objects.count() == 2
         assert len( cfer.objects.all() ) == 2
 
-        numprobssrc = 0
-        numprobstim = 0
-        for msg in brkmsgsrc.objects.all():
+        # numprobssrc = 0
+        # numprobstim = 0
+        numprobs = 0
+        # for msg in brkmsgsrc.objects.all():
+        #     assert len(msg.classid) == len(msg.probability)
+        #     numprobssrc += len(msg.classid)
+        # for msg in brkmsgtim.objects.all():
+        #     assert len(msg.classid) == len(msg.probability)
+        #     numprobstim += len(msg.classid)
+        for msg in brkmsg.objects.all():
             assert len(msg.classid) == len(msg.probability)
-            numprobssrc += len(msg.classid)
-        for msg in brkmsgtim.objects.all():
-            assert len(msg.classid) == len(msg.probability)
-            numprobstim += len(msg.classid)
+            numprobs += len(msg.classid)
         # 260 from NugentClassifier plus 20*260 for RandomSNType
-        assert numprobssrc == 5460
-        assert numprobssrc == numprobstim
+        # assert numprobssrc == 5460
+        # assert numprobssrc == numprobstim
+        assert numprobs == 5460
 
         assert ( set( [ i.classifiername for i in cfer.objects.all() ] )
                  == set( [ "NugentClassifier", "RandomSNType" ] ) )
@@ -188,8 +203,9 @@ class TestAlertCycle:
 
     def test_apibroker_existingsources( self, api_classify_existing_alerts ):
         cfer = elasticc2.models.BrokerClassifier
-        brkmsgsrc = elasticc2.models.CassBrokerMessageBySource
-        brkmsgtim = elasticc2.models.CassBrokerMessageByTime
+        # brkmsgsrc = elasticc2.models.CassBrokerMessageBySource
+        # brkmsgtim = elasticc2.models.CassBrokerMessageByTime
+        brkmsg = elasticc2.models.BrokerMessage
 
         assert cfer.objects.count() == 3
         apibroker = cfer.objects.filter( brokername="apiclassifier" )[0]
@@ -197,24 +213,31 @@ class TestAlertCycle:
         assert apibroker.classifiername == "AlwaysTheSame"
         assert apibroker.classifierparams == "0.5 111, 0.75 112"
 
-        numprobssrc = 0
-        numprobstim = 0
-        for msg in brkmsgsrc.objects.all():
+        # numprobssrc = 0
+        # numprobstim = 0
+        numprobs = 0
+        # for msg in brkmsgsrc.objects.all():
+        #     assert len(msg.classid) == len(msg.probability)
+        #     numprobssrc += len(msg.classid)
+        # for msg in brkmsgtim.objects.all():
+        #     assert len(msg.classid) == len(msg.probability)
+        #     numprobstim += len(msg.classid)
+        for msg in brkmsg.objects.all():
             assert len(msg.classid) == len(msg.probability)
-            numprobssrc += len(msg.classid)
-        for msg in brkmsgtim.objects.all():
-            assert len(msg.classid) == len(msg.probability)
-            numprobstim += len(msg.classid)
+            numprobs += len(msg.classid)
         # 5460 from before, plus 2*260 for the new classifier
-        assert numprobssrc == 5980
-        assert numprobssrc == numprobstim
+        # assert numprobssrc == 5980
+        # assert numprobssrc == numprobstim
+        assert numprobs == 5980
 
-        apiclassmsgssrc = brkmsgsrc.objects.filter( classifier_id=apibroker.classifier_id )
-        apiclassmsgstim = brkmsgtim.objects.filter( classifier_id=apibroker.classifier_id )
+        # apiclassmsgssrc = brkmsgsrc.objects.filter( classifier_id=apibroker.classifier_id )
+        # apiclassmsgstim = brkmsgtim.objects.filter( classifier_id=apibroker.classifier_id )
+        # assert len( apiclassmsgssrc ) == len( apiclassmsgstim )
 
-        assert len( apiclassmsgssrc ) == len( apiclassmsgstim )
+        apiclassmsg = brkmsg.objects.filter( classifier_id=apibroker.classifier_id )
+        assert len( apiclassmsg ) == 260
 
-        onemsg = apiclassmsgssrc[0]
+        onemsg = apiclassmsg[0]
         assert onemsg.classid == [ 111, 112 ]
         assert onemsg.probability == [ 0.25, 0.75 ]
         assert onemsg.msghdrtimestamp >= onemsg.brokeringesttimestamp
