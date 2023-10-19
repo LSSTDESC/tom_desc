@@ -18,6 +18,7 @@ from django.contrib.auth.models import Group
 from django.contrib.postgres.fields import ArrayField
 
 from cassandra.cqlengine import columns
+import cassandra.query
 from django_cassandra_engine.models import DjangoCassandraModel
 
 # NOTE FOR ROB
@@ -52,8 +53,8 @@ _formatter = logging.Formatter( f'[%(asctime)s - %(levelname)s] - %(message)s' )
 _logout.setFormatter( _formatter )
 _logger.propagate = False
 _logger.addHandler( _logout )
-# _logger.setLevel( logging.INFO )
-_logger.setLevel( logging.DEBUG )
+_logger.setLevel( logging.INFO )
+# _logger.setLevel( logging.DEBUG )
 
 # ======================================================================
 # ======================================================================
@@ -309,7 +310,7 @@ class BaseAlert(Createable):
 
         isddf = self.diaobject.isddf
 
-        # Extract the soruce that triggered this ale0rt
+        # Extract the source that triggered this ale0rt
 
         t0 = time.perf_counter()
         if self._sourcefields is None:
@@ -819,17 +820,17 @@ class BrokerMessage( models.Model ):
     brokermessage_id = models.BigAutoField( primary_key=True )
     streammessage_id = models.BigIntegerField( null=True )
     topicname = models.CharField( max_length=200, null=True )
-    alert_id = models.BigIntegerField( index=True )
-    diasource_id = models.BigIntegerField( index=True )
+    alert_id = models.BigIntegerField( db_index=True )
+    diasource_id = models.BigIntegerField( db_index=True )
 
     msghdrtimestamp = models.DateTimeField( null=True )
-    descingesttimestamp = models.DateTimeField( index=True, null=False )
+    descingesttimestamp = models.DateTimeField( db_index=True, null=False )
     elasticcpublishtimestamp = models.DateTimeField( null=True )
-    brokeringesttimestamp = models.DataTimeField( null=True )
+    brokeringesttimestamp = models.DateTimeField( null=True )
 
-    classifier_id = models.BigIntegerField( index=True, null=False )
-    classid = ArrayField( models.SmallIntegerField )
-    probability = ArrayField( Float32Field )
+    classifier_id = models.BigIntegerField( db_index=True, null=False )
+    classid = ArrayField( models.SmallIntegerField(), default=list )
+    probability = ArrayField( Float32Field(), default=list )
 
     @staticmethod
     def load_batch( messages, logger=_logger ):
@@ -857,10 +858,10 @@ class BrokerMessage( models.Model ):
         kwargses = []
         for brokertag in seenbrokers:
             if brokertag not in classifiers.keys():
-                kwargses.append( { 'brokername': msg['msg']['brokerName']
-                                   'brokerversion': msg['msg']['brokerVersion'],
-                                   'classifiername': msg['msg']['classifierName'],
-                                   'classifierparams': msg['msg']['classifierParams'] } )
+                kwargses.append( { 'brokername': brokertag[0],
+                                   'brokerversion': brokertag[1],
+                                   'classifiername': brokertag[2],
+                                   'classifierparams': brokertag[3] } )
         ncferstoadd = len(kwargses)
         logger.debug( f"Adding {ncferstoadd} new classifiers" )
         if ncferstoadd > 0:
@@ -886,17 +887,17 @@ class BrokerMessage( models.Model ):
                            'topicname': msg['topic'],
                            'alert_id': msg['msg']['alertId'],
                            'diasource_id': msg['msg']['diaSourceId'],
-                           'msghdrtimestamp': timestamp,
-                           'descingesttimestamp': datetime.datetime.now(),
+                           'msghdrtimestamp': msg['timestamp'],
+                           'descingesttimestamp': datetime.datetime.now( tz=pytz.utc ),
                            'elasticcpublishtimestamp': msg['msg']['elasticcPublishTimestamp'],
                            'brokeringesttimestamp': msg['msg']['brokerIngestTimestamp'],
                            'classifier_id': classifiers[brokertag].classifier_id,
-                           'classid': msg['msg']['classId'],
-                           'probability': msg['msg']['probability']
+                           'classid': [ c['classId'] for c in msg['msg']['classifications'] ],
+                           'probability': [ c['probability'] for c in msg['msg']['classifications'] ]
                           }
                 kwargses.append( kwargs )
-                sourceids.add( msg['msg']['diaSoruceId'] )
-        BrokerSoruceIds.add_batch( sourceids )
+                sourceids.add( msg['msg']['diaSourceId'] )
+        BrokerSourceIds.add_batch( sourceids )
         if len(kwargses) > 0:
             # This is byzantine, but I'm copying django documentation here
             objs = ( BrokerMessage( **k ) for k in kwargses )
@@ -1025,6 +1026,8 @@ class CassBrokerMessageBySource(DjangoCassandraModel):
                             f'{newcfer.classifiername}_{newcfer.classifierparams}' )
                 cfers[keycfer]['classifier_id'] = newcfer.classifier_id
 
+
+                
         for i, msgmeta in enumerate( messages ):
             msg = msgmeta['msg']
             if len( msg['classifications' ] ) == 0:
@@ -1038,37 +1041,46 @@ class CassBrokerMessageBySource(DjangoCassandraModel):
 
             cassid = uuid.uuid4()
             descingesttimestamp = datetime.datetime.now()
-            cassmsgbysource = CassBrokerMessageBySource(
-                classifier_id=cfers[ keycfer ][ 'classifier_id' ],
-                diasource_id=msg['diaSourceId'],
-                id = cassid,
-                topicname=msgmeta['topic'],
-                streammessage_id=msgmeta['msgoffset'],
-                alert_id=msg['alertId'],
-                msghdrtimestamp=msgmeta['timestamp'],
-                elasticcpublishtimestamp=msg['elasticcPublishTimestamp'],
-                brokeringesttimestamp=msg['brokerIngestTimestamp'],
-                descingestimestamp=descingesttimestamp,
-                classid=classes,
-                probability=probs
-            )
-            cassmsgbysource.save()
 
-            cassmsgbytime =  CassBrokerMessageByTime(
-                classifier_id=cfers[ keycfer ][ 'classifier_id' ],
-                descingestimestamp=descingesttimestamp,
-                id = cassid,
-                topicname=msgmeta['topic'],
-                streammessage_id=msgmeta['msgoffset'],
-                diasource_id=msg['diaSourceId'],
-                alert_id=msg['alertId'],
-                msghdrtimestamp=msgmeta['timestamp'],
-                elasticcpublishtimestamp=msg['elasticcPublishTimestamp'],
-                brokeringesttimestamp=msg['brokerIngestTimestamp'],
-                classid=classes,
-                probability=probs
-            )
-            cassmsgbytime.save()
+            # Since the django cassandra thingy doesn't have (as far as
+            # I've found) a way to do stuff in bulk, do it manually.
+            #
+            # What I've read about Cassandra suggests that doing stuff
+            # in bulk isn't supposed to be effcient.  But, I suspect
+            # this is also assuming that there's not various python
+            # overheads.  I really don't know.
+            
+            # cassmsgbysource = CassBrokerMessageBySource(
+            #     classifier_id=cfers[ keycfer ][ 'classifier_id' ],
+            #     diasource_id=msg['diaSourceId'],
+            #     id = cassid,
+            #     topicname=msgmeta['topic'],
+            #     streammessage_id=msgmeta['msgoffset'],
+            #     alert_id=msg['alertId'],
+            #     msghdrtimestamp=msgmeta['timestamp'],
+            #     elasticcpublishtimestamp=msg['elasticcPublishTimestamp'],
+            #     brokeringesttimestamp=msg['brokerIngestTimestamp'],
+            #     descingestimestamp=descingesttimestamp,
+            #     classid=classes,
+            #     probability=probs
+            # )
+            # cassmsgbysource.save()
+
+            # cassmsgbytime =  CassBrokerMessageByTime(
+            #     classifier_id=cfers[ keycfer ][ 'classifier_id' ],
+            #     descingestimestamp=descingesttimestamp,
+            #     id = cassid,
+            #     topicname=msgmeta['topic'],
+            #     streammessage_id=msgmeta['msgoffset'],
+            #     diasource_id=msg['diaSourceId'],
+            #     alert_id=msg['alertId'],
+            #     msghdrtimestamp=msgmeta['timestamp'],
+            #     elasticcpublishtimestamp=msg['elasticcPublishTimestamp'],
+            #     brokeringesttimestamp=msg['brokerIngestTimestamp'],
+            #     classid=classes,
+            #     probability=probs
+            # )
+            # cassmsgbytime.save()
 
         # Update the log of new broker source ids
         BrokerSourceIds.add_batch( sourceids )
