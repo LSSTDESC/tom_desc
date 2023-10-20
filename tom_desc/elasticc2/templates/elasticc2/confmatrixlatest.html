@@ -1,0 +1,44 @@
+{% extends 'tom_common/base.html' %}
+{% load static %}
+{% block title %}
+ELAsTiCC2 Confusion Matrices
+{% endblock %}
+{% block additional_css %}
+<link rel="stylesheet" href="{% static 'elasticc/elasticc.css' %}">
+{% endblock %}
+{% block additional_js %}
+<script type="text/javascript" src="{% static 'elasticc/elasticc.js' %}"></script>
+{% endblock %}
+{% block content %}
+<h2>ELAsTiCC2 Confusion Matrices</h2>
+
+<p>Updated {{ updatetime }}</p>
+
+<p>The graphs below show confusion matrices for each broker/classifier.
+  Counts are for <i>objects</i>, not sources.  For each object, we take
+  the <i>latest</i> message we have from a given classifier.  (To
+  be more precise: the latest source, i.e. observation, that that broker
+  has classified for each object.)  From that message, whichever class
+  has the highest probability is considred to be the predicted class.</p>
+  
+{% for broker,brokerdata in brokers.items %}
+  <hr>
+  <h2>{{ broker }}</h2>
+  <h4><button id="{{ broker }}button"
+              onclick="hideOrShow('{{ broker }}button', '{{ broker }}div')">Show</button></h4>
+  <div id="{{ broker }}div", style="display: none">
+    {% for brokerversion, brokerversiondata in brokerdata.items %}
+    <h3>{{ broker }} {{ brokerversion }}</h3>
+      {% for classifiername, classifiernamedata in brokerversiondata.items %}
+      <h4>{{ broker }} {{ brokerversion }} {{ classifiername }}</h4>
+        {% for classifierparams, svg in classifiernamedata.items %}
+        <h5>{{ broker }} {{ brokerversion }} {{ classifiername }} {{ classifierparams }}</h5>
+          <img src="{% static 'elasticc2/confmatrix_lastclass/' %}{{ svg }}"
+               width=800, alt=[ "{{ broker }} {{ brokerversion }} {{ classifiername }} {{ classifierparams }} {{ timerange }} ]">
+        {% endfor %}
+      {% endfor %}   
+    {% endfor %}
+  </div>
+{% endfor %}
+
+{% endblock %}

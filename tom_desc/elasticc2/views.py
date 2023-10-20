@@ -263,6 +263,41 @@ class Elasticc2BrokerCompletenessGraphs( LoginRequiredMixin, django.views.View, 
         return HttpResponse( templ.render( context, request ) )
 
 # ======================================================================
+
+class Elasticc2ConfMatrixLatest( LoginRequiredMixin, django.views.View, BrokerSorter ):
+    def get( self, request, info=None ):
+        return self.post( request, info )
+
+    def post( self, request, info=None ):
+        templ = loader.get_template( "elasticc2/confmatrixlatest.html" )
+        context = { 'brokers': {} }
+        graphdir = pathlib.Path(__file__).parent / "static/elasticc2/confmatrixlatest"
+        graphdir.mkdir( exist_ok=True, parents=True )
+
+        try:
+            with open( graphdir / "updatetime.txt" ) as ifp:
+                context['updatetime'] = ifp.readline().strip()
+        except FileNotFoundError:
+            context['updatetime'] = "(unknown)"
+
+        brokers = self.getbrokerstruct()
+
+        for brokername, brokerinfo in brokers.items():
+            context['brokers'][brokername] = {}
+            for brokerversion, brokerversioninfo in brokerinfo.items():
+                context['brokers'][brokername][brokerversion] = {}
+                for classifiername, classifierinfo in brokerversioninfo.items():
+                    context['brokers'][brokername][brokerversion][classifiername] = {}
+                    for cfer in classifierinfo:
+                        localcontext = context['brokers'][brokername][brokerversion][classifiername]
+                        classifierparams, cferid = cfer
+                        localcontext[classifierparams] = f"{cferid}.svg"
+
+        return HttpResponse( templ.render( context, request ) )
+
+
+
+# ======================================================================
 # DJango REST interfaces
 
 class PPDBDiaObjectViewSet( rest_framework.viewsets.ReadOnlyModelViewSet ):

@@ -36,6 +36,7 @@ class Command(BaseCommand):
     help = 'Generate broker completeness graphs'
     outdir = ( _rundir / "../../static/elasticc2/brokercompleteness" ).resolve()
 
+
     def add_arguments( self, parser ):
         parser.add_argument( "--t0", default="2023-10-16",
                              help="First UTC day to look at (YYYY-MM-DD) (default: 2023-10-16)" )
