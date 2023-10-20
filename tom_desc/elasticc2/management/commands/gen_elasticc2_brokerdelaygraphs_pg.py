@@ -54,7 +54,7 @@ class Command(BaseCommand):
 
     def add_arguments( self, parser) :
         parser.add_argument( "--t0", default="2023-10-16",
-                             help="First day to look at (YYYY-MM-DD) (default: 2023-10=16)" )
+                             help="First day to look at (YYYY-MM-DD) (default: 2023-10-16)" )
         parser.add_argument( "--t1", default="2023-10-19",
                              help="One past the last day to look at (YYYY-MM-DD) (default: 2023-10-19)" )
         parser.add_argument( "--dt", default=7, type=int, help="Step in days (default: 7)" )

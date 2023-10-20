@@ -1,0 +1,46 @@
+{% extends 'tom_common/base.html' %}
+{% load static %}
+{% block title %}
+ELAsTiCC2 Broker Completeness
+{% endblock %}
+{% block additional_css %}
+<link rel="stylesheet" href="{% static 'elasticc/elasticc.css' %}">
+{% endblock %}
+{% block additional_js %}
+<script type="text/javascript" src="{% static 'elasticc/elasticc.js' %}"></script>
+{% endblock %}
+{% block content %}
+<h2>ELAsTiCC2 Completeness</h2>
+
+<p>Updated {{ updatetime }}</p>
+
+<p>The graphs below show broker completeness as a function of time.
+  "Completeness" is the fraction of alerts sent in any time that has at
+  least one response from the broker.  It counts responses that arrived
+  any time bewteen when the alert was sent and when the plots were last
+  regenerated.</p>
+
+{% for broker,brokerdata in brokers.items %}
+  <hr>
+  <h2>{{ broker }}</h2>
+  <h4><button id="{{ broker }}button"
+              onclick="hideOrShow('{{ broker }}button', '{{ broker }}div')">Show</button></h4>
+  <div id="{{ broker }}div", style="display: none">
+    {% for brokerversion, brokerversiondata in brokerdata.items %}
+    <h3>{{ broker }} {{ brokerversion }}</h3>
+      {% for classifiername, classifiernamedata in brokerversiondata.items %}
+      <h4>{{ broker }} {{ brokerversion }} {{ classifiername }}</h4>
+        {% for classifierparams, classifierparamsdata in classifiernamedata.items %}
+        <h5>{{ broker }} {{ brokerversion }} {{ classifiername }} {{ classifierparams }}</h5>
+          {% for timerange, svg in classifierparamsdata.items %}
+          <h6>{{ timerange }}</h6>
+            <img src="{% static 'elasticc2/brokercompleteness/' %}{{ svg }}"
+                 width=800, alt=[ "{{ broker }} {{ brokerversion }} {{ classifiername }} {{ classifierparams }} {{ timerange }} ]">
+          {% endfor %}
+        {% endfor %}
+      {% endfor %}   
+    {% endfor %}
+  </div>
+{% endfor %}
+
+{% endblock %}

@@ -97,7 +97,7 @@ spec:
           - brokerpoll2
           - --do-antares
           - --antares-topic
-          - elasticc2-st2
+          - elasticc2-st3
           - --do-pitt
           - --pitt-project
           - elasticc-challenge

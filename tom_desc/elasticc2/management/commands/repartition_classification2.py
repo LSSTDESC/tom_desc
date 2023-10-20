@@ -1,3 +1,5 @@
+raise RuntimeError( "Way out of date." )
+
 import sys
 import logging
 import psycopg2

@@ -1,3 +1,5 @@
+raise RuntimeError( "Way out of date, may be entirely subsumed by send_elasticc2_alerts.py" )
+
 import sys
 import io
 import socket

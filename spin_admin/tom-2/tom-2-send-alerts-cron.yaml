@@ -25,9 +25,9 @@ spec:
             args: ['manage.py', 'send_elasticc2_alerts',
                '-a', '36',
                '-k', 'public.alerts.ztf.uw.edu:9092',
-               '--wfd-topic', 'elasticc2-st2-wfd',
-               '--ddf-full-topic', 'elasticc2-st2-ddf-full',
-               '--ddf-limited-topic', 'elasticc2-st2-ddf-limited',
+               '--wfd-topic', 'elasticc2-st3-wfd',
+               '--ddf-full-topic', 'elasticc2-st3-ddf-full',
+               '--ddf-limited-topic', 'elasticc2-st3-ddf-limited',
                '--do']
             # args: ['manage.py', 'send_elasticc2_alerts',
             #    '-a', '3',
@@ -97,6 +97,6 @@ spec:
               type: Directory
             name: tom-2-deployment
   # schedule: 0 0 * * *
-  schedule: 40 16 * * *
+  schedule: 30 13 * * *
   successfulJobsHistoryLimit: 3
   suspend: false

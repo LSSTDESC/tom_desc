@@ -38,7 +38,7 @@ _logger.setLevel( logging.DEBUG )
 
 class Elasticc2MainView( LoginRequiredMixin, django.views.View ):
     """ELAsTiCC2 front page (HTML)."""
-    
+
     def get( self, request ):
         templ = loader.get_template( "elasticc2/elasticc2.html" )
         return HttpResponse( templ.render( {}, request ) )
@@ -70,7 +70,7 @@ class Elasticc2AdminSummary( PermissionRequiredMixin, django.views.View ):
 
     Requires the elasticc.elasticc_admin permission.
     """
-    
+
     permission_required = 'elasticc.elasticc_admin'
     raise_exception = True
 
@@ -110,7 +110,7 @@ class Elasticc2AdminSummary( PermissionRequiredMixin, django.views.View ):
 
 class Elasticc2AlertStreamHistograms( LoginRequiredMixin, django.views.View ):
     """Show histograms of streaming rate sending out ELAsTiCC2 alerts."""
-    
+
     def get( self, request, info=None ):
         return self.post( request, info )
 
@@ -143,38 +143,38 @@ class Elasticc2AlertStreamHistograms( LoginRequiredMixin, django.views.View ):
 class BrokerSorter:
     def getbrokerstruct( self ):
         brokers = {}
-        cfers = BrokerClassifier.objects.all().order_by( 'brokerName', 'brokerVersion',
-                                                         'classifierName', 'classifierParams' )
+        cfers = BrokerClassifier.objects.all().order_by( 'brokername', 'brokerversion',
+                                                         'classifiername', 'classifierparams' )
         # There's probably a faster pythonic way to make
         # a hierarchy like this, but oh well.  This works.
         curbroker = None
         curversion = None
         curcfer = None
         for cfer in cfers:
-            if cfer.brokerName != curbroker:
-                curbroker = cfer.brokerName
-                curversion = cfer.brokerVersion
-                curcfer = cfer.classifierName
+            if cfer.brokername != curbroker:
+                curbroker = cfer.brokername
+                curversion = cfer.brokerversion
+                curcfer = cfer.classifiername
                 brokers[curbroker] = {
                     curversion: {
-                        curcfer: [ [ cfer.classifierParams, cfer.classifierId ] ]
+                        curcfer: [ [ cfer.classifierparams, cfer.classifier_id ] ]
                     }
                 }
-            elif cfer.brokerVersion != curversion:
-                curversion = cfer.brokerVersion
-                curcfer = cfer.classifierName
+            elif cfer.brokerversion != curversion:
+                curversion = cfer.brokerversion
+                curcfer = cfer.classifiername
                 brokers[curbroker][curversion] = {
-                    curcfer: [ [ cfer.classifierParams, cfer.classifierId ] ] }
-            elif cfer.classifierName != curcfer:
-                curcfer = cfer.classifierName
-                brokers[curbroker][curversion][curcfer] = [ [ cfer.classifierParams, cfer.classifierId ] ]
+                    curcfer: [ [ cfer.classifierparams, cfer.classifier_id ] ] }
+            elif cfer.classifiername != curcfer:
+                curcfer = cfer.classifiername
+                brokers[curbroker][curversion][curcfer] = [ [ cfer.classifierparams, cfer.classifier_id ] ]
             else:
-                brokers[curbroker][curversion][curcfer].append( [ cfer.classifierParams, cfer.classifierId ] )
+                brokers[curbroker][curversion][curcfer].append( [ cfer.classifierparams, cfer.classifier_id ] )
 
         return brokers
 
 # ======================================================================
-    
+
 class Elasticc2BrokerTimeDelayGraphs( LoginRequiredMixin, django.views.View, BrokerSorter ):
     def get( self, request, info=None ):
         return self.post( request, info )
@@ -201,7 +201,7 @@ class Elasticc2BrokerTimeDelayGraphs( LoginRequiredMixin, django.views.View, Bro
         brokers.sort()
 
         context['brokers'] = {}
-        
+
         for broker in brokers:
             context['brokers'][broker] = { 'sum': f'{broker}-cumulative.svg', 'weeks': {} }
             for fname in files:
@@ -211,10 +211,56 @@ class Elasticc2BrokerTimeDelayGraphs( LoginRequiredMixin, django.views.View, Bro
                     context['brokers'][broker]['weeks'][week] = fname.name
 
         # ****
-        sys.stderr.write( f"context = {context}\n" )
+        # sys.stderr.write( f"context = {context}\n" )
         # ****
         return HttpResponse( templ.render( context, request ) )
-    
+
+
+# ======================================================================
+
+class Elasticc2BrokerCompletenessGraphs( LoginRequiredMixin, django.views.View, BrokerSorter ):
+    def get( self, request, info=None ):
+        return self.post( request, info )
+
+    def post( self, request, info=None ):
+        templ = loader.get_template( "elasticc2/brokercompleteness.html" )
+        context = { 'brokers': {} }
+        graphdir = pathlib.Path(__file__).parent / "static/elasticc2/brokercompleteness"
+        graphdir.mkdir( exist_ok=True, parents=True )
+
+        try:
+            with open( graphdir / "updatetime.txt" ) as ifp:
+                context['updatetime'] = ifp.readline().strip()
+        except FileNotFoundError:
+            context['updatetime'] = "(unknown)"
+
+        brokers = self.getbrokerstruct()
+
+        dateparse = re.compile( "^\d+_(\[\s*\d{4}-\d{2}-\d{2}\s*,\s*\d{4}-\d{2}-\d{2}\s*\))\.svg$" )
+
+        for brokername, brokerinfo in brokers.items():
+            context['brokers'][brokername] = {}
+            for brokerversion, brokerversioninfo in brokerinfo.items():
+                context['brokers'][brokername][brokerversion] = {}
+                for classifiername, classifierinfo in brokerversioninfo.items():
+                    context['brokers'][brokername][brokerversion][classifiername] = {}
+                    for cfer in classifierinfo:
+                        classifierparams, cferid = cfer
+                        context['brokers'][brokername][brokerversion][classifiername][classifierparams] = {}
+                        svgs = list( graphdir.glob( f"{cferid}_*.svg" ) )
+                        svgs.sort()
+                        for svg in svgs:
+                            match = dateparse.search( svg.name )
+                            if match is None:
+                                sys.stderr.write( f"ERROR parsing {svg.name}\n" )
+                            else:
+                                context['brokers'][brokername][brokerversion][classifiername][classifierparams][match.group(1)] = svg.name
+
+        # ****
+        # sys.stderr.write( f"context = {context}\n" )
+        # ****
+
+        return HttpResponse( templ.render( context, request ) )
 
 # ======================================================================
 # DJango REST interfaces
@@ -264,7 +310,7 @@ class PPDBDiaObjectSourcesViewSet( rest_framework.viewsets.ReadOnlyModelViewSet 
     def list( self, request, pk=None ):
         return rest_framework.response.Response( status=rest_framework.status.HTTP_400_BAD_REQUEST,
                                                  data="Must give an object id" )
-    
+
     def retrieve( self, request, pk=None ):
         obj = get_object_or_404( self.queryset, pk=pk )
         objserializer = PPDBDiaObjectSerializer( obj )
@@ -298,9 +344,9 @@ class PPDBDiaObjectAndPrevSourcesForSourceViewSet( rest_framework.viewsets.ReadO
                                                  data="Must give a source id" )
 
     def retrieve( self, request, pk=None ):
-        sys.stderr.write( f"Trying to get source {pk}" )
+        # sys.stderr.write( f"Trying to get source {pk}" )
         src = get_object_or_404( PPDBDiaSource.objects.all(), pk=pk )
-        sys.stderr.write( f"Trying to get object {src.diaobject_id}" )
+        # sys.stderr.write( f"Trying to get object {src.diaobject_id}" )
         obj = get_object_or_404( PPDBDiaObject.objects.all(), pk=src.diaobject_id )
         objserializer = PPDBDiaObjectSerializer( obj )
         objdict = dict( objserializer.data )
@@ -319,17 +365,17 @@ class PPDBDiaObjectAndPrevSourcesForSourceViewSet( rest_framework.viewsets.ReadO
             ser = PPDBDiaForcedSourceSerializer( src )
             objdict[ 'diaforcedsources' ].append( ser.data )
         return rest_framework.response.Response( objdict )
-    
+
 # ======================================================================
 # A REST interface (but not using the Django REST framework) for
 # viewing and posting broker messages.  Posting broker messages
 # (via the PUT method) requires the elasticc2.elasticc_broker
 # permission.
 
-        
+
 class BrokerMessageView(PermissionRequiredMixin, django.views.View):
     """A REST interface for getting and putting broker messages.
-    
+
     Requires elasticc.elasticc_broker permission for PUT, just logged in for GET.
 
     GET or POST : TBD
@@ -403,7 +449,7 @@ class BrokerMessageView(PermissionRequiredMixin, django.views.View):
 
         if n is None:
             n = msgs.count()
-            
+
         if ( offset is None ) and ( num is None ):
             return msgs, n
         elif num is None:
@@ -424,11 +470,11 @@ class BrokerMessageView(PermissionRequiredMixin, django.views.View):
                     else:
                         vals[val] = int(args[val])
         return vals['offset'], vals['num']
-        
+
     def get( self, request, info=None ):
         # EVentually I want to make get return html
         return self.post( request, info )
-        
+
     def post( self, request, info=None ):
         offset, num = self.offset_num( request )
 
@@ -436,7 +482,7 @@ class BrokerMessageView(PermissionRequiredMixin, django.views.View):
             msgs, nmsgs = self.get_queryset( request, info, offset, num )
         except ValueError as ex:
             return JsonResponse( { "error": str(ex) } )
-        
+
         if isinstance( info, int ):
             return JsonResponse( {} if msgs.count()==0 else msgs[0].to_dict() )
         else:
@@ -445,8 +491,8 @@ class BrokerMessageView(PermissionRequiredMixin, django.views.View):
                                    'totalcount': nmsgs,
                                    'count': msgs.count(),
                                    'brokermessages': [ msg.to_dict() for msg in msgs ] } )
-        
-        
+
+
     def put( self, request, *args, **kwargs ):
 
         data = json.loads( request.body )
@@ -472,7 +518,7 @@ class BrokerMessageView(PermissionRequiredMixin, django.views.View):
                                   'timestamp': pubtime,
                                   'msgoffset': -1,
                                   'msg': datum } )
-            
+
 
         _logger.debug( f"BrokerMessageView.put: load_batch of {len(messageinfo)} messages." )
         batchret = BrokerMessage.load_batch( messageinfo, logger=_logger )
