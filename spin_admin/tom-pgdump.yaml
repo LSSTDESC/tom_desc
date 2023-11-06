@@ -23,7 +23,7 @@ spec:
               value: tom-postgres
             - name: PGPASSWORD
               value: fragile
-            image: rknop/devuan-chimaera-pgdump
+            image: registry.nersc.gov/m1727/raknop/tom-pgdump:daedalus
             imagePullPolicy: Always
             name: tom-pgdump
             resources: {}
