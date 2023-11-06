@@ -107,8 +107,8 @@ class Command(BaseCommand):
                                             { 'cferid': cferid, 't0': grapht, 't1': grapht+graphdt } )
                             rows = cursor.fetchall()
                             strio = io.StringIO()
-                            strio.write( f"Query: {cursor.mogrify( q, { 'cferid': cferid, "f
-                                         "'t0': grapht, 't1': grapht+graphdt } )}\n" )
+                            dictargs = { 'cferid': cferid, 't0': grapht, 't1': grapht+graphdt }
+                            strio.write( f"Query: {cursor.mogrify( q, dictargs )}\n" )
                             strio.write( "\n".join( [ row['QUERY PLAN'] for row in rows ] ) )
                             _logger.info( strio.getvalue() )
 
