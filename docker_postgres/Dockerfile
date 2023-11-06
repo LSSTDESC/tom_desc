@@ -1,10 +1,7 @@
-FROM rknop/devuan-daedalus-rknop
+FROM rknop/devuan-daedalus-rknop AS base
 MAINTAINER Rob Knop <raknop@lbl.gov>
 
 ENV DEBIAN_FRONTEND=noninteractive
-
-# RUN mkdir /secrets
-# RUN echo "replace_this" >> /secrets/postgres_password
 
 RUN mkdir /build
 WORKDIR /build
@@ -24,7 +21,8 @@ RUN apt-get update && apt-get -y upgrade && \
   make install && \
   cd .. && \
   rm -rf q3c && \
-  curl -L https://github.com/ossc-db/pg_hint_plan/archive/refs/tags/REL15_1_5_1.tar.gz -o pg_hint_plan-REL15_1_5_1.tar.gz && \
+  curl -L https://github.com/ossc-db/pg_hint_plan/archive/refs/tags/REL15_1_5_1.tar.gz \
+       -o pg_hint_plan-REL15_1_5_1.tar.gz && \
   tar -xpf pg_hint_plan-REL15_1_5_1.tar.gz && \
   cd pg_hint_plan-REL15_1_5_1 && \
   make && \
@@ -46,13 +44,11 @@ RUN locale-gen en_US.utf8
 RUN echo "host all all 0.0.0.0/0 md5" >> /etc/postgresql/15/main/pg_hba.conf
 COPY postgresql.conf /etc/postgresql/15/main/postgresql.conf
 
-# RUN echo "listen_addresses='*'" >> /etc/postgresql/13/main/postgresql.conf
-# RUN cat /etc/postgresql/13/main/postgresql.conf | \
-#        perl -pe "s{data_directory *= *'(.*)'(.*)}{data_directory = '/var/lib/postgresql/data'\2}" \
-#          > /etc/postgresql/13/main/postgresql.conf.new \
-#     && mv /etc/postgresql/13/main/postgresql.conf /etc/postgresql/13/main/postgresql.conf.old \
-#     && mv /etc/postgresql/13/main/postgresql.conf.new /etc/postgresql/13/main/postgresql.conf
+ENV POSTGRES_DATA_DIR=/var/lib/postgresql/data
 
+# ======================================================================
+
+FROM base AS tom-postgres
 
 # Make sure this matches what is in the config file (created just above)
 # (There is some futzing about here to make sure the right permissions are
@@ -63,5 +59,15 @@ COPY run_postgres.sh /tmp/run_postgres.sh
 RUN cp /tmp/run_postgres.sh /run_postgres.sh && chmod 755 /run_postgres.sh
 
 USER postgres
-ENV POSTGRES_DATA_DIR=/var/lib/postgresql/data
 CMD ["bash", "/run_postgres.sh"]
+
+# ======================================================================
+
+FROM base AS tom-pgdump
+
+RUN mkdir /home/pgdump
+ENV HOME /home/pgdump
+ADD run_pgdump.sh /home/pgdump/run_pgdump.sh
+
+USER postgres
+ENTRYPOINT [ "/bin/bash", "/home/pgdump/run_pgdump.sh" ]
