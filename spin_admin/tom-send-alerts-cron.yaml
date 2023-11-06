@@ -12,9 +12,9 @@ spec:
         metadata:
           annotations:
             field.cattle.io/ports: '[[]]'
-            nersc.gov/collab_uids: "99896"
+            nersc.gov/collab_uids: "70268"
             nersc.gov/gid: "95089"
-            nersc.gov/gids: 95089,57177,60152,96414
+            nersc.gov/gids: 45703,60152,57177,58102,59318,60070,63477,64483,79186,70268,92576,95089,96414
             nersc.gov/roles: user
             nersc.gov/uid: "95089"
             nersc.gov/username: raknop
@@ -24,9 +24,18 @@ spec:
           - command: ['python']
             args: ['manage.py', 'send_elasticc2_alerts',
                '-a', '36',
-               '-k', 'public.alerts.ztf.uw.edu:9092', '-t', 'elasticc-1',
-               '--do'
-                  ]
+               '-k', 'public.alerts.ztf.uw.edu:9092',
+               '--wfd-topic', 'elasticc2-2-wfd',
+               '--ddf-full-topic', 'elasticc2-2-ddf-full',
+               '--ddf-limited-topic', 'elasticc2-2-ddf-limited',
+               '--do']
+            # args: ['manage.py', 'send_elasticc2_alerts',
+            #    '-a', '3',
+            #    '-k', 'kafka-server:9092',
+            #    '--wfd-topic', 'alerts-wfd',
+            #    '--ddf-full-topic', 'alerts-ddf-full',
+            #    '--ddf-limited-topic', 'alerts-ddf-limited',
+            #    '--do']
             env:
             - name: DB_HOST
               value: tom-postgres
@@ -36,9 +45,17 @@ spec:
               value: fragile
             - name: DB_USER
               value: postgres
-            image: rknop/tom-desc-production
+            - name: CASSANDRA_HOST
+              value: tom-cassandra
+            - name: CASSANDRA_DB
+              value: tom_desc
+            - name: CASSANDRA_USER
+              value: cassandra
+            - name: CASSANDRA_PASSWORD
+              value: cassandra
+            image: registry.nersc.gov/m1727/raknop/tom_desc_extcode:chimaera
             imagePullPolicy: Always
-            name: tom-2-send-alerts
+            name: tom-send-alerts
             resources: {}
             securityContext:
               allowPrivilegeEscalation: false
@@ -67,6 +84,8 @@ spec:
           securityContext:
             fsGroup: 57177
           terminationGracePeriodSeconds: 30
+          imagePullSecrets:
+            - name: registry-nersc
           volumes:
           - name: tom-secrets
             secret:
@@ -78,5 +97,5 @@ spec:
               type: Directory
             name: tom-deployment
   schedule: 0 0 * * *
-  successfulJobsHistoryLimit: 7
-  suspend: true
+  successfulJobsHistoryLimit: 3
+  suspend: false

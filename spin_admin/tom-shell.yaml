@@ -1,3 +1,4 @@
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -32,6 +33,14 @@ spec:
           value: fragile
         - name: DB_USER
           value: postgres
+        - name: CASSANDRA_HOST
+          value: tom-cassandra
+        - name: CASSANDRA_DB
+          value: tom_desc
+        - name: CASSANDRA_USER
+          value: cassandra
+        - name: CASSANDRA_PASSWORD
+          value: cassandra
         - name: FINK_GROUP_ID
           value: lsstfr-johann
         - name: FINK_SERVER
@@ -44,7 +53,7 @@ spec:
           value: /secrets/pitt_google_auth_key.json
         - name: GOOGLE_CLOUD_PROJECT
           value: elasticc-challenge
-        image: rknop/tom-desc-production
+        image: registry.nersc.gov/m1727/raknop/tom_desc_extcode:chimaera
         imagePullPolicy: Always
         name: tom-shell
         resources: {}
@@ -70,6 +79,8 @@ spec:
           name: tom-deployment
         - mountPath: /sample
           name: tom-sample
+        - mountPath: /pgdata
+          name: tom-desc-postgres
         command: [ "tail" ]
         args: [ "-f", "/etc/issue" ]
       dnsConfig: {}
@@ -93,3 +104,28 @@ spec:
           path: /global/cfs/cdirs/desc-td/ELASTICC2
           type: Directory
         name: tom-sample
+      - name: tom-desc-postgres
+        persistentVolumeClaim:
+          claimName: tom-desc-postgres
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tom-shell
+  namespace: desc-tom
+spec:
+  clusterIP: None
+  clusterIPs:
+  - None
+  ports:
+  - name: default
+    port: 42
+    protocol: TCP
+    targetPort: 42
+  selector:
+    workload.user.cattle.io/workloadselector: deployment-desc-tom-tom-shell
+  sessionAffinity: None
+  type: ClusterIP
+status:
+  loadBalancer: {}
+---

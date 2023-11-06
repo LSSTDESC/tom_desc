@@ -1,3 +1,4 @@
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -41,6 +42,16 @@ spec:
           value: fragile
         - name: DB_USER
           value: postgres
+        - name: CASSANDRA_HOST
+          value: tom-cassandra
+        - name: CASSANDRA_DB
+          value: tom_desc
+        - name: CASSANDRA_USER
+          value: cassandra
+        - name: CASSANDRA_PASSWORD
+          value: cassandra
+        - name: ALERCE_KAFKA_SERVER
+          value: b-3-public.publicproduction.o8ncxm.c18.kafka.us-east-1.amazonaws.com:9196,b-2-public.publicproduction.o8ncxm.c18.kafka.us-east-1.amazonaws.com:9196,b-1-public.publicproduction.o8ncxm.c18.kafka.us-east-1.amazonaws.com:9196
         - name: FINK_GROUP_ID
           value: lsstfr-johann
         - name: FINK_SERVER
@@ -53,7 +64,7 @@ spec:
           value: /secrets/pitt_google_auth_key.json
         - name: GOOGLE_CLOUD_PROJECT
           value: elasticc-challenge
-        image: rknop/tom-desc-production
+        image: registry.nersc.gov/m1727/raknop/tom_desc_extcode:chimaera
         imagePullPolicy: Always
         name: tom-app
         resources: {}
@@ -86,6 +97,8 @@ spec:
       securityContext:
         fsGroup: 57177
       terminationGracePeriodSeconds: 30
+      imagePullSecrets:
+        - name: registry-nersc
       volumes:
       - name: tom-secrets
         secret:
@@ -100,3 +113,98 @@ spec:
           path: /global/cfs/cdirs/desc-td/ELASTICC2
           type: Directory
         name: tom-sample
+---
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    field.cattle.io/targetWorkloadIds: '["deployment:desc-tom:tom-app"]'
+  name: tom-app
+  namespace: desc-tom
+  ownerReferences:
+  - apiVersion: apps/v1beta2
+    controller: true
+    kind: deployment
+    name: tom-app
+    uid: e8f8e9fa-9bb1-475a-810d-483dbc7f6bc8
+spec:
+  clusterIP: None
+  clusterIPs:
+    - None
+  ports:
+  - name: default
+    port: 42
+    protocol: TCP
+    targetPort: 42
+  selector:
+    workload.user.cattle.io/workloadselector: deployment-desc-tom-tom-app
+  sessionAffinity: None
+  type: ClusterIP
+status:
+  loadBalancer: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    field.cattle.io/targetWorkloadIds: '["deployment:desc-tom:tom-app"]'
+  name: tom-ingress-service
+  namespace: desc-tom
+  ownerReferences:
+  - apiVersion: v1beta1/extensions
+    controller: true
+    kind: Ingress
+    name: tom-app
+    uid: e8f8e9fa-9bb1-475a-810d-483dbc7f6bc8
+spec:
+  ports:
+  - port: 8080
+    protocol: TCP
+    targetPort: 8080
+  selector:
+    workload.user.cattle.io/workloadselector: deployment-desc-tom-tom-app
+  sessionAffinity: None
+  type: ClusterIP
+status:
+  loadBalancer: {}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    nersc.gov/clustername: production
+    nginx.ingress.kubernetes.io/preserve-trailing-slash: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: 500m
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+  generation: 1
+  labels:
+    cattle.io/creator: norman
+  name: tom-desc-app
+  namespace: desc-tom
+  selfLink: /apis/networking.k8s.io/v1/namespaces/desc-tom/ingresses/tom-app
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: tom-desc-app.desc-tom.production.svc.spin.nersc.org
+    http:
+      paths:
+      - backend:
+          service:
+            name: tom-ingress-service
+            port:
+              number: 8080
+        pathType: ImplementationSpecific
+  - host: desc-tom.lbl.gov
+    http:
+      paths:
+      - backend:
+          service:
+            name: tom-ingress-service
+            port:
+              number: 8080
+        pathType: ImplementationSpecific
+  tls:
+  - hosts:
+    - desc-tom.lbl.gov
+    secretName: tom-cert
+---

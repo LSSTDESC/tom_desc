@@ -2,7 +2,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: tom-postgres
+  name: tom-cassandra
   namespace: desc-tom
 spec:
   progressDeadlineSeconds: 600
@@ -10,7 +10,7 @@ spec:
   revisionHistoryLimit: 10
   selector:
     matchLabels:
-      workload.user.cattle.io/workloadselector: deployment-desc-tom-tom-postgres
+      workload.user.cattle.io/workloadselector: deployment-desc-tom-tom-cassandra
   strategy:
     rollingUpdate:
       maxSurge: 1
@@ -29,24 +29,15 @@ spec:
         nersc.gov/username: raknop
       creationTimestamp: null
       labels:
-        workload.user.cattle.io/workloadselector: deployment-desc-tom-tom-postgres
+        workload.user.cattle.io/workloadselector: deployment-desc-tom-tom-cassandra
     spec:
-      initContainers:
-      - name: volume-mount-hack
-        image: busybox
-        command: [ "sh", "-c", "chown 100:108 /pgdata" ]
-        volumeMounts:
-        - name: tom-desc-postgres
-          mountPath: /var/lib/postgresql/data
-        - name: pgdump
-          mountPath: /pgdump
       containers:
       - env:
-        - name: POSTGRES_DATA_DIR
-          value: /var/lib/postgresql/data
-        image: registry.nersc.gov/m1727/raknop/tom-postgres:daedalus
+        - name: CASSANDRA_DATA_DIR
+          value: /var/lib/cassandra
+        image: registry.nersc.gov/m1727/raknop/tom_cassandra
         imagePullPolicy: Always
-        name: tom-postgres
+        name: tom-cassandra
         resources: {}
         securityContext:
           allowPrivilegeEscalation: false
@@ -67,8 +58,8 @@ spec:
         terminationMessagePolicy: File
         tty: true
         volumeMounts:
-        - mountPath: /var/lib/postgresql/data
-          name: tom-desc-postgres
+        - mountPath: /var/lib/cassandra
+          name: tom-cassandra-pvc
         - mountPath: /dev/shm
           name: dshm
       dnsPolicy: ClusterFirst
@@ -79,13 +70,9 @@ spec:
       imagePullSecrets:
         - name: registry-nersc
       volumes:
-      - name: tom-desc-postgres
+      - name: tom-cassandra-pvc
         persistentVolumeClaim:
-          claimName: tom-desc-postgres-20231106
-      - hostPath:
-          path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/pg_dump
-          type: Directory
-        name: pgdump
+          claimName: tom-cassandra-pvc
       - emptyDir:
           medium: Memory
           sizeLimit: 128Gi
@@ -94,7 +81,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: tom-postgres
+  name: tom-cassandra
   namespace: desc-tom
 spec:
   clusterIP: None
@@ -106,7 +93,7 @@ spec:
     protocol: TCP
     targetPort: 42
   selector:
-    workload.user.cattle.io/workloadselector: deployment-desc-tom-tom-postgres
+    workload.user.cattle.io/workloadselector: deployment-desc-tom-tom-cassandra
   sessionAffinity: None
   type: ClusterIP
 status:

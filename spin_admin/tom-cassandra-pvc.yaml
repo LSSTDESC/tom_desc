@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: tom-cassandra-pvc
+  namespace: desc-tom
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1024Gi
+  storageClassName: nfs-client
+  volumeMode: Filesystem

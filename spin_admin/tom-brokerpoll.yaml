@@ -5,7 +5,7 @@ metadata:
   namespace: desc-tom
 spec:
   progressDeadlineSeconds: 600
-  replicas: 0
+  replicas: 1
   revisionHistoryLimit: 10
   selector:
     matchLabels:
@@ -18,6 +18,7 @@ spec:
   template:
     metadata:
       annotations:
+        cattle.io/timestamp: "2023-02-06T16:44:40Z"
         field.cattle.io/ports: '[[]]'
         nersc.gov/collab_uids: 70268,99896
         nersc.gov/gid: "95089"
@@ -39,6 +40,14 @@ spec:
           value: fragile
         - name: DB_USER
           value: postgres
+        - name: CASSANDRA_HOST
+          value: tom-cassandra
+        - name: CASSANDRA_DB
+          value: tom_desc
+        - name: CASSANDRA_USER
+          value: cassandra
+        - name: CASSANDRA_PASSWORD
+          value: cassandra
         - name: ALERCE_KAFKA_SERVER
           value: b-3-public.publicproduction.o8ncxm.c18.kafka.us-east-1.amazonaws.com:9196,b-2-public.publicproduction.o8ncxm.c18.kafka.us-east-1.amazonaws.com:9196,b-1-public.publicproduction.o8ncxm.c18.kafka.us-east-1.amazonaws.com:9196
         - name: FINK_GROUP_ID
@@ -53,7 +62,7 @@ spec:
           value: /secrets/pitt_google_auth_key.json
         - name: GOOGLE_CLOUD_PROJECT
           value: elasticc-challenge
-        image: rknop/tom-desc-production
+        image: registry.nersc.gov/m1727/raknop/tom_desc_extcode:chimaera
         imagePullPolicy: Always
         name: tom-brokerpoll
         resources: {}
@@ -77,17 +86,22 @@ spec:
           name: tom-secrets
         - mountPath: /tom_desc
           name: tom-deployment
-        command: [ "python" ]
+        command: [ "dumb-init" ]
         args:
+          - -r
+          - 15:10
+          - python
           - manage.py
           - brokerpoll2
           - --do-antares
-          - --do-alerce
+          - --antares-topic
+          - elasticc2-st3
           - --do-pitt
-          - --pitt-topic
-          - elasticc-SuperNNova
           - --pitt-project
           - elasticc-challenge
+          - --pitt-topic
+          - elasticc-SuperNNova
+          - --do-test
       dnsConfig: {}
       dnsPolicy: ClusterFirst
       restartPolicy: Always
@@ -95,6 +109,8 @@ spec:
       securityContext:
         fsGroup: 57177
       terminationGracePeriodSeconds: 30
+      imagePullSecrets:
+        - name: registry-nersc
       volumes:
       - name: tom-secrets
         secret:
