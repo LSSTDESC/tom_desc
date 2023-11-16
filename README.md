@@ -128,21 +128,9 @@ Make a branch `/u/{yourname}/{name}` to do dev work, which (if appropriate) may 
 
 If you want to test the TOM out, you can deploy it on your local machine.  If you're lucky, all you need to do is:
 
-<!--
-<ul>
-<li> Run <code>git submodule update --init --recursive</code>.  There are a number of git submodules that have the standard TOM code.  By default, when you clone, git doesn't clone submodules, so do this in order to make sure all that stuff is there.  (Alternative, if instead of just <code>git clone...</code> you did <code>git clone --recurse-submodules ...</code>, then you've already taken care of this step.)  If you do a <code>git pull</code> later, you either need to do <code>git pull --recurse-submodules</code>, or do <code>git submodule --update --recursive</code> after your pull.</li>
-<li> Run <code>docker-compose up -d tom</code>.  This will use the <code>docker-compose.yml</code> file to either build or pull two images (the web server and the postgres server), and run two containers.  It will also create a docker volume named "tomdbdata" where postgres will store its contents, so that you can persist the database from one run of the container to the next.</li>
-<li>The first time you run it for a given postgres volume, once the containers are up you need to run a shell on the server container with <code>docker compose exec -it tom /bin/bash</code>, and then run the commands:
-<ul>
-    <li><code>python manage.py migrate</code></li>
-    <li><code>python manage.py createsuperuser</code> (and answer the prompts)</li>
-</ul></li>
-</ul>
--->
-
 * Run <code>git submodule update --init --recursive</code>.  There are a number of git submodules that have the standard TOM code.  By default, when you clone, git doesn't clone submodules, so do this in order to make sure all that stuff is there.  (Alternative, if instead of just <code>git clone...</code> you did <code>git clone --recurse-submodules ...</code>, then you've already taken care of this step.)  If you do a <code>git pull</code> later, you either need to do <code>git pull --recurse-submodules</code>, or do <code>git submodule --update --recursive</code> after your pull.</li>
 
-* Run <code>docker-compose up</code>.  This will use the <code>docker-compose.yml</code> file to either build or pull three images (the web server, the postgres server, and the cassandra server), and create three containers.  It will also create a docker volume named "tomdbdata" and "tomcassandradata" where postgres and cassandra respectively will store their contents, so that you can persist the databases from one run of the container to the next.</li>
+* Run <code>docker-compose up -d tom</code>.  This will use the <code>docker-compose.yml</code> file to either build or pull three images (the web server, the postgres server, and the cassandra server), and create three containers.  It will also create a docker volume named "tomdbdata" and "tomcassandradata" where postgres and cassandra respectively will store their contents, so that you can persist the databases from one run of the container to the next.</li>
 
 * The first time you run it for a given postgres volume, once the containers are up you need to run a shell on the server container with <code>docker exec -it tom_desc_tom_1 /bin/bash</code> (substituting the name your container got for "tom_desc_tom_1"), and then run the commands:
   - <code>python manage.py createsuperuser</code> (and answer the prompts)
@@ -160,6 +148,13 @@ If you are using a new postgres data volume (i.e. you're not reusing one from a 
 ```
 
 If you ever run a server that exposes its interface to the outside web, you probably want to edit your local version of the file `secrets/django_secret_key`.  Don't commit anything sensitive to git, and especially don't upload it to github!  (There *are* postgres passwords in the github archive, which would seem to voilate this warning.  The reason we're not worried about that is that both in the docker-compose file, and as the server is deployed in production, the postgres server is not directly accessible from outside, but only from within the docker environment (or, for production, the Spin namespace). Of course, it would be better to add the additional layer of security of obfuscating those passwords, but, whatever.)
+
+To shut down all the containers you started, just run
+```
+docker compose down
+```
+
+If you add `-v` to the end of that command, it will also destroy the Postgres and Cassandra data volumes you created.  If you *don't* add `-v`, next time you do `docker compose up -d tom`, the information in the database you had from last time around will still be there.
 
 ### Populating the database
 
@@ -351,12 +346,20 @@ where `<dir>` is a directory that has three models from the 1% ELAsTiCC2 test se
 ```
 ELASTICC2_TEST_DATA=/data/raknop/elasticc2_train_1pct_3models docker compose up -d shellhost
 ```
-If you're not going to use these, you can omit the variable.  You can then connect to that shell host with `docker exec -it <container> /bin/bash`, giving it the name of the container started by docker compose (probably `tests-shellhost-1`).  The postgres server will on the host named `postgres` (so you can `psql -h postgres -U postgres tom_desc` to poke at the database— the password is "fragile", which you can see in the `docker-compose.yaml` file).  The web server will be on the host named `tom`, listening on port 8080 without SSL  (so, you could do `netcat tom 8080`, or write a python script that uses requests to connect to `http://tom:8080`... or, for that matter, use the `tom_client.py` file included in the `tests` directory).
+If you're not going to use these, you can omit the variable.  You can then connect to that shell host with `docker compose exec -it shellhost /bin/bash`.  The postgres server will on the host named `postgres` (so you can `psql -h postgres -U postgres tom_desc` to poke at the database— the password is "fragile", which you can see in the `docker-compose.yaml` file).  The web server will be on the host named `tom`, listening on port 8080 without SSL  (so, you could do `netcat tom 8080`, or write a python script that uses requests to connect to `http://tom:8080`... or, for that matter, use the `tom_client.py` file included in the `tests` directory).
 
 When you're done with everything, do
 ```
 docker compose down
 ```
+
+or
+
+```
+docker compose down -v
+```
+
+if you also want to delete the created volumes (which you should if you're running tests, so the next run will start with a clean environment).
 
 ### Automatically running all the tests
 
@@ -368,6 +371,6 @@ where `<dir>` is a directory with the 1% ELAsTiCC2 test set (just as with runnin
 
 After the tests complete (which could take a long time), do
 ```
-docker compose down
+docker compose down -v
 ```
 to clean up.  (If you don't do this, the next time you try to run the tests, it won't have a clean slate and the startup will fail.)
