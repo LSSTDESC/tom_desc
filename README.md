@@ -178,7 +178,30 @@ You will be prompted for the postgres password, which is "fragile".  (This postg
 
 #### For ELAsTiCC2
 
-TODO
+<a href="">Here is a small subset of tables from ELAsTiCC2</a>.
+
+TODO: describe
+
+Save the file you download into the `tom_desc/admin_tools` subdirectory if your git checkout.  (This directory already exists.)
+
+For various reasons, the docker image for the Tom server is based on an older version of the Linux distribution (Devuan).  The postgres image is based on Daedalus, which as of this writing is the current stable version.  The restoration scripts require `pg_dump` to have a version that's compatible with the postgres server, and for that reason you need to run a special shell just for this restoration process.  Start that shell with
+```
+docker compose up -d daedalus-shell
+```
+and then go into the shell with
+```
+docker compose exec -it daedalus-shell /bin/bash
+```
+cd into the directory `admin_toos` and run:
+```
+python import_elasticc2_subset_dump.py <filename>
+```
+where `<filename>` is the .sql file that you downloaded.
+
+If all is well, when you're done run
+```
+docker compose down daedalus-shell
+```
 
 ### Development and database migrations
 

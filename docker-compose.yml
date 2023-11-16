@@ -27,6 +27,35 @@ services:
       - CASSANDRA_HOST=cassandra
       - CASSANDRA_USER=cassandra
       - CASSANDRA_PASSWORD=cassandra
+    user: ${USERID:-0}:${GROUPID:-0}
+
+  daedalus-shell:
+    image: registry.nersc.gov/m1727/raknop/tom_desc_extcode:daedalus
+    build:
+      context: ./
+      dockerfile: docker_server/Dockerfile.daedalus
+      target: tom-server-extcode
+    depends_on:
+      migratedb:
+        condition: service_completed_successfully
+    volumes:
+      - type: bind
+        source: ./tom_desc
+        target: /tom_desc
+      - type: bind
+        source: ./secrets
+        target: /secrets
+    environment:
+      - DB_USER=postgres
+      - DB_PASS=fragile
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=tom_desc
+      - CASSANDRA_HOST=cassandra
+      - CASSANDRA_USER=cassandra
+      - CASSANDRA_PASSWORD=cassandra
+    user: ${USERID:-0}:${GROUPID:-0}
+    entrypoint: [ "tail", "-f", "/etc/issue" ]
 
   migratedb:
     image: registry.nersc.gov/m1727/raknop/tom_desc_extcode:chimaera

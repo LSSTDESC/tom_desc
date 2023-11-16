@@ -40,6 +40,8 @@ RUN patch /usr/local/lib/python3.9/dist-packages/pittgoogle/pubsub.py /tmp/pubsu
 RUN mkdir -p /.astropy
 RUN chmod -R 777 /.astropy
 
+ENV LESS=-XLRi
+
 # ======================================================================
 
 FROM base AS tom-server-bindmount
