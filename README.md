@@ -191,7 +191,7 @@ They have data from the following tables:
 * `elasticc2_brokerclassifier`
 * `elasticc2_brokermessage`
 
-The 10, 100, or 1000 objects were chosen randomly.  As of this writing, ELAsTiCC2 has recently started, so there are many objects in the main database for which no alerts have been sent out; the objects chosen for these subsets have at least one alert sent.  (The files will be regenerated after ELAsTiCC2 is over.)  All sources, forced sources, and alerts (including unsent ones) for those objects are included, as are all broker messages we've received in response to one of the alerts included.
+The 10, 100, or 1000 objects were chosen randomly.  As of this writing (2023-11-16), ELAsTiCC2 has recently started, so there are many objects in the main database for which no alerts have been sent out; the objects chosen for these subsets have at least one alert sent.  (The files will be regenerated after ELAsTiCC2 is over.)  All sources, forced sources, and alerts (including unsent ones) for those objects are included, as are all broker messages we've received in response to one of the alerts included.
 
 Save the file you download into the `tom_desc/admin_tools` subdirectory if your git checkout.  (This directory already exists.)
 

@@ -7,7 +7,9 @@ import psycopg2
 import psycopg2.extras
 import django.db
 from matplotlib import pyplot
+import django.core.management
 from django.core.management.base import BaseCommand, CommandError
+
 
 _rundir = pathlib.Path(__file__).parent
 
@@ -31,10 +33,18 @@ class Command(BaseCommand):
                              help='YYYY-MM-DD of last day to look at (default: current day - 1)' )
         parser.add_argument( '--hour', default=0,
                              help='UTC Hour where the "day" starts (default: 0)' )
+        parser.add_argument( '--scorched-earth', action='store_true', default=False,
+                             help='Wipe out the storage directory before starting.' )
 
     def handle( self, *args, **options ):
         self.outdir.mkdir( parents=True, exist_ok=True )
 
+        if options[ 'scorched_earth' ]:
+            _logger.warning( "Wiping out current plot directory" )
+            for f in self.outdir.iterdir():
+                if f.is_file():
+                    f.unlink()
+        
         starthour = int( options['hour'] )
         datematch = re.compile( '^(\d{4})-(\d{2})-(\d{2})$' )
         match = datematch.search( options['start'] )
@@ -95,3 +105,5 @@ class Command(BaseCommand):
                     pyplot.close( fig )
                     
                 curdate += datetime.timedelta( days=1 )
+
+        django.core.management.call_command( 'collectstatic', '--clear', '--noinput' )
