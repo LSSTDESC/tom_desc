@@ -452,7 +452,7 @@ class Command(BaseCommand):
 
     def add_arguments( self, parser ):
         parser.add_argument( '--do-alerce', action='store_true', default=False, help="Poll from ALeRCE" )
-        parser.add_argument( '--alerce-topic-pattern', default=None,
+        parser.add_argument( '--alerce-topic-pattern', default='^lc_classifier_.*_(\d{4}\d{2}\d{2})$',
                              help='Regex for matching ALeRCE topics (warning: custom code, see AlerceBroker)' )
         parser.add_argument( '--do-antares', action='store_true', default=False, help="Poll from ANTARES" )
         parser.add_argument( '--antares-topic', default=None, help='Topic name for Antares' )

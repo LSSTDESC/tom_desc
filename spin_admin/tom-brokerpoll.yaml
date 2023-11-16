@@ -48,6 +48,8 @@ spec:
           value: cassandra
         - name: CASSANDRA_PASSWORD
           value: cassandra
+        - name: ALERCE_TOPIC_RELDATEOFFSET
+          value: '-36'
         - name: ALERCE_KAFKA_SERVER
           value: b-3-public.publicproduction.o8ncxm.c18.kafka.us-east-1.amazonaws.com:9196,b-2-public.publicproduction.o8ncxm.c18.kafka.us-east-1.amazonaws.com:9196,b-1-public.publicproduction.o8ncxm.c18.kafka.us-east-1.amazonaws.com:9196
         - name: FINK_GROUP_ID
@@ -95,13 +97,13 @@ spec:
           - brokerpoll2
           - --do-antares
           - --antares-topic
-          - elasticc2-st3
+          - elasticc2-2
           - --do-pitt
           - --pitt-project
           - elasticc-challenge
           - --pitt-topic
           - elasticc-SuperNNova
-          - --do-test
+          - --do-alerce
       dnsConfig: {}
       dnsPolicy: ClusterFirst
       restartPolicy: Always

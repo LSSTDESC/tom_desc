@@ -90,6 +90,8 @@ spec:
       securityContext:
         fsGroup: 57177
       terminationGracePeriodSeconds: 30
+      imagePullSecrets:
+        - name: registry-nersc
       volumes:
       - name: tom-secrets
         secret:
