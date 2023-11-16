@@ -54,6 +54,9 @@ If the table structure has evolved since then, it may no longer work.
     parser.add_argument( '-n', '--nobs', default=1000, type=int, help='Number of rows from ppdbdiaobject to copy' )
     parser.add_argument( '-s', '--skip-table-copy', default=False, action='store_true',
                          help="Skip temp table creation and copy; only use this if you know what you're doing." )
+    parser.add_argument( '--only-sent', default=False, action='store_true',
+                         help=( "Only include objects with at least one alert that has been sent.  This will "
+                                "slow down the process, and is unnecessary once ELAsTiCC2 is over." ) )
     args = parser.parse_args()
 
     tables = [ 'elasticc2_brokerclassifier',
@@ -78,8 +81,18 @@ If the table structure has evolved since then, it may no longer work.
 
         _logger.info( f"Copying {args.nobs} objects" )
         # ...hopefully the "int" type on the argument makes us safe from Bobby Tables
-        cursor.execute( f'INSERT INTO temp_copy_elasticc2_ppdbdiaobject '
-                        f'SELECT * FROM elasticc2_ppdbdiaobject ORDER BY RANDOM() LIMIT {args.nobs}' )
+        if not args.only_sent:
+            cursor.execute( f'INSERT INTO temp_copy_elasticc2_ppdbdiaobject '
+                            f'SELECT * FROM elasticc2_ppdbdiaobject ORDER BY RANDOM() LIMIT {args.nobs}' )
+        else:
+            cursor.execute( f'INSERT INTO temp_copy_elasticc2_ppdbdiaobject '
+                            f'  SELECT * FROM elasticc2_ppdbdiaobject'
+                            f'  WHERE diaobject_id IN '
+                            f'    ( SELECT DISTINCT ON (o.diaobject_id) o.diaobject_id '
+                            f'      FROM elasticc2_ppdbdiaobject o '
+                            f'      INNER JOIN elasticc2_ppdbalert a ON o.diaobject_id=a.diaobject_id '
+                            f'        AND a.alertsenttimestamp IS NOT NULL ) '
+                            f'  ORDER BY RANDOM() LIMIT {args.nobs}' )
 
         for subtab in [ 'ppdbdiasource', 'ppdbdiaforcedsource', 'ppdbalert', 'diaobjecttruth' ]:
             _logger.info( f"Copying {subtab} for the {args.nobs} objects..." )
@@ -112,12 +125,7 @@ If the table structure has evolved since then, it may no longer work.
         command.extend( [ '-t', f'temp_copy_{t}' ] )
     res = subprocess.run( command, capture_output=False, env={'PGPASSWORD': args.password} )
     if res.returncode != 0:
-        _logger.error( f"Subprocessed failed\n"
-                       f"command: {res.args}\n"
-                       f"\nstdout\n------\n"
-                       f"{res.stdout.decode('utf-8')}\n"
-                       f"stderr\n------\n"
-                       f"{res.stderr.decode('utf-8')}\n" )
+        _logger.error( f"Subprocessed failed\ncommand: {res.args}" )
         sys.exit( 1 )
 
     _logger.info( "Dropping temp tables" )

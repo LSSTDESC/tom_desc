@@ -178,9 +178,21 @@ You will be prompted for the postgres password, which is "fragile".  (This postg
 
 #### For ELAsTiCC2
 
-<a href="">Here is a small subset of tables from ELAsTiCC2</a>.
+Here are three files with a subset of ELAsTiCC2:
+* <a href="https://portal.nersc.gov/cfs/lsst/DESC_TD_PUBLIC/users/raknop/elasticc2_dump_10obj.sql">elasticc2_dump_10obj.sql</a> (128&nbsp;KiB — 10 objects, 97 sources, 2,029 forced sources, 97 alerts (48 sent), 332 broker messages)
+* <a href="https://portal.nersc.gov/cfs/lsst/DESC_TD_PUBLIC/users/raknop/elasticc2_dump_10obj.sql">elasticc2_dump_100obj.sql</a> (1.4&nbsp;MiB — 100 objects, 3,226 sources, 26,686 forced sources, 3,226 alerts (990 sent), 6,463 broker messages)
+* <a href="https://portal.nersc.gov/cfs/lsst/DESC_TD_PUBLIC/users/raknop/elasticc2_dump_100obj.sql">elasticc2_dump_100obj.sql</a> (14&nbsp;MiB — 1000 ojects, 27,888 sources, 230,370 forced sources, 27,888 alerts (10,167 sent), 66,740 broker messages)
 
-TODO: describe
+They have data from the following tables:
+* `elasticc2_ppdbdiaobject`
+* `elasticc2_ppdbdiasource`
+* `elasticc2_ppdbdiaforcedsource`
+* `elasticc2_ppdbalert`
+* `elasticc2_diaobjecttruth`
+* `elasticc2_brokerclassifier`
+* `elasticc2_brokermessage`
+
+The 10, 100, or 1000 objects were chosen randomly.  As of this writing, ELAsTiCC2 has recently started, so there are many objects in the main database for which no alerts have been sent out; the objects chosen for these subsets have at least one alert sent.  (The files will be regenerated after ELAsTiCC2 is over.)  All sources, forced sources, and alerts (including unsent ones) for those objects are included, as are all broker messages we've received in response to one of the alerts included.
 
 Save the file you download into the `tom_desc/admin_tools` subdirectory if your git checkout.  (This directory already exists.)
 
@@ -192,9 +204,9 @@ and then go into the shell with
 ```
 docker compose exec -it daedalus-shell /bin/bash
 ```
-cd into the directory `admin_toos` and run:
+cd into the directory `admin_tools` and run:
 ```
-python import_elasticc2_subset_dump.py <filename>
+python import_elasticc2_subset_dump.py -f <filename>
 ```
 where `<filename>` is the .sql file that you downloaded.
 

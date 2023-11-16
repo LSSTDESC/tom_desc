@@ -59,7 +59,6 @@ If the table structure has evolved since then, it may no longer work.
         'elasticc2_diaobjecttruth',
         'elasticc2_brokerclassifier',
         'elasticc2_brokermessage',
-        'elasticc2_diaforcedsource',   # TODO: remove
     ]
 
     _logger.info( "Running pg_restore" )
