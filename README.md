@@ -342,7 +342,7 @@ docker compose build
 ```
 
 ### Running a shell in the framework
-```
+
 To get an environment in which to run the tests manually, run
 ```
 ELASTICC2_TEST_DATA=<dir> docker compose up -d shellhost
