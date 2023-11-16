@@ -126,13 +126,13 @@ Make a branch `/u/{yourname}/{name}` to do dev work, which (if appropriate) may 
 
 ## Deployment a dev environment with Docker
 
-If you want to test the TOM out, you can deploy it on your local machine.  If you're lucky, all you need to do is:
+If you want to test the TOM out, you can deploy it on your local machine.  If you're lucky, all you need to do is, within the top level of the git checkout:
 
 * Run <code>git submodule update --init --recursive</code>.  There are a number of git submodules that have the standard TOM code.  By default, when you clone, git doesn't clone submodules, so do this in order to make sure all that stuff is there.  (Alternative, if instead of just <code>git clone...</code> you did <code>git clone --recurse-submodules ...</code>, then you've already taken care of this step.)  If you do a <code>git pull</code> later, you either need to do <code>git pull --recurse-submodules</code>, or do <code>git submodule --update --recursive</code> after your pull.</li>
 
-* Run <code>docker-compose up -d tom</code>.  This will use the <code>docker-compose.yml</code> file to either build or pull three images (the web server, the postgres server, and the cassandra server), and create three containers.  It will also create a docker volume named "tomdbdata" and "tomcassandradata" where postgres and cassandra respectively will store their contents, so that you can persist the databases from one run of the container to the next.</li>
+* Run <code>docker-compose up -d tom</code>.  This will use the <code>docker-compose.yml</code> file to either build or pull three images (the web server, the postgres server, and the cassandra server), and create three containers.  It will also create docker volumes named "tomdbdata" and "tomcassandradata" where postgres and cassandra respectively will store their contents, so that you can persist the databases from one run of the container to the next.</li>
 
-* Database migrations are applied automatically as part of the docker compose setup, but you need to manually create the TOM superuser account so that you have something to log into..  The first time you run it for a given postgres volume, once the containers are up you need to run a shell on the server container with <code>docker compose exec -it tom /bin/bash</code>, and then run the command:
+* Database migrations are applied automatically as part of the docker compose setup, but you need to manually create the TOM superuser account so that you have something to log into.  The first time you run it for a given postgres volume, once the containers are up you need to run a shell on the server container with <code>docker compose exec -it tom /bin/bash</code>, and then run the command:
   - <code>python manage.py createsuperuser</code> (and answer the prompts)
 
 * If you are using a new postgres data volume (i.e. you're not reusing one from a previous run of docker compose), you need to create the "Public" group.  You need to do this before adding any users.  If all is well, any users added thereafter will automatically be added to this group.  Some of the DESC specific code will break if this group does not exist.  (The TOM documentation seems to imply that this group should have been created automatically, but that doesn't seem to be the case.)  To do this:
@@ -195,7 +195,7 @@ The 10, 100, or 1000 objects were chosen randomly.  As of this writing, ELAsTiCC
 
 Save the file you download into the `tom_desc/admin_tools` subdirectory if your git checkout.  (This directory already exists.)
 
-For various reasons, the docker image for the Tom server is based on an older version of the Linux distribution (Devuan).  The postgres image is based on Daedalus, which as of this writing is the current stable version.  The restoration scripts require `pg_dump` to have a version that's compatible with the postgres server, and for that reason you need to run a special shell just for this restoration process.  Start that shell with
+For various reasons, the docker image for the Tom server is based on an older version of the Linux distribution (Devuan).  The postgres image is based on Daedalus, which as of this writing is the current stable version.  The restoration process requires `pg_restore` to have a version that's compatible with the postgres server, and for that reason you need to run a special shell just for this restoration process.  Start that shell with
 ```
 docker compose up -d daedalus-shell
 ```
@@ -268,9 +268,14 @@ where you cut and paste the full ugly pod name from the output of `get all` or `
 
 #### The steps necessary to create the production TOM from scratch:
 
+If you're making a new deployment somewhere (rather than just recreating
+desc_tom on the Spin production server), you *will* need to edit the YAML files before applying them
+(so that things like "namespace" and "workloadselector" are consistent
+with everything else you're doing).  Please keep the YAML files in the top `spin_admin` directory which committed to the git archive as the ones necessary for the default production installation.
+
 After each step, it's worth running a `rancher kubectl get...` command to make sure that the thing you created or started is working.  There are lots of reasons why things can fail, some of which aren't entirely under your control (e.g. servers that docker images are pulled from).
 
-- Create the two persistent volume claims.  There are two files, `tom-postgres-pvc.yaml` and `tom-cassandra-pvc.yaml` that describe these.  If you're making a new deployment somewhere, you *will* need to edit them (so that things like "namespace" and "workloadselector" are consistent with everything else you're doing).  Be very careful with these files, as you stand a chance of blowing away the existing TOM database if you do the wrong thing.
+- Create the two persistent volume claims.  There are two files, `tom-postgres-pvc.yaml` and `tom-cassandra-pvc.yaml` that describe these.  Be very careful with these files, as you stand a chance of blowing away the existing TOM database if you do the wrong thing.
 
 - Create the cassandra deployment.  (As of this writing, the cassandra database is actually not actively used, but the TOM won't start up without it being available.)  The YAML file is `tom-cassandra.yaml`
 
