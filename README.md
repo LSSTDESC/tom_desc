@@ -132,20 +132,19 @@ If you want to test the TOM out, you can deploy it on your local machine.  If yo
 
 * Run <code>docker-compose up -d tom</code>.  This will use the <code>docker-compose.yml</code> file to either build or pull three images (the web server, the postgres server, and the cassandra server), and create three containers.  It will also create a docker volume named "tomdbdata" and "tomcassandradata" where postgres and cassandra respectively will store their contents, so that you can persist the databases from one run of the container to the next.</li>
 
-* The first time you run it for a given postgres volume, once the containers are up you need to run a shell on the server container with <code>docker exec -it tom_desc_tom_1 /bin/bash</code> (substituting the name your container got for "tom_desc_tom_1"), and then run the commands:
+* Database migrations are applied automatically as part of the docker compose setup, but you need to manually create the TOM superuser account so that you have something to log into..  The first time you run it for a given postgres volume, once the containers are up you need to run a shell on the server container with <code>docker compose exec -it tom /bin/bash</code>, and then run the command:
   - <code>python manage.py createsuperuser</code> (and answer the prompts)
 
-Database migrations are applied automatically as part of the docker compose setup, but you need to manually create the TOM superuser account so that you have something to log into.
-
-At this point, you should be able to connect to your running TOM at `localhost:8080`.
-
-If you are using a new postgres data volume (i.e. you're not reusing one from a previous run of docker compose), you need to create the "Public" group.  You need to do this before adding any users.  If all is well, any users added thereafter will automatically be added to this group.  Some of the DESC specific code will break if this group does not exist.  (The TOM documentation seems to imply that this group should have been created automatically, but that doesn't seem to be the case.)  To do this:
+* If you are using a new postgres data volume (i.e. you're not reusing one from a previous run of docker compose), you need to create the "Public" group.  You need to do this before adding any users.  If all is well, any users added thereafter will automatically be added to this group.  Some of the DESC specific code will break if this group does not exist.  (The TOM documentation seems to imply that this group should have been created automatically, but that doesn't seem to be the case.)  To do this:
 ``` python manage.py shell
 >>> from django.contrib.auth.models import Group
 >>> g = Group( name='Public' )
 >>> g.save()
 >>> exit()
 ```
+
+At this point, you should be able to connect to your running TOM at `localhost:8080`.
+
 
 If you ever run a server that exposes its interface to the outside web, you probably want to edit your local version of the file `secrets/django_secret_key`.  Don't commit anything sensitive to git, and especially don't upload it to github!  (There *are* postgres passwords in the github archive, which would seem to voilate this warning.  The reason we're not worried about that is that both in the docker-compose file, and as the server is deployed in production, the postgres server is not directly accessible from outside, but only from within the docker environment (or, for production, the Spin namespace). Of course, it would be better to add the additional layer of security of obfuscating those passwords, but, whatever.)
 
