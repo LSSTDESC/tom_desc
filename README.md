@@ -6,7 +6,7 @@ Based on the [Tom Toolkit](https://lco.global/tomtoolkit/)
 
 The "production" server at nersc is `https://desc-tom.lbl.gov` ; ask Rob (raknop@lbl.gov or Rob Knop on the LSST Slack) if you need a user account.
 
-At the moment, the TOM is only holding the alerts and broker messages for the ELAsTiCC challenge.  It will evolve from here (using at least ELAsTiCC as a test data set) into something that will prioritize and schedule follow-up observations.
+At the moment, the TOM is only holding the alerts and broker messages for the ELAsTiCC and ELAsTiCC2 campaigns.  It will evolve from here (using at least ELAsTiCC as a test data set) into something that will prioritize and schedule follow-up observations.
 
 Being a Django server, the TOM is divided into different "applications".  The most relevant ones right now are:
 
@@ -20,6 +20,8 @@ Being a Django server, the TOM is divided into different "applications".  The mo
 Just go.  Look at (for example) the ELAsTiCC, ELAsTiCC2, and Targets links in the header navigation bar.
 
 ### Via SQL
+
+TODO: make sure this is up to date
 
 You can access the database directly by passing SQL to a thin http interface; see `sql_query_tom_db.py` or (similar code as a Jupyter notebook) `sql_query_tom_db.ipynb`; see [Database Schema and Notes](#database-schema-and-notes) for more information.  Both of these (IF THEY'RE UP TO DATE) use `tomclient.py`, which defines a class `TomClient` that is really just a very simple front-end to python `requests` that handles some annoying django login details..  The docstring for the class in that file describes how to use it.
 
@@ -105,6 +107,12 @@ There are two database tables to help matching broker classifications to truth, 
 
 ---
 
+# <a name="elasticc2"></a>The ELAsTiCC2 application
+
+TODO
+
+---
+
 # Internal Documentation
 
 The rest of this is only interesting if you want to develop it or deploy a private version for hacking.
@@ -116,39 +124,34 @@ The branch `main` has the current production code.
 Make a branch `/u/{yourname}/{name}` to do dev work, which (if appropriate) may later be merged into `main`.
 
 
-## Deployment with Docker
+## Deployment a dev environment with Docker
 
 If you want to test the TOM out, you can deploy it on your local machine.  If you're lucky, all you need to do is:
 
+<!--
 <ul>
-
-<li> Run <code>git submodule update --init --recursive</code>.  There
-  are a number of git submodules that have the standard TOM code.  By
-  default, when you clone, git doesn't clone submodules, so do this in
-  order to make sure all that stuff is there.  (Alternative, if instead
-  of just <code>git clone...</code> you did <code>git clone
-  --recurse-submodules ...</code>, then you've already taken care of
-  this step.)  If you do a <code>git pull</code> later, you either need
-  to do <code>git pull --recurse-submodules</code>, or do <code>git
-  submodule --update --recursive</code> after your pull.</li>
-<li> Run <code>docker-compose up</code>.  This will use the <code>docker-compose.yml</code> file
-  to either build or pull two images (the web server and the postgres
-  server), and run two containers.  It will also create a docker volume
-  named "tomdbdata" where postgres will store its contents, so that you
-          can persist the database from one run of the container to the next.</li>
-<li>The first time you run it for a given postgres volume, once the
-  containers are up you need to run a shell on the server container with
-  <code>docker exec -it tom_desc_tom_1 /bin/bash</code> (substituting the name your
-  container got for "tom_desc_tom_1"), and then run the commands:
-  <ul>
+<li> Run <code>git submodule update --init --recursive</code>.  There are a number of git submodules that have the standard TOM code.  By default, when you clone, git doesn't clone submodules, so do this in order to make sure all that stuff is there.  (Alternative, if instead of just <code>git clone...</code> you did <code>git clone --recurse-submodules ...</code>, then you've already taken care of this step.)  If you do a <code>git pull</code> later, you either need to do <code>git pull --recurse-submodules</code>, or do <code>git submodule --update --recursive</code> after your pull.</li>
+<li> Run <code>docker-compose up</code>.  This will use the <code>docker-compose.yml</code> file to either build or pull two images (the web server and the postgres server), and run two containers.  It will also create a docker volume named "tomdbdata" where postgres will store its contents, so that you can persist the database from one run of the container to the next.</li>
+<li>The first time you run it for a given postgres volume, once the containers are up you need to run a shell on the server container with <code>docker exec -it tom_desc_tom_1 /bin/bash</code> (substituting the name your container got for "tom_desc_tom_1"), and then run the commands:
+<ul>
     <li><code>python manage.py migrate</code></li>
     <li><code>python manage.py createsuperuser</code> (and answer the prompts)</li>
-  </ul></li>
+</ul></li>
 </ul>
+-->
 
-This will set up the database schema, and create root user.  At this point, you should be able to connect to your running TOM at `localhost:8080`.
+* Run <code>git submodule update --init --recursive</code>.  There are a number of git submodules that have the standard TOM code.  By default, when you clone, git doesn't clone submodules, so do this in order to make sure all that stuff is there.  (Alternative, if instead of just <code>git clone...</code> you did <code>git clone --recurse-submodules ...</code>, then you've already taken care of this step.)  If you do a <code>git pull</code> later, you either need to do <code>git pull --recurse-submodules</code>, or do <code>git submodule --update --recursive</code> after your pull.</li>
 
-Next, you need to create the "Public" group.  You need to do this before adding any users.  If all is well, any users added thereafter will automatically be added to this group.  Some of the DESC specific code will break if this group does not exist.  (The TOM documentation seems to imply that this group should have been created automatically, but that doesn't seem to be the case.)  To do this:
+* Run <code>docker-compose up</code>.  This will use the <code>docker-compose.yml</code> file to either build or pull three images (the web server, the postgres server, and the cassandra server), and create three containers.  It will also create a docker volume named "tomdbdata" and "tomcassandradata" where postgres and cassandra respectively will store their contents, so that you can persist the databases from one run of the container to the next.</li>
+
+* The first time you run it for a given postgres volume, once the containers are up you need to run a shell on the server container with <code>docker exec -it tom_desc_tom_1 /bin/bash</code> (substituting the name your container got for "tom_desc_tom_1"), and then run the commands:
+  - <code>python manage.py createsuperuser</code> (and answer the prompts)
+
+Database migrations are applied automatically as part of the docker compose setup, but you need to manually create the TOM superuser account so that you have something to log into.
+
+At this point, you should be able to connect to your running TOM at `localhost:8080`.
+
+If you are using a new postgres data volume (i.e. you're not reusing one from a previous run of docker compose), you need to create the "Public" group.  You need to do this before adding any users.  If all is well, any users added thereafter will automatically be added to this group.  Some of the DESC specific code will break if this group does not exist.  (The TOM documentation seems to imply that this group should have been created automatically, but that doesn't seem to be the case.)  To do this:
 ``` python manage.py shell
 >>> from django.contrib.auth.models import Group
 >>> g = Group( name='Public' )
@@ -160,6 +163,7 @@ If you ever run a server that exposes its interface to the outside web, you prob
 
 ### Populating the database
 
+#### For ELAsTiCC
 <a href="https://portal.nersc.gov/cfs/lsst/DESC_TD_PUBLIC/users/raknop/elasticc_subset.sql">Here is a small subset</a> of the tables from September 2022-January 2203 ELAsTiCC campaign.  It includes:
 
 * 1,000 objects selected randomly
@@ -176,6 +180,10 @@ To populate the `elasticc` tables of the database with this subset, copy this fi
 `psql -h postgres -U postgres tom_desc < elasticc_subset.sql`
 
 You will be prompted for the postgres password, which is "fragile".  (This postgres instance should not be accessible outside of your docker container environment, which is why it doesn't have a secure password.)  If all goes well, you'll get a bunch of numbers telling you how many rows were put into various tables, and you will get no error messages.  After that, your database should be populated.  Verify this by going to the link `http://localhost:8080/elasticc/summary` and verify that the numbers match what's listed above.  (You will need to be logged into your instance of the TOM for that page to load.)
+
+#### For ELAsTiCC2
+
+TODO
 
 ### Development and database migrations
 
@@ -199,28 +207,61 @@ BE CAREFUL ABOUT DATABASE MIGRATIONS.  For throw-away development environments, 
 
 ## Deployment at NERSC
 
-The server runs on NERSC Spin, in the `desc-tom` namespace of production m1727.  It reads its container image from `registry.services.nersc.gov/raknop/tom-desc-production`; that container image is built the Dockerfile in the "docker" subdirectory of this repository.  (I also run another instance on the development Spin server, for, of course, development.)
+The server runs on NERSC Spin, in the `desc-tom` namespace of production m1727.  Rob maintains this.
 
-The actual web ap software is *not* read from the docker image (although a version of the software is packaged in the image).  Rather, the directory `/tom_desc` inside the container is mounted from the NERSC csf file system.  This allows us to update the software without having to rebuild and redploy the image; the image only needs to be redeployed if we have to add prerequisite packages, or if we want to update the OS software for security patches and the like.  The actual TOM software is deployed at `/global/cfs/cdirs/desc-td/SOFTWARE/tom_deployment/production/tom_desc` (with the root volume for the web server in the `tom_desc` subdirectory below that).  Right now, that deployment is just handled as a git checkout.  After it's updated, things need to happen *on* the Spin server (migrations, telling the server to reload the software).  My (Rob's) notes on this are in `rob_notes.txt`.
+The actual web ap software is *not* read from the docker image (although a version of the software is packaged in the image).  Rather, the directory `/tom_desc` inside the container is mounted from the NERSC csf file system.  This allows us to update the software without having to rebuild and redploy the image; the image only needs to be redeployed if we have to add prerequisite packages, or if we want to update the OS software for security patches and the like.  The actual TOM software is deployed at `/global/cfs/cdirs/desc-td/SOFTWARE/tom_deployment/production/tom_desc` (with the root volume for the web server in the `tom_desc` subdirectory below that).  Right now, that deployment is just handled as a git checkout.  After it's updated, things need to happen *on* the Spin server (migrations, telling the server to reload the software).  My (Rob's) notes on this are in `rob_notes.txt`, though they may have fallen somewhat out of date.
+
+
+
+There are some additional `.yaml` files in that directory for other services that are useful for the actual business of ELAsTiCC2:
+
+* `tom-send-alerts-cron.yaml` creates a cron job to send out alerts while the actual ELASTiCC2 campaign is running.  That file will need to be edited so that the `args` field has the right arguments to do what you want to do.
+
+* `tom-pgdump.yaml` creates a cron job that (as currently configured) does a weekly pg_dump of the postgres database, to the directory found under the `hostPath:` field underneath `volumes:`.
+
+
+
 
 ### Steps for deployment
 
-This is assuming a deployment from scratch.  You probably don't want to do this on the production server, as you stand a chance of wiping out the existing database!  Only do this if you really know what you're doing (which, at the moment, is probably only Rob.)
-
-### With the command line
+This is assuming a deployment from scratch.  You probably don't want to do this on the production server, as you stand a chance of wiping out the existing database!  Only do this if you really know what you're doing (which, at the moment, is probably only Rob.)  If you're in a situation where Rob isn't available, if you understand NERSC Spin the vocabulary here should make sense; the NERSC Spin support people should be able to help, as shoudl the `#spin` channel on the NERSC Users Slack.
 
 Do `module load spin` on perlmutter.  Do `rancher context switch` to get in the right rancher cluster and context.  Create a namespace (if it doesn't exist already) with `rancher namespace create <name>`.  Rob uses `desc-tom` on the spin dev cluster, and for production deployment, `desc-tom` and `desc-tom-2` on the production cluster.
 
-- Create the persistent volume claim.  Make a copy of and edit `tom-rknop-dev-postgres-pvc.yaml` to be consistent with everything.  Be careful about this; a bunch of things need to be edited for consistency (including lots of names, namespaces, and references.  This will be fraught if you don't know what you're doing.  There are things like "workloadselector" that have to be consistent with the namespace name and the deployment name.  When done, create the pvc with
-   `rancher kubectl apply --namespace=<namespace> -f <filename>`
+All of the things necessary to get the TOM running are specified in YAML files found in the `spin_admin` subdirectory.  To create or update something on Spin, you "apply" the YAML file with
+  `rancher kubectl apply --namespace <namespace> -f <filename>`
+where `<namespace>` is the Spin namespace you're working in, and `<filename>` is the YAML file you're using.  If you're not using the default deployment, you *will* have to edit the various YAML files for what you're doing; among other things, all "namespace" and "workloadselector" fields will have to be updated for the namespace you're using.
 
-- Create the postgres deployment.  Make a copy of and edit `tom-rknop-dev-postgres.yaml`, again being careful to get everything right!  Create the postgres installation with another `rancher kubectl apply` command, giving the new yaml filename.  You can check that the deployment is there with `rancher kubectl get deployment --namespace=<namesdpace>`, and that it's running with `rancher kubectl get pods --namespace=<namespace>`.  Check the logs of the pod to make sure postgres created its directory structure on the persistent volume, and got started up right, with `rancher kubectl logs --namepace=<filename> <podname>`, where you can get the podname from the output of the `get pods` command.
+You can see what you have running by doing all of:
 
-- Create the postgres service; this is the thing that's needed so that the TOM web ap server is able to communicate internally with the postgres server.  This "just happens" when you do it from the UI, but you have to do it as a separate step here.  The yaml file to copy and edit is `tom-rknop-dev-postgres-service.yaml`.
+* `rancher kubectl get all --namespace <namespace>`
+* `rancher kubectl get pvc --namespace <namespace>`
+* `rancher kubectl get secret --namespace <namespace>`
 
-- Create the secrets.  The yaml file to copy and edit is `tom-rknop-dev-secrets.yaml`.
+(it seems that "all" doesn't really mean all).  You can also just look to see what actual pods are running with `get pods` in place of `get all`.  This is a good way to make sure that the things you think are running are really running.  You can get the logs (stdout and stderr from the entrypoint command) for a pod with
+  `rancher kubectl logs --namespace <namespace> <pod>`
+where you cut and paste the full ugly pod name from the output of `get all` or `get pods`.
 
-- Create the webap server.  The yaml file to copy and edit is `tom-rknop-dev-app.yaml`.  There is an additional wrinkle with this.  Right now, I do *not* have the django code baked into the Docker image, because everything is still under active development.  Rather, I have the django code in a directory on CFS, and a mount that as a volume in spin.  This requires running the workload under the same UID as the owner of the directory.  This means (at least) editing some fields under `spec.template.metadata.annotations`
+(It's also possible to use the web interface to monitor what's going; you should know about that if you've been trained on NERSC Spin.)
+
+#### The steps necessary to create the production TOM from scratch:
+
+After each step, it's worth running a `rancher kubectl get...` command to make sure that the thing you created or started is working.  There are lots of reasons why things can fail, some of which aren't entirely under your control (e.g. servers that docker images are pulled from).
+
+- Create the two persistent volume claims.  There are two files, `tom-postgres-pvc.yaml` and `tom-cassandra-pvc.yaml` that describe these.  If you're making a new deployment somewhere, you *will* need to edit them (so that things like "namespace" and "workloadselector" are consistent with everything else you're doing).  Be very careful with these files, as you stand a chance of blowing away the existing TOM database if you do the wrong thing.
+
+- Verify that the persistent volume claims exist with
+  `rancher kubectl get pvc --namespace <namespace>`
+
+- Create the cassandra deployment.  (As of this writing, the cassandra database is actually not actively used, but the TOM won't start up without it being available.)  The YAML file is `tom-cassandra.yaml`
+
+- Create the postgres deployment.  The YAML file is `tom-postgres.yaml`
+
+- Create the secrets.  The yaml file is `tom-secrets.yaml`.  This file *will* need to be edited, because we don't want to commit the actual secrets to the git archive.  Rob keeps a copy of the YAML file with the actual secrets in place in his `~/secrets` directory; you won't be able to read this, but if you're stuck needing to create this when Rob isn't around, NERSC people should be able to help you.  (TODO: find a safe collabration-available place to keep this.)
+
+- Create the web certificate for the web app.  The YAML file is `tom-cert.yaml`.  Like `tom-secrets.yaml`, this one needs to be edited.  Because certificates expire, the contents of this have to be updated regularly (yearly, using the LBL certificates that Rob uses).  The actual content of the secrets is created with a combination of `openssl` and `base64` commands.  TODO: really document this.
+
+- Create the webap server.  The yaml file is `tom-app.yaml`.  This one has to run as a normal user because it needs to bind-mount directories.  The file right now has Rob's userid as the user to run as.  To change this, edit the file and look at the following fields under `spec.template.metadata.annotations`:
   - `nersc.gov/collab_uids`
   - `nersc.gov/gid`
   - `nersc.gov/gids`
@@ -228,18 +269,11 @@ Do `module load spin` on perlmutter.  Do `rancher context switch` to get in the 
   - `nersc.gov/username`
 ...and maybe some others.
 
-- Create the tom webap service; `tom-rknop-dev-app-service.yaml`.
-
-- Create the service for the ingress:
-
-- Create the ingress: `<filename>`.  Deal with certificates; I do this in the UI right now, and am not sure how to translate it properly to command-line stuff.
-
 - Once everything is set up, you still have to actually create the database; to do this, get a shell on the app server with `rancher kubectl exec --stdin --tty --namespace=<namespace> <podname> -- /bin/bash` and run
   - `python manage.py migrate`
   - `python manage.py createsuperuser`
 
-- Create the `Public` Group.   (The TOM documentation seems to imply that this group should have been
-  created automatically, but that doesn't seem to be the case.)
+- Create the `Public` Group.   (The TOM documentation seems to imply that this group should have been created automatically, but that doesn't seem to be the case.)
   ```
    python manage.py shell
    >>> from django.contrib.auth.models import Group
@@ -250,76 +284,17 @@ Do `module load spin` on perlmutter.  Do `rancher context switch` to get in the 
 
 - You then probably want to do things to copy users and populate databases and things....
 
-- Whenever making any changes to the code (which *might* include manual database manipulation, but hopefully doesn't), you need to tell the `gunicorn` web server on the app workload to refresh itself.  Do this with a shell on that workload with `kill -HUP 1`.
+- Whenever making any changes to the code (which *might* include manual database manipulation, but hopefully doesn't), you need to tell the `gunicorn` web server on the tom-app pod to refresh itself.  Do this with a shell on that pod with `kill -HUP 1`.
 
-### With the UI
+#### Removing it all from Spin
 
-**This may be out of date!  In fact, it certainly is, because Spin is migrating to a new UI (the "cluster explorer"), and this is for the old one.  But, it may be out of date even for that.**
-
-For the passwords obscured below, look at the `0022_ro_users.py` migration file in `tom_desc/elasticc/migrations`.
-
-- Create a secrets volume with
-     - django_secret_key equal to something long and secure
-     - postgres_password equal to fragile
-     - postgres_elasticc_ro equal to <the right password>
-     - postgres_elasticc_admin_ro equal to <the right password>
-- Create the postgres workload at spin.
-  - image: rknop/tom-desc-postgres
-  - env vars
-      - POSTGRES_PASSWORD_FILE=/secrets/postgres-password
-      - POSTGRES_USER=postgres
-      - POSTGRES_DB=tom_desc
-  - volume: persistent storage claim mounted at /var/lib/postgresql/data
-      - Size to request: hard to say.  I put in 1024GB.
-  - Bind-mount a volume to mount the secrets described above mounted at /secrets
-  - Otherwise standard spin stuff (I think)
-      - This includes under "Security & Host Config" (available via
-        "Show Advanced Options" in the lower-right) selecting "ALL"
-        under "Drop Capabilities" and "CHWON", "DAC_OVERRIDE", "FOWNER",
-        "NET_BIND_SERVICE", "SETGID", and "SETUID" under "Add Capabilities".
-  - Fix an annoying spin permissions issue so that postgres can read the volume
-      - Don't start the postgres workload (make it a scalable deployment of 0 pods)
-      - Make a temporary workload that gives you a linux shell and mounts the same volume
-      - chown {uid}:{gid} on the mounted volume inside a pod running that temporary workload
-          where uid and gid are of the postgres user (101 and 104 in my case)
-      - Now set the postgres workload to a scalable deployment of 1 pod;
-      - it should run happily.
-- Create the tom workload with:
-   - image rknop/tom-desc-production
-   - env vars:
-       - DB_HOST={name of the postgres workload}
-       - DB_NAME=tom_desc
-       - DB_PASS=fragile
-       - DB_USER=postgres
-   - Volumes
-       - secrets described above mounted at /secrets
-       - a bind mount of the tom_desc subirectory of the CFS directory
-         where there is a checkout of this archive; mount this at
-         /tom_desc
-- Under "Command", User ID must have the uid that owns the CFS directory, and Filesystem Group the gid
-   - Under "Security and Host Config"
-       - Run as non-root must be "Yes"
-       - Under "Security & Host Config", instead of the usual spin
-         recommendations *only* add the NET_BIND_SERVICE capability
-   - Create a ingress under "Load Balancing".  (More information needed.)
-
-When you first create the database and the TOM, the tom won't work, because the database tables aren't set up. Run a shell on the TOM's workload, and then do `python manage.py migrate` to set up those database tables.  When done, do `kill -HUP 1` to restart the web server.  This is only necessary when you start the first time.
-
-### Copying users
-
-I haven't figured out the "right" way to do this with django, so here's an ugly hack.
-
-- On the existing server, run
-   `pg_dump -h <postgreshost> -U postgres tom_desc -t auth_user -a -f users.sql`
-
-- Edit the .sql file to remove the rows with `AnonymousUser` and `root`.
-
-- Restore the dump on the new server with
-   `psql -h <postgreshost> -U postgres tom_desc < users.sql`
+This is fiddly.  You have to do a bunch of `rancher kubectl delete <thing> --namespace <namespace> <spec>`, where `<thing>` is deployment, service, ingress, secret, and pvc.  You can figure out what there is with the three `rancher kubectl get...` commands above.  BE VERY CAREFUL BEFORE DELETING A PVC.  For everything else, after you delete it, you can recreate it, if you have current yaml files.  If you delete a persistent volume claim, all of the data on it is **gone**.
 
 # Notes for ELASTICC
 
 ## ELASTICC
+
+Since the first ELAsTiCC campaign is long over, the realtime stuff here is not relevant any more.
 
 ### Streaming to ZADS
 

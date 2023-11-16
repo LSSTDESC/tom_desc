@@ -1,12 +1,16 @@
-version: "3.2"
+version: "3.8"
 services:
   tom:
-    image: rknop/tom-desc-production
-    build: ./docker_server
+    image: registry.nersc.gov/m1727/raknop/tom_desc_extcode:chimaera
+    build:
+      context: ./
+      dockerfile: docker_server/Dockerfile
+      target: tom-server-extcode
     ports:
       - "8080:8080"
     depends_on:
-      - "postgres"
+      migratedb:
+        condition: service_completed_successfully
     volumes:
       - type: bind
         source: ./tom_desc
@@ -20,14 +24,71 @@ services:
       - DB_HOST=postgres
       - DB_PORT=5432
       - DB_NAME=tom_desc
-  postgres:
-    image: rknop/tom-desc-postgres
-    build: ./docker_postgres
+      - CASSANDRA_HOST=cassandra
+      - CASSANDRA_USER=cassandra
+      - CASSANDRA_PASSWORD=cassandra
+
+  migratedb:
+    image: registry.nersc.gov/m1727/raknop/tom_desc_extcode:chimaera
+    build:
+      context: ./
+      dockerfile: docker_server/Dockerfile
+      target: tom-server-extcode
+    depends_on:
+      postgres:
+        condition: service_healthy
+      cassandra:
+        condition: service_healthy
+    volumes:
+      - type: bind
+        source: ./tom_desc
+        target: /tom_desc
+      - type: bind
+        source: ./secrets
+        target: /secrets
     environment:
-      - POSTGRES_PASSWORD=fragile
-      - POSTGRES_USER=postgres
-      - POSTGRES_DB=tom_desc
+      - DB_USER=postgres
+      - DB_PASS=fragile
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=tom_desc
+      - CASSANDRA_HOST=cassandra
+      - CASSANDRA_USER=cassandra
+      - CASSANDRA_PASSWORD=cassandra
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        python manage.py migrate
+        python manage.py sync_cassandra
+
+  postgres:
+    image: registry.nersc.gov/m1727/raknop/tom-postgres:daedalus
+    build:
+      context: ./docker_postgres
+      dockerfile: Dockerfile
+      target: tom-postgres
     volumes:
       - tomdbdata:/var/lib/postgresql/data
+    healthcheck:
+      test: netcat -w 1 localhost 5432 || exit 1
+      interval: 5s
+      timeout: 10s
+      retries: 5
+
+  cassandra:
+    image: registry.nersc.gov/m1727/raknop/tom_cassandra
+    build:
+      context: ./docker_cassandra
+      dockerfile: Dockerfile
+    volumes:
+      - tomcassandradata:/var/lib/cassandra
+    healthcheck:
+      test: cqlsh -u cassandra -p cassandra cassandra < /dev/null
+      interval: 10s
+      timeout: 2s
+      retries: 10
+
 volumes:
   tomdbdata:
+  tomcassandradata:
