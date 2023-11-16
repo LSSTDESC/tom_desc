@@ -131,8 +131,8 @@ If you want to test the TOM out, you can deploy it on your local machine.  If yo
 <!--
 <ul>
 <li> Run <code>git submodule update --init --recursive</code>.  There are a number of git submodules that have the standard TOM code.  By default, when you clone, git doesn't clone submodules, so do this in order to make sure all that stuff is there.  (Alternative, if instead of just <code>git clone...</code> you did <code>git clone --recurse-submodules ...</code>, then you've already taken care of this step.)  If you do a <code>git pull</code> later, you either need to do <code>git pull --recurse-submodules</code>, or do <code>git submodule --update --recursive</code> after your pull.</li>
-<li> Run <code>docker-compose up</code>.  This will use the <code>docker-compose.yml</code> file to either build or pull two images (the web server and the postgres server), and run two containers.  It will also create a docker volume named "tomdbdata" where postgres will store its contents, so that you can persist the database from one run of the container to the next.</li>
-<li>The first time you run it for a given postgres volume, once the containers are up you need to run a shell on the server container with <code>docker exec -it tom_desc_tom_1 /bin/bash</code> (substituting the name your container got for "tom_desc_tom_1"), and then run the commands:
+<li> Run <code>docker-compose up -d tom</code>.  This will use the <code>docker-compose.yml</code> file to either build or pull two images (the web server and the postgres server), and run two containers.  It will also create a docker volume named "tomdbdata" where postgres will store its contents, so that you can persist the database from one run of the container to the next.</li>
+<li>The first time you run it for a given postgres volume, once the containers are up you need to run a shell on the server container with <code>docker compose exec -it tom /bin/bash</code>, and then run the commands:
 <ul>
     <li><code>python manage.py migrate</code></li>
     <li><code>python manage.py createsuperuser</code> (and answer the prompts)</li>
@@ -211,25 +211,16 @@ The server runs on NERSC Spin, in the `desc-tom` namespace of production m1727. 
 
 The actual web ap software is *not* read from the docker image (although a version of the software is packaged in the image).  Rather, the directory `/tom_desc` inside the container is mounted from the NERSC csf file system.  This allows us to update the software without having to rebuild and redploy the image; the image only needs to be redeployed if we have to add prerequisite packages, or if we want to update the OS software for security patches and the like.  The actual TOM software is deployed at `/global/cfs/cdirs/desc-td/SOFTWARE/tom_deployment/production/tom_desc` (with the root volume for the web server in the `tom_desc` subdirectory below that).  Right now, that deployment is just handled as a git checkout.  After it's updated, things need to happen *on* the Spin server (migrations, telling the server to reload the software).  My (Rob's) notes on this are in `rob_notes.txt`, though they may have fallen somewhat out of date.
 
-
-
-There are some additional `.yaml` files in that directory for other services that are useful for the actual business of ELAsTiCC2:
-
-* `tom-send-alerts-cron.yaml` creates a cron job to send out alerts while the actual ELASTiCC2 campaign is running.  That file will need to be edited so that the `args` field has the right arguments to do what you want to do.
-
-* `tom-pgdump.yaml` creates a cron job that (as currently configured) does a weekly pg_dump of the postgres database, to the directory found under the `hostPath:` field underneath `volumes:`.
-
-
-
-
 ### Steps for deployment
 
-This is assuming a deployment from scratch.  You probably don't want to do this on the production server, as you stand a chance of wiping out the existing database!  Only do this if you really know what you're doing (which, at the moment, is probably only Rob.)  If you're in a situation where Rob isn't available, if you understand NERSC Spin the vocabulary here should make sense; the NERSC Spin support people should be able to help, as shoudl the `#spin` channel on the NERSC Users Slack.
+This is assuming a deployment from scratch.  You probably don't want to do this on the production server, as you stand a chance of wiping out the existing database!  Only do this if you really know what you're doing (which, at the moment, is probably only Rob.)  If you're in a situation where Rob isn't available, if you understand NERSC Spin the vocabulary here should make sense; the NERSC Spin support people should be able to help, as should the `#spin` channel on the NERSC Users Slack.
 
 Do `module load spin` on perlmutter.  Do `rancher context switch` to get in the right rancher cluster and context.  Create a namespace (if it doesn't exist already) with `rancher namespace create <name>`.  Rob uses `desc-tom` on the spin dev cluster, and for production deployment, `desc-tom` and `desc-tom-2` on the production cluster.
 
 All of the things necessary to get the TOM running are specified in YAML files found in the `spin_admin` subdirectory.  To create or update something on Spin, you "apply" the YAML file with
+
   `rancher kubectl apply --namespace <namespace> -f <filename>`
+
 where `<namespace>` is the Spin namespace you're working in, and `<filename>` is the YAML file you're using.  If you're not using the default deployment, you *will* have to edit the various YAML files for what you're doing; among other things, all "namespace" and "workloadselector" fields will have to be updated for the namespace you're using.
 
 You can see what you have running by doing all of:
@@ -239,7 +230,9 @@ You can see what you have running by doing all of:
 * `rancher kubectl get secret --namespace <namespace>`
 
 (it seems that "all" doesn't really mean all).  You can also just look to see what actual pods are running with `get pods` in place of `get all`.  This is a good way to make sure that the things you think are running are really running.  You can get the logs (stdout and stderr from the entrypoint command) for a pod with
+
   `rancher kubectl logs --namespace <namespace> <pod>`
+
 where you cut and paste the full ugly pod name from the output of `get all` or `get pods`.
 
 (It's also possible to use the web interface to monitor what's going; you should know about that if you've been trained on NERSC Spin.)
@@ -249,9 +242,6 @@ where you cut and paste the full ugly pod name from the output of `get all` or `
 After each step, it's worth running a `rancher kubectl get...` command to make sure that the thing you created or started is working.  There are lots of reasons why things can fail, some of which aren't entirely under your control (e.g. servers that docker images are pulled from).
 
 - Create the two persistent volume claims.  There are two files, `tom-postgres-pvc.yaml` and `tom-cassandra-pvc.yaml` that describe these.  If you're making a new deployment somewhere, you *will* need to edit them (so that things like "namespace" and "workloadselector" are consistent with everything else you're doing).  Be very careful with these files, as you stand a chance of blowing away the existing TOM database if you do the wrong thing.
-
-- Verify that the persistent volume claims exist with
-  `rancher kubectl get pvc --namespace <namespace>`
 
 - Create the cassandra deployment.  (As of this writing, the cassandra database is actually not actively used, but the TOM won't start up without it being available.)  The YAML file is `tom-cassandra.yaml`
 
@@ -284,7 +274,19 @@ After each step, it's worth running a `rancher kubectl get...` command to make s
 
 - You then probably want to do things to copy users and populate databases and things....
 
-- Whenever making any changes to the code (which *might* include manual database manipulation, but hopefully doesn't), you need to tell the `gunicorn` web server on the tom-app pod to refresh itself.  Do this with a shell on that pod with `kill -HUP 1`.
+#### Updating the running code
+
+Whenever making any changes to the code (which *might* include manual database manipulation, but hopefully doesn't), you need to tell the `gunicorn` web server on the tom-app pod to refresh itself.  Do this with a shell on that pod with `kill -HUP 1`.
+
+#### Additional YAML files
+
+There are some additional `.yaml` files in the `spin_admin` directory for other services that are useful for the actual business of ELAsTiCC2:
+
+* `tom-send-alerts-cron.yaml` creates a cron job to send out alerts while the actual ELASTiCC2 campaign is running.  That file will need to be edited so that the `args` field has the right arguments to do what you want to do.
+
+* `tom-pgdump.yaml` creates a cron job that (as currently configured) does a weekly pg_dump of the postgres database, to the directory found under the `hostPath:` field underneath `volumes:`.
+
+(others)
 
 #### Removing it all from Spin
 
@@ -309,25 +311,26 @@ The django management command `elasticc/management/commands/brokerpoll.py` handl
 
 ### Streaming to ZADS
 
-The django management command `elasticc/management/commands/send_elasticc_alerts.py` is able to construct avro alerts from the tables in the database, and send those avro alerts on to a kafka server.
+The django management command `elasticc2/management/commands/send_elasticc2_alerts.py` is able to construct avro alerts from the tables in the database, and send those avro alerts on to a kafka server.  This command is run in the cron job described by `spin_admin/tom-send-alerts-cron.yaml`.
 
 ### Fake broker
 
-In the `LSSTDESC/elasticc` archive, under the `stream-to-zads` directory, there is a script `fakebroker.py`.  This is able to read ELaSTiCC alerts from one kafka server, construct broker messages (which are the right structure, but have no real thought behind the classifications), and send those broker messages on to another kafka server.
+In the `LSSTDESC/elasticc` archive, under the `stream-to-zads` directory, there is a script `fakebroker.py`.  This is able to read ELaSTiCC alerts from one kafka server, construct broker messages (which are the right structure, but have no real thought behind the classifications), and send those broker messages on to another kafka server.  It's run as aprt of the test suite (see below).
 
 
 ## Testing
 
-The `tests` subdirectory has tests.  They don't test the basic TOM functionality; they test the DESC stuff that we've added on top of the TOM.  (The hope is that the TOM passes its own tests internally.)  Currently, tests are still being written, so much of the functionality doesn't have any tests.
+The `tests` subdirectory has tests.  They don't test the basic TOM functionality; they test the DESC stuff that we've added on top of the TOM.  (The hope is that the TOM passes its own tests internally.)  Currently, tests are still being written, so much of the functionality doesn't have any tests, sadly.  One key important test, though, is the one that verifies that the flow of alerts from TOM to kafka server, and back from broker's kafka servers to the TOM, or posted to the TOM via the API that AMPEL uses, works.
 
 The tests are designed to run inside the framework described by the `docker-compose.yaml` file.  Tests of the functionality require several different services running:
 
   * two kafka services (zookeeper and server)
   * a backend postgres service
+  * a backend cassandra service
   * the TOM web server
   * a fake broker (to ingest alerts and produce broker classifications for testing purposes)
   * a process polling the fake broker for classifications to stick into the tom
-  * a client machine on which to run the tests
+  * a client container on which to run the tests
 
 The `docker-compose.yaml` file has an additional service `createdb` that creates the database tables once the postgres server is up; subsequent services don't start until that service is finished.  It starts up one or two different client services, based on how you run it; either one to automatedly run all the tests (which can potentially take a very long time), or one to provice a shell host where you can manually run individual tests or poke about.
 
