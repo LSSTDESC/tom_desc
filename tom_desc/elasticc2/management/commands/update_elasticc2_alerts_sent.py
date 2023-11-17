@@ -25,8 +25,7 @@ _logger.setLevel( logging.INFO )
 
 class Command(BaseCommand):
     help = 'Generate alert stream rate histograms'
-    destdir = _rundir / "../../static/elasticc2/alertstreamhists"
-    outdir = destdir.parent / f'{destdir.name}_working'
+    outdir = _rundir / "../../static/elasticc2/alertstreamhists"
 
     
     def add_arguments( self, parser) :
@@ -40,8 +39,13 @@ class Command(BaseCommand):
                              help='Wipe out the storage directory putting new plots there.' )
 
     def handle( self, *args, **options ):
-        self.destdir.mkdir( parents=True, exist_ok=True )
         self.outdir.mkdir( parents=True, exist_ok=True )
+
+        if options[ 'scorched_earth' ]:
+            _logger.warning( "Wiping out current plot directory" )
+            for f in self.outdir.iterdir():
+                if f.is_file():
+                    f.unlink()
 
         starthour = int( options['hour'] )
         datematch = re.compile( '^(\d{4})-(\d{2})-(\d{2})$' )
@@ -63,11 +67,13 @@ class Command(BaseCommand):
         # Jump through hoops to get access to the psycopg2 connection from django
         conn = django.db.connection.cursor().connection
 
+        ndid = 0
         with conn.cursor( cursor_factory=psycopg2.extras.RealDictCursor ) as cursor:
             curdate = start
             while curdate <= end:
                 fpath = self.outdir / f"{curdate.year:04d}-{curdate.month:02d}-{curdate.day:02d}.svg"
                 if not fpath.exists():
+                    ndid += 1
                     _logger.info( f"Generating {fpath.name}" )
 
                     searchtime = datetime.datetime( curdate.year, curdate.month, curdate.day, starthour )
@@ -104,16 +110,8 @@ class Command(BaseCommand):
                     
                 curdate += datetime.timedelta( days=1 )
 
-        if options[ 'scorched_earth' ]:
-            _logger.warning( "Wiping out current plot directory" )
-            for f in self.destdir.iterdir():
-                if f.is_file():
-                    f.unlink()
-
-        _logger.info( "Moving files from working location to final location" )
-        for f in self.outdir.iterdir():
-            if f.is_file():
-                shutil.move( f, self.destdir )
-
-        _logger.info( "Done; installing statics." )
-        django.core.management.call_command( 'collectstatic', '--clear', '--noinput' )
+        if ndid == 0:
+            _logger.info( "No new plots generated." )
+        else:
+            _logger.info( "Done; installing statics." )
+            django.core.management.call_command( 'collectstatic', '--clear', '--noinput' )
