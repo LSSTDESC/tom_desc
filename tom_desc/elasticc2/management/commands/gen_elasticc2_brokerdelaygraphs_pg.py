@@ -4,6 +4,7 @@ import re
 import math
 import copy
 import pathlib
+import shutil
 import traceback
 import time
 import datetime
@@ -50,7 +51,8 @@ def calcbucks( bucketleft, bucketright, dbucket ):
     
 class Command(BaseCommand):
     help = 'Generate broker time delay graphs'
-    outdir = _rundir / "../../static/elasticc2/brokertiminggraphs"
+    destdir = _rundir / "../../static/elasticc2/brokertiminggraphs"
+    outdir = destdir.parent / f'{destdir.name}_working'
 
     def add_arguments( self, parser) :
         parser.add_argument( "--t0", default="2023-10-16",
@@ -63,8 +65,8 @@ class Command(BaseCommand):
         whichtitle = { 'full': "Orig. Alert to Tom Ingestion",
                        'broker': "Broker Delay",
                        'tom': "Tom Delay" }
-        
-        fig = pyplot.figure( figsize=(18,4), tight_layout=True )
+
+        fig = pyplot.figure( figsize=(18,4.5), tight_layout=True )
         for i, which in enumerate( [ 'full', 'broker', 'tom' ] ):
             subdf = metasubdf.xs( ( which ), level='which' )
             ax = fig.add_subplot( 1, 3, i+1 )
@@ -94,10 +96,19 @@ class Command(BaseCommand):
         for broker in brokers:
             for week in weeks:
                 subdf = self.brokerdf.xs( ( broker, week ), level=( 'broker', 'week' ) )
+                justfull = subdf.xs( 'full', level='which' )
                 if week == 'cumulative':
-                    suptitle = broker
+                    suptitle = ( f'{broker}\n'
+                                 f'{int(justfull["count"].sum())} classifications '
+                                 f'for {self.totalerts} alerts '
+                                 f'({(int(justfull["count"].sum()) / self.totalerts):.2f})'
+                                )
                 else:
-                    suptitle = f"{broker}, {week} UTC"
+                    suptitle = ( f"{broker}, {week} UTC\n"
+                                 f'{int(justfull["count"].sum())} classifications '
+                                 f'for {self.weekcount[week]} alerts '
+                                 f'({(int(justfull["count"].sum()) / self.weekcount[week]):.2f})'
+                                )
                 outfile = self.outdir / f'{broker}-{week}.svg'
                 self.oneplot( subdf, suptitle, outfile )
 
@@ -105,19 +116,27 @@ class Command(BaseCommand):
                 for cferid in self.brokergroups[ broker ]:
                     if cferid not in cferids:
                         continue
-                    for i, which in enumerate( [ 'full', 'broker', 'tom' ] ):
-                        subdf = self.df.xs( ( cferid, week ), level=( 'cferid', 'week' ) )
-                        binfo = self.brokers[ cferid ]
-                        if week == 'cumulative':
-                            suptitle = ( f'{binfo["brokername"]} {binfo["brokerversion"]} '
-                                         f'{binfo["classifiername"]} {binfo["classifierparams"]} '
-                                         f'({binfo["classifier_id"]})' )
-                        else:
-                            suptitle = ( f'{binfo["brokername"]} {binfo["brokerversion"]} '
-                                         f'{binfo["classifiername"]} {binfo["classifierparams"]} '
-                                         f': {week} UTC' )
-                        outfile = self.outdir / f'{broker}_cferid{cferid}-{week}.svg'
-                        self.oneplot( subdf, suptitle, outfile )
+                    subdf = self.df.xs( ( cferid, week ), level=( 'cferid', 'week' ) )
+                    justfull = subdf.xs( 'full', level='which' )
+                    binfo = self.brokers[ cferid ]
+                    if week == 'cumulative':
+                        suptitle = ( f'{binfo["brokername"]} {binfo["brokerversion"]} '
+                                     f'{binfo["classifiername"]} {binfo["classifierparams"]} '
+                                     f'({binfo["classifier_id"]})\n'
+                                     f'{int(justfull["count"].sum())} classifications '
+                                     f'for {self.totalerts} alerts '
+                                     f'({(justfull["count"].sum() / self.totalerts):.2f})'
+                                    )
+                    else:
+                        suptitle = ( f'{binfo["brokername"]} {binfo["brokerversion"]} '
+                                     f'{binfo["classifiername"]} {binfo["classifierparams"]} '
+                                     f': {week} UTC\n'
+                                     f'{int(justfull["count"].sum())} classifications '
+                                     f'for {self.weekcount[week]} alerts '
+                                     f'({(justfull["count"].sum() / self.weekcount[week]):.2f})'
+                                    )
+                    outfile = self.outdir / f'{broker}_cferid{cferid}-{week}.svg'
+                    self.oneplot( subdf, suptitle, outfile )
                         
 
     def makedfs( self, weeklabs, brokernames, brokerids, bucketnums ):
@@ -146,7 +165,6 @@ class Command(BaseCommand):
         self.df.set_index( [ 'cferid', 'week', 'which', 'buck' ], inplace=True )
         self.brokerdf.set_index( [ 'broker', 'week', 'which', 'buck' ], inplace=True )
 
-
     def handle( self, *args, **options ):
         _logger.info( "Starting genbrokerdelaygraphs" )
 
@@ -174,10 +192,8 @@ class Command(BaseCommand):
                 updatetime = datetime.datetime.utcnow().date().isoformat()
 
                 self.outdir.mkdir( parents=True, exist_ok=True )
-                for f in self.outdir.iterdir():
-                    if f.is_file():
-                        f.unlink()
-                
+                self.destdir.mkdir( parents=True, exist_ok=True )
+
                 # Determine time buckets and weeks.  Although I'm not using the
                 # postgres width_bucket stuff any more, I did once upon a time,
                 # so there are vestigal definitions here.
@@ -204,6 +220,18 @@ class Command(BaseCommand):
                              f'{(w+dt).year:04d}-{(w+dt).month:02d}-{(w+dt).day:02d})' for w in weeks ]
 
                 with conn.cursor( cursor_factory=psycopg2.extras.RealDictCursor ) as cursor:
+                    # Count the total number of alerts
+                    self.weekcount = {}
+                    self.totalerts = 0
+                    for week, weeklab in zip( weeks, weeklabs ):
+                        _logger.info( f"Counting alerts in week {weeklab}" )
+                        cursor.execute( "SELECT COUNT(*) AS count FROM elasticc2_ppdbalert "
+                                        "WHERE alertsenttimestamp>=%(t0)s "
+                                        "  AND alertsenttimestamp<%(t1)s",
+                                        { 't0': week, 't1': week+dt } )
+                        self.weekcount[ weeklab ] = cursor.fetchone()['count']
+                        self.totalerts += self.weekcount[ weeklab ]
+                    
                     # Figure out which brokers we have
                     cursor.execute( 'SELECT * FROM elasticc2_brokerclassifier '
                                     'ORDER BY "brokername","brokerversion","classifiername","classifierparams"' )
@@ -242,8 +270,8 @@ class Command(BaseCommand):
                                                 "FROM elasticc2_brokermessage m "
                                                 "INNER JOIN elasticc2_ppdbalert a ON m.alert_id=a.alert_id "
                                                 "WHERE m.classifier_id=%(id)s "
-                                                "  AND descingesttimestamp >= %(t0)s "
-                                                "  AND descingesttimestamp < %(t1)s",
+                                                "  AND a.alertsenttimestamp >= %(t0)s "
+                                                "  AND a.alertsenttimestamp < %(t1)s",
                                                { 'id': cferid, # tuple( self.brokergroups[broker] ),
                                                  't0': week,
                                                  't1': week+dt }
@@ -314,12 +342,24 @@ class Command(BaseCommand):
             if updatetime is not None:
                 with open( self.outdir / "updatetime.txt", 'w' ) as ofp:
                     ofp.write( updatetime )
-            _logger.info( "All done." )
+
+            _logger.info( "Moving plots to destination" )
+            for f in self.destdir.iterdir():
+                if f.is_file():
+                    f.unlink()
+            for f in self.outdir.iterdir():
+                if f.is_file():
+                    shutil.move( f, self.destdir )
+                    
+            _logger.info( "Done; installing statics." )
+            django.core.management.call_command( 'collectstatic', '--clear', '--noinput' )
+
         except Exception as e:
             _logger.exception( e )
             _logger.exception( traceback.format_exc() )
             # import pdb; pdb.set_trace()
             raise e
+
         finally:
             if conn is not None:
                 conn.rollback()

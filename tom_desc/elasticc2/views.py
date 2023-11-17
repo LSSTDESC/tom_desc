@@ -190,28 +190,62 @@ class Elasticc2BrokerTimeDelayGraphs( LoginRequiredMixin, django.views.View, Bro
             context['updatetime'] = "(unknown)"
         files = list( graphdir.glob( "*.svg" ) )
         files.sort()
-        weekmatch = re.compile( '^(?P<base>.*)-(?P<trange>\[\d{4}-\d{2}-\d{2}\s*,\s*\d{4}-\d{2}-\d{2}\))\.svg$' )
-        summedmatch = re.compile( '^(?P<base>.*)-cumulative\.svg$' )
+        cferweekmatch = re.compile( '^(?P<base>.*)_cferid(?P<cfer>\d+)-'
+                                    '(?P<trange>\[\d{4}-\d{2}-\d{2}\s*,\s*\d{4}-\d{2}-\d{2}\))\.svg$' )
+        cfersummedmatch = re.compile( '^(?P<base>.*)_cferid(?P<cfer>\d+)-cumulative.svg' )
+        brokerweekmatch = re.compile( '^(?P<base>.*)-(?P<trange>\[\d{4}-\d{2}-\d{2}\s*,\s*\d{4}-\d{2}-\d{2}\))\.svg$' )
+        brokersummedmatch = re.compile( '^(?P<base>.*)-cumulative\.svg$' )
+
         brokers = set()
         for fname in files:
-            match = summedmatch.search( fname.name )
+            match = cfersummedmatch.search( fname.name )
+            if match is not None:
+                continue
+            match = brokersummedmatch.search( fname.name )
             if match is not None:
                 brokers.add( match.group('base') )
         brokers = list(brokers)
         brokers.sort()
 
+        cfers = { b: set() for b in brokers }
+        for fname in files:
+            match = cfersummedmatch.search( fname.name )
+            if match is not None:
+                cfers[ match.group('base') ].add( match.group('cfer') )
+        for b in brokers:
+            cfers[b] = list( cfers[b] )
+            cfers[b].sort()
+
+        # ****
+        # sys.stderr.write( f"brokers = {json.dumps( brokers, indent=4 )}\n" )
+        # sys.stderr.write( f"cfers = {json.dumps( cfers, indent=4 )}\n" )
+        # ****
+            
         context['brokers'] = {}
 
         for broker in brokers:
             context['brokers'][broker] = { 'sum': f'{broker}-cumulative.svg', 'weeks': {} }
             for fname in files:
-                match = weekmatch.search( fname.name )
-                if ( match is not None ) and ( match.group(1) == broker ):
+                match = brokerweekmatch.search( fname.name )
+                if ( match is not None ) and ( match.group('base') == broker ):
                     week = match.group('trange')
                     context['brokers'][broker]['weeks'][week] = fname.name
+            context['brokers'][broker]['cfers'] = { c: { 'sum': None, 'weeks': {} } for c in cfers[broker] }
+            for fname in files:
+                match = cferweekmatch.search( fname.name )
+                if ( match is not None ) and ( match.group('base') == broker ):
+                    cfer = match.group('cfer')
+                    week = match.group('trange')
+                    context['brokers'][broker]['cfers'][cfer]['weeks'][week] = fname.name
+                    continue
+                match = cfersummedmatch.search( fname.name )
+                if ( match is not None ) and ( match.group('base') == broker ):
+                    cfer = match.group('cfer')
+                    context['brokers'][broker]['cfers'][cfer]['sum'] = fname.name
+                    
 
         # ****
-        # sys.stderr.write( f"context = {context}\n" )
+        # sys.stderr.write( f"context = {json.dumps( context, indent=4 )}\n" )
         # ****
         return HttpResponse( templ.render( context, request ) )
 

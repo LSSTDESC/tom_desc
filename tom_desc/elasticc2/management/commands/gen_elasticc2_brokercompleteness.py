@@ -4,6 +4,7 @@ import re
 import math
 import copy
 import pathlib
+import shutil
 import traceback
 import time
 import datetime
@@ -34,8 +35,9 @@ _logger.setLevel( logging.DEBUG )
 
 class Command(BaseCommand):
     help = 'Generate broker completeness graphs'
-    outdir = ( _rundir / "../../static/elasticc2/brokercompleteness" ).resolve()
-
+    destdir = ( _rundir / "../../static/elasticc2/brokercompleteness" ).resolve()
+    outdir = destdir.parent / f'{destdir.name}_working'
+    
 
     def add_arguments( self, parser ):
         parser.add_argument( "--t0", default="2023-10-16",
@@ -44,25 +46,13 @@ class Command(BaseCommand):
                              help="Last UTC day to look at (YYYY-MM-DD) (default: 2023-10-19)" )
         parser.add_argument( "--dt", default=7, type=int, help="Step in days between subdivided graphs (default: 7)" )
         parser.add_argument( "--bardt", default=24, type=int, help="Step in hours between bars( default: 24)" )
-        parser.add_argument( "--wipe", default=False, action='store_true',
-                             help="Wipe out output directory before starting." )
         parser.add_argument( "--explain", default=False, action='store_true', help="Show EXPLAIN ANALYZE on queries" )
 
     def handle( self, *args, **options ):
         _logger.info( "Starting gen_elasticc2_brokercompleteness" )
 
-        if not self.outdir.is_dir():
-            if self.outdir.exists():
-                raise FileExistsError( f"{self.outdir} exists but is not a directory!" )
-            self.outdir.mkdir( parents=True, exist_ok=True )
-
-        if options['wipe']:
-            _logger.info( f"Wiping out {self.outdir}" )
-            for f in self.outdir.glob( '*.svg' ):
-                f.unlink()
-            f = self.outdir / "updatetime.txt"
-            if f.exists():
-                f.unlink()
+        self.outdir.mkdir( parents=True, exist_ok=True )
+        self.destdir.mkdir( parents=True, exist_ok=True )
 
         grapht0 = pytz.utc.localize( datetime.datetime.fromisoformat( options['t0'] ) )
         grapht1 = pytz.utc.localize( datetime.datetime.fromisoformat( options['t1'] ) )
@@ -193,6 +183,16 @@ class Command(BaseCommand):
                     finally:
                         grapht += graphdt
 
+            _logger.info( "Moving plots to destination" )
+            for f in self.destdir.iterdir():
+                if f.is_file():
+                    f.unlink()
+            for f in self.outdir.iterdir():
+                if f.is_file():
+                    shutil.move( f, self.destdir )
+                    
+            _logger.info( "Done; installing statics." )
+            django.core.management.call_command( 'collectstatic', '--clear', '--noinput' )
 
         except Exception as e:
             _logger.exception( e )

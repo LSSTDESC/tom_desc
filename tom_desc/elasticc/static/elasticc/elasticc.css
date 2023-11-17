@@ -14,3 +14,7 @@ li.exbelow { border-bottom: 1ex }
 
 .sup { vertical-align: super; font-size: 66% }
 .sub { vertical-align: sub; font-size: 66% }
+
+div.heavyindent { border: 4px inset #808080; padding: 4px }
+div.heavyindent img { width: 100% }
+

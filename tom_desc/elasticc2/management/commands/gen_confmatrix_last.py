@@ -1,5 +1,6 @@
 import sys
 import pathlib
+import shutil
 import logging
 import datetime
 import traceback
@@ -29,7 +30,8 @@ _logger.setLevel( logging.DEBUG )
 
 class Command(BaseCommand):
     help = "Generate confusion matrices using latest classification from each classifier"
-    outdir = ( _rundir / "../../static/elasticc2/confmatrix_lastclass" ).resolve()
+    destdir = ( _rundir / "../../static/elasticc2/confmatrix_lastclass" ).resolve()
+    outdir = destdir.parent / f'{destdir.name}_working'
 
     @numpy.vectorize
     def conf_annotation( count, fraction ):
@@ -43,18 +45,8 @@ class Command(BaseCommand):
     def handle( self, *args, **options ):
         _logger.info( "Starting gen_confmatrix_last" )
 
-        if not self.outdir.is_dir():
-            if self.outdir.exists():
-                raise FileExistsError( f"{self.outdir} exists but is not a directory!" )
-            self.outdir.mkdir( parents=True, exist_ok=True )
-
-        # if options['wipe']:
-        #     _logger.info( f"Wiping out {self.outdir}" )
-        #     for f in self.outdir.glob( '*.svg' ):
-        #         f.unlink()
-        #     f = self.outdir / "updatetime.txt"
-        #     if f.exists():
-        #         f.unlink()
+        self.outdir.mkdir( parents=True, exist_ok=True )
+        self.destdir.mkdir( parents=True, exist_ok=True )
 
         conn = None
         # Jump through hoops to get access to the psycopg2 connection from django
@@ -183,6 +175,17 @@ class Command(BaseCommand):
                 pyplot.close( fig )
                 _logger.info( f"Done with {brokerdesc}" )
                 
+            _logger.info( "Moving plots to destination" )
+            for f in self.destdir.iterdir():
+                if f.is_file():
+                    f.unlink()
+            for f in self.outdir.iterdir():
+                if f.is_file():
+                    shutil.move( f, self.destdir )
+
+            _logger.info( "Done; installing statics." )
+            django.core.management.call_command( 'collectstatic', '--clear', '--noinput' )
+
         except Exception as e:
             _logger.error( traceback.format_exc() )
             import pdb; pdb.set_trace()

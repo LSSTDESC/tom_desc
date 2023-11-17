@@ -1,6 +1,7 @@
 import sys
 import re
 import pathlib
+import shutil
 import datetime
 import logging
 import psycopg2
@@ -24,8 +25,10 @@ _logger.setLevel( logging.INFO )
 
 class Command(BaseCommand):
     help = 'Generate alert stream rate histograms'
-    outdir = _rundir / "../../static/elasticc2/alertstreamhists"
+    destdir = _rundir / "../../static/elasticc2/alertstreamhists"
+    outdir = destdir.parent / f'{destdir.name}_working'
 
+    
     def add_arguments( self, parser) :
         parser.add_argument( '--start', default='2023-07-05',
                              help='YYYY-MM-DD of first day to look at (default: 2023-07-05)' )
@@ -34,17 +37,12 @@ class Command(BaseCommand):
         parser.add_argument( '--hour', default=0,
                              help='UTC Hour where the "day" starts (default: 0)' )
         parser.add_argument( '--scorched-earth', action='store_true', default=False,
-                             help='Wipe out the storage directory before starting.' )
+                             help='Wipe out the storage directory putting new plots there.' )
 
     def handle( self, *args, **options ):
+        self.destdir.mkdir( parents=True, exist_ok=True )
         self.outdir.mkdir( parents=True, exist_ok=True )
 
-        if options[ 'scorched_earth' ]:
-            _logger.warning( "Wiping out current plot directory" )
-            for f in self.outdir.iterdir():
-                if f.is_file():
-                    f.unlink()
-        
         starthour = int( options['hour'] )
         datematch = re.compile( '^(\d{4})-(\d{2})-(\d{2})$' )
         match = datematch.search( options['start'] )
@@ -106,4 +104,16 @@ class Command(BaseCommand):
                     
                 curdate += datetime.timedelta( days=1 )
 
+        if options[ 'scorched_earth' ]:
+            _logger.warning( "Wiping out current plot directory" )
+            for f in self.destdir.iterdir():
+                if f.is_file():
+                    f.unlink()
+
+        _logger.info( "Moving files from working location to final location" )
+        for f in self.outdir.iterdir():
+            if f.is_file():
+                shutil.move( f, self.destdir )
+
+        _logger.info( "Done; installing statics." )
         django.core.management.call_command( 'collectstatic', '--clear', '--noinput' )

@@ -46,20 +46,44 @@ ELAsTiCC2 Broker Time Delays
 </ul>
 
 {% for broker,brokerdata in brokers.items %}
-  <hr>
+<hr>
+<div class="heavyindent">
   <h3>{{ broker }}</h3>
-  <img src="{% static 'elasticc2/brokertiminggraphs' %}/{{ brokerdata.sum }}"
-       width=1200 alt=["{{ broker }}"]>
-  <h4><button id="{{ broker }}button"
-              onclick="hideOrShow('{{ broker }}button', '{{ broker }}div')">Show
+  <img src="{% static 'elasticc2/brokertiminggraphs' %}/{{ brokerdata.sum }}" alt=["{{ broker }}"]>
+  <br>
+  <h4><button id="hideshow_{{ broker }}_cfers_button"
+              onclick="hideOrShow('hideshow_{{ broker }}_cfers_button',
+                       'hideshow_{{ broker }}_cfers_div')">Show
+    </button> subdivided by individual classifiers</h4>
+  <div id="hideshow_{{ broker }}_cfers_div" class="heavyindent" style="display: none">
+    {% for cfer,cferdata in brokerdata.cfers.items %}
+    <img src="{% static 'elasticc2/brokertiminggraphs' %}/{{ cferdata.sum }}" alt="[ {{ broker }} - {{ cfer }} ]">
+    <br>
+    <h4><button id="hideshow_{{ broker }}_{{ cfer }}_weeks_button"
+                onclick="hideOrShow('hideshow_{{ broker }}_{{ cfer }}_weeks_button',
+                         'hideshow_{{ broker }}_{{ cfer }}_weeks_div')">Show
     </button> subdivided by time</h4>
-  <div id="{{ broker }}div" style="display: none">
-    {% for week, fname in brokerdata.weeks.items %}
-      <p><b>{{broker}}, {{ week }} UTC:</b></p>
+    <div id="hideshow_{{ broker }}_{{ cfer }}_weeks_div" class="heavyindent" style="display: none">
+      {% for week, fname in cferdata.weeks.items %}
       <img src="{% static 'elasticc2/brokertiminggraphs' %}/{{ fname }}"
-           width=1200 alt="[ {{ broker }} {{ week }} ]" >
+           alt="[ {{ broker }} - {{ cfer }} {{ week }} ]">
+      <br>
+      {% endfor %}
+    </div>
     {% endfor %}
   </div>
+      
+  <h4><button id="hideshow_{{ broker }}_weeks_button"
+              onclick="hideOrShow('hideshow_{{ broker }}_weeks_button',
+                       'hideshow_{{ broker }}_weeks_div')">Show
+    </button> subdivided by time</h4>
+  <div id="hideshow_{{ broker }}_weeks_div" class="heavyindent" style="display: none">
+    {% for week, fname in brokerdata.weeks.items %}
+      <img src="{% static 'elasticc2/brokertiminggraphs' %}/{{ fname }}" alt="[ {{ broker }} {{ week }} ]" >
+      <br>
+    {% endfor %}
+  </div>
+</div>
 {% endfor %}
 
 {% endblock %}
