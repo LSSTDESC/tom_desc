@@ -41,7 +41,7 @@ class Command(BaseCommand):
         else:
             count_str = f'{count:.3g}'
         return f'{percent}%\n{count_str}'
-    
+
     def handle( self, *args, **options ):
         _logger.info( "Starting gen_confmatrix_last" )
 
@@ -70,7 +70,7 @@ class Command(BaseCommand):
             cursor.execute( "SELECT classid,gentype,description FROM elasticc2_gentypeofclassid "
                             "ORDER BY classid" )
             tmp = pandas.DataFrame( cursor.fetchall() )
-            
+
             nogentypeclasses = tmp[ tmp['gentype'].isnull() ].set_index( 'classid' )
             gentypeclasses = tmp[ ~tmp['gentype'].isnull() ]
             trueclasses = pandas.DataFrame( gentypeclasses.groupby( 'classid' ).agg( list )[ 'gentype' ] )
@@ -90,12 +90,12 @@ class Command(BaseCommand):
                                f'{cfer["classifiername"]} {cfer["classifierparams"]}' )
 
                 massivedf = None
-                
+
                 for trueclass in trueclasses.index.values:
                     if not isinstance( trueclasses.loc[ trueclass, 'gentype' ], list ):
                         continue
                     _logger.info( f"Doing true type {trueclasses.loc[trueclass,'description']} for {brokerdesc}" )
-                    
+
                     q = ( "SELECT DISTINCT ON ( a.diaobject_id ) "
                           "  a.diaobject_id,m.classid,m.probability "
                           "FROM elasticc2_ppdbalert a "
@@ -130,7 +130,7 @@ class Command(BaseCommand):
                     tmpdf[ 'class' ] = tmpdf[ 'classid' ].apply( lambda x : trueclasses.loc[ x, 'description' ] )
                     tmpdf.drop( 'classid', axis=1 )
                     tmpdf[ 'trueclass' ] = trueclasses.loc[ trueclass, 'description' ]
-                    
+
                     if massivedf is None:
                         massivedf = tmpdf
                     else:
@@ -139,7 +139,6 @@ class Command(BaseCommand):
                 _logger.info( f"Building confidence matrix for {brokerdesc}" )
                 countmatrix = sklearn.metrics.confusion_matrix( massivedf['trueclass'], massivedf['class'],
                                                                 labels=trueclasses.description )
-
 
                 # Filter out empty rows and columns
                 rowkeeps = []
@@ -156,25 +155,28 @@ class Command(BaseCommand):
                 countmatrix = countmatrix[ rowkeeps[:, numpy.newaxis], colkeeps[numpy.newaxis, :] ]
                 xlabels = trueclasses.description.values[ colkeeps ]
                 ylabels = trueclasses.description.values[ rowkeeps ]
-                    
-                # Normalize countmatrix by true type
-                # (Do axis=1 to normalize by predicted type)
-                fracmatrix = countmatrix / countmatrix.sum( axis=0 )
 
-                annotations = self.conf_annotation( countmatrix, fracmatrix )
+                for axnorm in range(0,2):
+                    # axis=0 is normalize by predicted type (I think)
+                    # axis=1 is normalize by true type
+                    if axnorm == 1:
+                        fracmatrix = countmatrix / countmatrix.sum( axis=axnorm )[ :, numpy.newaxis ]
+                    else:
+                        fracmatrix = countmatrix / countmatrix.sum( axis=axnorm )
+                    annotations = self.conf_annotation( countmatrix, fracmatrix )
 
-                fig = pyplot.figure( figsize=(10, 10), tight_layout=True )
-                ax = fig.add_subplot( 1, 1, 1 )
-                seaborn.heatmap( fracmatrix, ax=ax, cmap='Blues', vmin=0, vmax=1,
-                                 annot=annotations, fmt='s', annot_kws={"fontsize": 6},
-                                 xticklabels=xlabels, yticklabels=ylabels )
-                ax.set_xlabel( "Predicted Class", fontsize=14 )
-                ax.set_ylabel( "True Class", fontsize=14 )
-                ax.set_title( f"{brokerdesc}\nBased on latest source classified", fontsize=18 )
-                fig.savefig( self.outdir / f'{cferid}.svg' )
-                pyplot.close( fig )
+                    fig = pyplot.figure( figsize=(10, 10), tight_layout=True )
+                    ax = fig.add_subplot( 1, 1, 1 )
+                    seaborn.heatmap( fracmatrix, ax=ax, cmap='Blues', vmin=0, vmax=1,
+                                     annot=annotations, fmt='s', annot_kws={"fontsize": 6},
+                                     xticklabels=xlabels, yticklabels=ylabels )
+                    ax.set_xlabel( "Predicted Class", fontsize=14 )
+                    ax.set_ylabel( "True Class", fontsize=14 )
+                    ax.set_title( f"{brokerdesc}\nBased on latest source classified", fontsize=18 )
+                    fig.savefig( self.outdir / f'{cferid}_axnorm{axnorm}.svg' )
+                    pyplot.close( fig )
                 _logger.info( f"Done with {brokerdesc}" )
-                
+
             _logger.info( "Moving plots to destination" )
             for f in self.destdir.iterdir():
                 if f.is_file():
@@ -188,10 +190,11 @@ class Command(BaseCommand):
 
         except Exception as e:
             _logger.error( traceback.format_exc() )
-            import pdb; pdb.set_trace()
-            pass
-        
+            # import pdb; pdb.set_trace()
+            # pass
+            raise e
 
 
-                    
-            
+
+
+

@@ -19,26 +19,43 @@ ELAsTiCC2 Confusion Matrices
   the <i>latest</i> message we have from a given classifier.  (To
   be more precise: the latest source, i.e. observation, that that broker
   has classified for each object.)  From that message, whichever class
-  has the highest probability is considred to be the predicted class.</p>
-  
-{% for broker,brokerdata in brokers.items %}
-  <hr>
-  <h2>{{ broker }}</h2>
-  <h4><button id="{{ broker }}button"
-              onclick="hideOrShow('{{ broker }}button', '{{ broker }}div')">Show</button></h4>
-  <div id="{{ broker }}div", style="display: none">
-    {% for brokerversion, brokerversiondata in brokerdata.items %}
-    <h3>{{ broker }} {{ brokerversion }}</h3>
-      {% for classifiername, classifiernamedata in brokerversiondata.items %}
-      <h4>{{ broker }} {{ brokerversion }} {{ classifiername }}</h4>
-        {% for classifierparams, svg in classifiernamedata.items %}
-        <h5>{{ broker }} {{ brokerversion }} {{ classifiername }} {{ classifierparams }}</h5>
-          <img src="{% static 'elasticc2/confmatrix_lastclass/' %}{{ svg }}"
-               width=800, alt=[ "{{ broker }} {{ brokerversion }} {{ classifiername }} {{ classifierparams }} {{ timerange }} ]">
+  has the highest probability is considered to be the predicted class.</p>
+
+<p>The confusion matrices have two different normalizations.
+  "Normalized by predicted type" means that the percentages shown are
+  the percentage of the true type that had that predicted type (column
+  percentages sum to 100%).  "Normalized by true type" means that the
+  percentages are the percentage of the predicted type that have that true
+  type (row percentages sum to 100%).</p>
+
+{% for axnorm,axnormdata in axnorms.items %}
+  {% if axnorm == 1 %}
+    <h2>Normalized by predicted type</h2>
+  {% else %}
+    <h2>Normalized by true type</h2>
+  {% endif %}
+  {% for broker,brokerdata in axnormdata.items %}
+    <h3>{{ broker }}</h3>
+    <h4><button id="{{ broker }}_{{ axnorm }}button"
+                onclick="hideOrShow('{{ broker }}_{{ axnorm }}button', '{{ broker }}_{{ axnorm }}div')">
+        Show</button></h4>
+    <div id="{{ broker }}_{{ axnorm }}div" style="display: none">
+      {% for brokerversion, brokerversiondata in brokerdata.items %}
+      <h3>{{ broker }} {{ brokerversion }}</h3>
+        {% for classifiername, classifiernamedata in brokerversiondata.items %}
+        <h4>{{ broker }} {{ brokerversion }} {{ classifiername }}</h4>
+          {% for classifierparams, svg in classifiernamedata.items %}
+          <h5>{{ broker }} {{ brokerversion }} {{ classifiername }} {{ classifierparams }}</h5>
+            <img src="{% static 'elasticc2/confmatrix_lastclass/' %}{{ svg }}"
+                 width=800, alt=[ "{{ broker }} {{ brokerversion }} {{ classifiername }} {{ classifierparams }} {{ timerange }} ]">
+          {% endfor %}
         {% endfor %}
-      {% endfor %}   
-    {% endfor %}
-  </div>
+      {% endfor %}
+    </div>
+    <hr>
+  {% endfor %}
+  <hr>
 {% endfor %}
+
 
 {% endblock %}

@@ -106,7 +106,7 @@ class Elasticc2AdminSummary( PermissionRequiredMixin, django.views.View ):
 
         return HttpResponse( templ.render( context, request ) )
 
-# ======================================================================    
+# ======================================================================
 
 class Elasticc2AlertStreamHistograms( LoginRequiredMixin, django.views.View ):
     """Show histograms of streaming rate sending out ELAsTiCC2 alerts."""
@@ -220,7 +220,7 @@ class Elasticc2BrokerTimeDelayGraphs( LoginRequiredMixin, django.views.View, Bro
         # sys.stderr.write( f"brokers = {json.dumps( brokers, indent=4 )}\n" )
         # sys.stderr.write( f"cfers = {json.dumps( cfers, indent=4 )}\n" )
         # ****
-            
+
         context['brokers'] = {}
 
         for broker in brokers:
@@ -242,7 +242,7 @@ class Elasticc2BrokerTimeDelayGraphs( LoginRequiredMixin, django.views.View, Bro
                 if ( match is not None ) and ( match.group('base') == broker ):
                     cfer = match.group('cfer')
                     context['brokers'][broker]['cfers'][cfer]['sum'] = fname.name
-                    
+
 
         # ****
         # sys.stderr.write( f"context = {json.dumps( context, indent=4 )}\n" )
@@ -304,8 +304,8 @@ class Elasticc2ConfMatrixLatest( LoginRequiredMixin, django.views.View, BrokerSo
 
     def post( self, request, info=None ):
         templ = loader.get_template( "elasticc2/confmatrixlatest.html" )
-        context = { 'brokers': {} }
-        graphdir = pathlib.Path(__file__).parent / "static/elasticc2/confmatrixlatest"
+        context = { 'axnorms': {} }
+        graphdir = pathlib.Path(__file__).parent / "static/elasticc2/confmatrix_lastclass"
         graphdir.mkdir( exist_ok=True, parents=True )
 
         try:
@@ -316,16 +316,18 @@ class Elasticc2ConfMatrixLatest( LoginRequiredMixin, django.views.View, BrokerSo
 
         brokers = self.getbrokerstruct()
 
-        for brokername, brokerinfo in brokers.items():
-            context['brokers'][brokername] = {}
-            for brokerversion, brokerversioninfo in brokerinfo.items():
-                context['brokers'][brokername][brokerversion] = {}
-                for classifiername, classifierinfo in brokerversioninfo.items():
-                    context['brokers'][brokername][brokerversion][classifiername] = {}
-                    for cfer in classifierinfo:
-                        localcontext = context['brokers'][brokername][brokerversion][classifiername]
-                        classifierparams, cferid = cfer
-                        localcontext[classifierparams] = f"{cferid}.svg"
+        for axnorm in [ 1, 0 ]:
+            context['axnorms'][axnorm] = {}
+            for brokername, brokerinfo in brokers.items():
+                context['axnorms'][axnorm][brokername] = {}
+                for brokerversion, brokerversioninfo in brokerinfo.items():
+                    context['axnorms'][axnorm][brokername][brokerversion] = {}
+                    for classifiername, classifierinfo in brokerversioninfo.items():
+                        context['axnorms'][axnorm][brokername][brokerversion][classifiername] = {}
+                        for cfer in classifierinfo:
+                            localcontext = context['axnorms'][axnorm][brokername][brokerversion][classifiername]
+                            classifierparams, cferid = cfer
+                            localcontext[classifierparams] = f"{cferid}_axnorm{axnorm}.svg"
 
         return HttpResponse( templ.render( context, request ) )
 
