@@ -42,8 +42,8 @@ class Command(BaseCommand):
     def add_arguments( self, parser ):
         parser.add_argument( "--t0", default="2023-10-16",
                              help="First UTC day to look at (YYYY-MM-DD) (default: 2023-10-16)" )
-        parser.add_argument( "--t1", default="2023-10-19",
-                             help="Last UTC day to look at (YYYY-MM-DD) (default: 2023-10-19)" )
+        parser.add_argument( "--t1", default=None,
+                             help="Last UTC day to look at (YYYY-MM-DD) (default: current day)" )
         parser.add_argument( "--dt", default=7, type=int, help="Step in days between subdivided graphs (default: 7)" )
         parser.add_argument( "--bardt", default=24, type=int, help="Step in hours between bars( default: 24)" )
         parser.add_argument( "--explain", default=False, action='store_true', help="Show EXPLAIN ANALYZE on queries" )
@@ -55,7 +55,11 @@ class Command(BaseCommand):
         self.destdir.mkdir( parents=True, exist_ok=True )
 
         grapht0 = pytz.utc.localize( datetime.datetime.fromisoformat( options['t0'] ) )
-        grapht1 = pytz.utc.localize( datetime.datetime.fromisoformat( options['t1'] ) )
+        if options['t1'] is not None:
+            grapht1 = pytz.utc.localize( datetime.datetime.fromisoformat( options['t1'] ) )
+        else:
+            grapht1 = datetime.datetime.now( tz=pytz.utc )
+            grapht1 = pytz.utc.localize( datetime.datetime( grapht1.year, grapht1.month, grapht1.day ) )
         graphdt = datetime.timedelta( days=options['dt'] )
 
         conn = None

@@ -55,10 +55,10 @@ class Command(BaseCommand):
     outdir = destdir.parent / f'{destdir.name}_working'
 
     def add_arguments( self, parser) :
-        parser.add_argument( "--t0", default="2023-10-16",
-                             help="First day to look at (YYYY-MM-DD) (default: 2023-10-16)" )
-        parser.add_argument( "--t1", default="2023-10-19",
-                             help="One past the last day to look at (YYYY-MM-DD) (default: 2023-10-19)" )
+        parser.add_argument( "--t0", default="2023-11-11",
+                             help="First day to look at (YYYY-MM-DD) (default: 2023-11-11)" )
+        parser.add_argument( "--t1", default=None,
+                             help="One past the last day to look at (YYYY-MM-DD) (default: current day)" )
         parser.add_argument( "--dt", default=7, type=int, help="Step in days (default: 7)" )
 
     def oneplot( self, metasubdf, suptitle, outfile ):
@@ -209,7 +209,11 @@ class Command(BaseCommand):
                 # bucketleftedges = bucketleft + ( bucketnums - 1 ) * dbucket
                
                 t0 = pytz.utc.localize( datetime.datetime.fromisoformat( options['t0'] ) )
-                t1 = pytz.utc.localize( datetime.datetime.fromisoformat( options['t1'] ) )
+                if options['t1'] is not None:
+                    t1 = pytz.utc.localize( datetime.datetime.fromisoformat( options['t1'] ) )
+                else:
+                    t1 = datetime.datetime.now( tz=pytz.utc )
+                    t1 = pytz.utc.localize( datetime.datetime( t1.year, t1.month, t1.day ) )
                 dt = datetime.timedelta( days=options['dt'] )
                 weeks = []
                 week = t0
@@ -258,7 +262,7 @@ class Command(BaseCommand):
                     for broker in whichgroups:
                         for week, weeklab in zip( weeks, weeklabs ):
                             for cferid in self.brokergroups[broker]:
-                                _logger.info( f"Doing broker {broker} week {weeklab}..." )
+                                _logger.info( f"Doing broker {broker} classifier {cferid} week {weeklab}..." )
 
                                 cursor.execute( "SELECT "
                                                 "  EXTRACT(EPOCH FROM m.descingesttimestamp "

@@ -365,15 +365,15 @@ TOM_FACILITY_CLASSES = [
 ]
 
 TOM_ALERT_CLASSES = [
-    'tom_alerts.brokers.alerce.ALeRCEBroker',
+#    'tom_alerts.brokers.alerce.ALeRCEBroker',
 #    'tom_antares.antares.ANTARESBroker',
-    'tom_alerts.brokers.gaia.GaiaBroker',
-    'tom_alerts.brokers.lasair.LasairBroker',
+#    'tom_alerts.brokers.gaia.GaiaBroker',
+#    'tom_alerts.brokers.lasair.LasairBroker',
 #    'tom_alerts.brokers.mars.MARSBroker',
 #    'tom_alerts.brokers.scimma.SCIMMABroker',
-    'tom_alerts.brokers.scout.ScoutBroker',
-    'tom_alerts.brokers.tns.TNSBroker',
-    'tom_fink.fink.FinkBroker',
+#    'tom_alerts.brokers.scout.ScoutBroker',
+#    'tom_alerts.brokers.tns.TNSBroker',
+#    'tom_fink.fink.FinkBroker',
 #    'tom_pittgoogle.broker_stream_python.BrokerStreamPython',
 ]
 
