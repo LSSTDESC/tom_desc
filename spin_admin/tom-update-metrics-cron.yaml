@@ -24,7 +24,7 @@ spec:
           - command: [ '/bin/bash', '-c' ]
             args:
               - |
-                python manage.py update_elasticc2_alerts_sent --start 2023-11-11
+                python manage.py update_elasticc2_alerts_sent --start 2023-11-11 --endrel 0
                 python manage.py gen_elasticc2_brokerdelaygraphs_pg --t0 2023-11-11
                 python manage.py gen_confmatrix_last
                 python manage.py gen_elasticc2_brokercompleteness --t0 2023-11-11

@@ -32,8 +32,11 @@ class Command(BaseCommand):
         parser.add_argument( '--start', default='2023-07-05',
                              help='YYYY-MM-DD of first day to look at (default: 2023-07-05)' )
         parser.add_argument( '--end', default=None,
-                             help='YYYY-MM-DD of last day to look at (default: current day - 1)' )
-        parser.add_argument( '--hour', default=0,
+                             help='YYYY-MM-DD of last day to look at' )
+        parser.add_argument( '--endrel', default=-1,
+                             help=( 'Number of days relative to the current day to use as the end date. '
+                                    'Default -1.  Ignored if --end is specified.' ) )
+        parser.add_argument( '--hour', default=0, type=int,
                              help='UTC Hour where the "day" starts (default: 0)' )
         parser.add_argument( '--scorched-earth', action='store_true', default=False,
                              help='Wipe out the storage directory putting new plots there.' )
@@ -61,7 +64,7 @@ class Command(BaseCommand):
                 return
             end = datetime.date( int(match.group(1)), int(match.group(2)), int(match.group(3)) )
         else:
-            enddt = datetime.datetime.now() - datetime.timedelta( days=1 )
+            enddt = datetime.datetime.now() - datetime.timedelta( days=int(options['endrel']) )
             end = datetime.date( enddt.year, enddt.month, enddt.day )
         
         # Jump through hoops to get access to the psycopg2 connection from django
