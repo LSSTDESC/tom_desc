@@ -16,6 +16,10 @@ ELAsTiCC2 Streaming History
   hour to the ZADS server, from which brokers pull the alerts for
   classification.</p>
 
+{% autoescape off %}
+{{ updatestr }}
+{% endautoescape %}
+
 {% for week, days in weeks.items %}
   <p><button id="{{ week }}button"
              onclick="hideOrShow('{{ week }}button', '{{ week }}div')">Show

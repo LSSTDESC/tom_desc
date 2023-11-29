@@ -118,6 +118,36 @@ class Elasticc2AlertStreamHistograms( LoginRequiredMixin, django.views.View ):
         templ = loader.get_template( "elasticc2/alertstreamhists.html" )
         context = { 'weeks': {} }
 
+        timestampdir = pathlib.Path(__file__).parent / "static/elasticc2"
+        starttimefile = timestampdir / "alertsendstart"
+        finishedtimefile = timestampdir / "alertsendfinish"
+        flushedupdatetimefile = timestampdir / "alertssentupdate"
+        flushednumfile = timestampdir / "alertssent"
+        timestamps = {}
+        for stamp, path in zip( [ 'start', 'finish', 'flushtime', 'flushed'],
+                                 [ starttimefile, finishedtimefile, flushedupdatetimefile, flushednumfile ] ):
+            if path.exists():
+                with open( path, "r" ) as ifp:
+                    timestamps[ stamp ] = ifp.read()
+            else:
+                timestamps[ stamp ] = None
+        if timestamps['start'] is None:
+            updatestr = ''
+        else:
+            if timestamps['finish'] is not None:
+                updatestr = f"<p>Last streaming batch:</p><ul>"
+                updatestr += f"<li><b>Started:</b> {timestamps['start']}</li>"
+                updatestr += f"<li><b>Finished:</b> {timestamps['finish']}</li>"
+                updatestr += f"<li><b>Alerts Sent:</b> {timestamps['flushed']}</li>"
+                updatestr += "</ul>"
+            else:
+                updatestr = f"<p>Streaming in progress; for current batch:</p><ul>"
+                updatestr += f"<li><b>Started:</b> {timestamps['start']}</li>"
+                updatestr += f"<li><b>Last Status Update:</b> {timestamps['flushtime']}</li>"
+                updatestr += f"<li><b>Alerts Sent:</b> {timestamps['flushed']}</li>"
+                updatestr += "</ul>"
+        context['updatestr'] = updatestr
+        
         tmpldir = pathlib.Path(__file__).parent / "static/elasticc2/alertstreamhists"
         _logger.debug( f"Looking in directory {tmpldir}" )
         files = list( tmpldir.glob( "*.svg" ) )

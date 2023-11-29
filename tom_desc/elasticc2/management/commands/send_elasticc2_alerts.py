@@ -254,6 +254,11 @@ class Command(BaseCommand):
             self.logger.warn( f"{self.runningfile} exists, not starting." )
             return
 
+        starttimefile = pathlib.Path( __file__ ).parent.parent.parent / "static/elasticc2/alertsendstart"
+        finishedtimefile = pathlib.Path( __file__ ).parent.parent.parent / "static/elasticc2/alertsendfinish"
+        flushedupdatetimefile = pathlib.Path( __file__ ).parent.parent.parent / "static/elasticc2/alertssentupdate"
+        flushednumfile = pathlib.Path( __file__ ).parent.parent.parent / "static/elasticc2/alertssent"
+        
         # ...this doesn't seem to work inside a django management command.
         # The signals are never caught.
         # I hate that.  I wish there was a way to override it.
@@ -346,6 +351,13 @@ class Command(BaseCommand):
                 reconstructor = AlertReconstructor( self, pipe, options['alert_schema'] )
                 reconstructor.go()
 
+            if options[ 'do' ]:
+                with open( starttimefile, "w" ) as ofp:
+                    ofp.write( datetime.datetime.now().isoformat( ' ', timespec='seconds' ) )
+                finishedtimefile.unlink( missing_ok=True )
+                flushedupdatetimefile.unlink( missing_ok=True )
+                flushednumfile.unlink( missing_ok=True )
+
             freeprocs = set()
             busyprocs = set()
             donealerts = set()
@@ -432,6 +444,10 @@ class Command(BaseCommand):
                             t2 = time.perf_counter()
                             _flushtime += t1 - t0
                             _updatealertsenttime += t2 - t1
+                            with open( flushednumfile, "w" ) as ofp:
+                                ofp.write( str(totflushed) )
+                            with open( flushedupdatetimefile, "w" ) as ofp:
+                                ofp.write( datetime.datetime.now().isoformat( ' ', timespec='seconds' ) )
                         ids_produced = []
 
                 # self.logger.debug( f"{len(doneprocs)} finished, adding them back to freeprocs" )
@@ -453,6 +469,11 @@ class Command(BaseCommand):
                     t2 = time.perf_counter()
                     _flushtime += t1 - t0
                     _updatealertsenttime += t2 - t1
+                    with open( flushednumfile, "w" ) as ofp:
+                        ofp.write( str(totflushed) )
+                    with open( finishedtimefile, "w" ) as ofp:
+                        ofp.write( datetime.datetime.now().isoformat( ' ', timespec='seconds' ) )
+                    flushedupdatetimefile.unlink( missing_ok=True )
                 ids_produced = []
 
             # Tell all subprocesses to end

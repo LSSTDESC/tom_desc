@@ -118,6 +118,31 @@ services:
       timeout: 2s
       retries: 10
 
+  kafka-zookeeper:
+    image: registry.nersc.gov/m1727/raknop/kafka
+    build:
+      context: ../docker_kafka
+    healthcheck:
+      test: netcat -w 1 localhost 2181 || exit 1
+      interval: 5s
+      timeout: 10s
+      retries: 5
+    entrypoint: [ "bin/zookeeper-server-start.sh", "config/zookeeper.properties" ]
+
+  kafka-server:
+    depends_on:
+       kafka-zookeeper:
+         condition: service_healthy
+    image: registry.nersc.gov/m1727/raknop/kafka
+    build:
+      context: ../docker_kafka
+    healthcheck:
+      test: netcat -w 1 localhost 9092 || exit 1
+      interval: 5s
+      timeout: 10s
+      retries: 5
+    entrypoint: [ "bin/kafka-server-start.sh", "config/server.properties" ]
+      
 volumes:
   tomdbdata:
   tomcassandradata:

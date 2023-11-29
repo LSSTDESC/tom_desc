@@ -130,7 +130,7 @@ If you want to test the TOM out, you can deploy it on your local machine.  If yo
 
 * Run <code>git submodule update --init --recursive</code>.  There are a number of git submodules that have the standard TOM code.  By default, when you clone, git doesn't clone submodules, so do this in order to make sure all that stuff is there.  (Alternative, if instead of just <code>git clone...</code> you did <code>git clone --recurse-submodules ...</code>, then you've already taken care of this step.)  If you do a <code>git pull</code> later, you either need to do <code>git pull --recurse-submodules</code>, or do <code>git submodule --update --recursive</code> after your pull.</li>
 
-* Run <code>docker-compose up -d tom</code>.  This will use the <code>docker-compose.yml</code> file to either build or pull three images (the web server, the postgres server, and the cassandra server), and create three containers.  It will also create docker volumes named "tomdbdata" and "tomcassandradata" where postgres and cassandra respectively will store their contents, so that you can persist the databases from one run of the container to the next.</li>
+* Run <code>docker compose up -d tom</code>.  This will use the <code>docker-compose.yml</code> file to either build or pull three images (the web server, the postgres server, and the cassandra server), and create three containers.  It will also create docker volumes named "tomdbdata" and "tomcassandradata" where postgres and cassandra respectively will store their contents, so that you can persist the databases from one run of the container to the next.</li>
 
 * Database migrations are applied automatically as part of the docker compose setup, but you need to manually create the TOM superuser account so that you have something to log into.  The first time you run it for a given postgres volume, once the containers are up you need to run a shell on the server container with <code>docker compose exec -it tom /bin/bash</code>, and then run the command:
   - <code>python manage.py createsuperuser</code> (and answer the prompts)
@@ -146,7 +146,7 @@ If you want to test the TOM out, you can deploy it on your local machine.  If yo
 At this point, you should be able to connect to your running TOM at `localhost:8080`.
 
 
-If you ever run a server that exposes its interface to the outside web, you probably want to edit your local version of the file `secrets/django_secret_key`.  Don't commit anything sensitive to git, and especially don't upload it to github!  (There *are* postgres passwords in the github archive, which would seem to voilate this warning.  The reason we're not worried about that is that both in the docker-compose file, and as the server is deployed in production, the postgres server is not directly accessible from outside, but only from within the docker environment (or, for production, the Spin namespace). Of course, it would be better to add the additional layer of security of obfuscating those passwords, but, whatever.)
+If you ever run a server that exposes its interface to the outside web, you probably want to edit your local version of the file `secrets/django_secret_key`.  Don't commit anything sensitive to git, and especially don't upload it to github!  (There *are* postgres passwords in the github archive, which would seem to voilate this warning.  The reason we're not worried about that is that both in the docker compose file, and as the server is deployed in production, the postgres server is not directly accessible from outside, but only from within the docker environment (or, for production, the Spin namespace). Of course, it would be better to add the additional layer of security of obfuscating those passwords, but, whatever.)
 
 To shut down all the containers you started, just run
 ```
@@ -179,8 +179,8 @@ You will be prompted for the postgres password, which is "fragile".  (This postg
 
 Here are three files with a subset of ELAsTiCC2:
 * <a href="https://portal.nersc.gov/cfs/lsst/DESC_TD_PUBLIC/users/raknop/elasticc2_dump_10obj.sql">elasticc2_dump_10obj.sql</a> (128&nbsp;KiB — 10 objects, 97 sources, 2,029 forced sources, 97 alerts (48 sent), 332 broker messages)
-* <a href="https://portal.nersc.gov/cfs/lsst/DESC_TD_PUBLIC/users/raknop/elasticc2_dump_10obj.sql">elasticc2_dump_100obj.sql</a> (1.4&nbsp;MiB — 100 objects, 3,226 sources, 26,686 forced sources, 3,226 alerts (990 sent), 6,463 broker messages)
-* <a href="https://portal.nersc.gov/cfs/lsst/DESC_TD_PUBLIC/users/raknop/elasticc2_dump_100obj.sql">elasticc2_dump_100obj.sql</a> (14&nbsp;MiB — 1000 ojects, 27,888 sources, 230,370 forced sources, 27,888 alerts (10,167 sent), 66,740 broker messages)
+* <a href="https://portal.nersc.gov/cfs/lsst/DESC_TD_PUBLIC/users/raknop/elasticc2_dump_100obj.sql">elasticc2_dump_100obj.sql</a> (1.4&nbsp;MiB — 100 objects, 3,226 sources, 26,686 forced sources, 3,226 alerts (990 sent), 6,463 broker messages)
+* <a href="https://portal.nersc.gov/cfs/lsst/DESC_TD_PUBLIC/users/raknop/elasticc2_dump_1000obj.sql">elasticc2_dump_1000obj.sql</a> (14&nbsp;MiB — 1000 ojects, 27,888 sources, 230,370 forced sources, 27,888 alerts (10,167 sent), 66,740 broker messages)
 
 They have data from the following tables:
 * `elasticc2_ppdbdiaobject`
@@ -195,7 +195,7 @@ The 10, 100, or 1000 objects were chosen randomly.  As of this writing (2023-11-
 
 Save the file you download into the `tom_desc/admin_tools` subdirectory if your git checkout.  (This directory already exists.)
 
-For various reasons, the docker image for the Tom server is based on an older version of the Linux distribution (Devuan).  The postgres image is based on Daedalus, which as of this writing is the current stable version.  The restoration process requires `pg_restore` to have a version that's compatible with the postgres server, and for that reason you need to run a special shell just for this restoration process.  Start that shell with
+For various reasons, the docker image for the Tom server is based on an older version (Chimaera) of the Linux distribution (Devuan).  The postgres image is based on Daedalus, which as of this writing is the current stable version of Devuan.  The restoration process requires `pg_restore` to have a version that's compatible with the postgres server, and for that reason you need to run a special shell just for this restoration process.  Start that shell with
 ```
 docker compose up -d daedalus-shell
 ```
