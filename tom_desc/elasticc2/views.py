@@ -17,6 +17,8 @@ from django.template import loader
 
 import rest_framework
 
+import psycopg2.extras
+
 from elasticc2.models import PPDBDiaObject, PPDBDiaSource, PPDBDiaForcedSource, PPDBAlert, DiaObjectTruth
 from elasticc2.models import DiaObject, DiaSource, DiaForcedSource, BrokerClassifier, BrokerMessage
 from elasticc2.serializers import PPDBDiaObjectSerializer, PPDBDiaSourceSerializer, PPDBDiaForcedSourceSerializer
@@ -360,6 +362,42 @@ class Elasticc2ConfMatrixLatest( LoginRequiredMixin, django.views.View, BrokerSo
                             localcontext[classifierparams] = f"{cferid}_axnorm{axnorm}.svg"
 
         return HttpResponse( templ.render( context, request ) )
+
+
+class Elasticc2BrokerClassificationForTrueType( LoginRequiredMixin, django.views.View ):
+    """REST interface to show all classifications from a given classifier for a given true type
+
+    Call with brokerclassfortruetype/brokerid/truetype
+
+    where brokerid is the classifier_id and truetype is the gentype from the truth table.
+
+    Spits back JSON with a list of lists; the members of each individual list are:
+
+      midpinttai,filtername,psflux,snr,diasource_id,classid,probability,zcmb,peakmjd
+
+    where classid and probability are themselves lists.
+
+    """
+
+    def get( self, request, classifier_id, gentype ):
+        return self.post( request, classifier_id, gentype )
+
+    def post( self, request, classifier_id, gentype ):
+        # Jump through hoops to get the an actual postgres cursor
+        with django.db.connection.cursor().connection.cursor( cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+            cursor.execute( "SELECT s.midpointtai,s.filtername,s,psflux,s.snr,"
+                            "       m.diasource_id,m.classid,m.probability,t.zcmb,t.peakmjd "
+                            "FROM elasticc2_diaobjecttruth t "
+                            "INNER JOIN elasticc2_ppdbdiasource s ON t.diaobject_id=s.diaobject_id "
+                            "INNER JOIN elasticc2_brokermessage m ON s.diasource_id=m.diasource_id "
+                            "WHERE m.classifier_id=%(cls)s AND t.gentype=%(gentype)s "
+                            "ORDER BY s.diasource_id,s.midpointtai ",
+                            { 'cls': classifier_id, 'gentype': gentype } )
+            rows = list( cursor.fetchall() )
+            
+            
+
+    
 
 
 

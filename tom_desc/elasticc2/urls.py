@@ -21,6 +21,10 @@ urlpatterns = [
     path( 'brokercompleteness', views.Elasticc2BrokerCompletenessGraphs.as_view() ),
 
     path( 'confmatrixlatest', views.Elasticc2ConfMatrixLatest.as_view() ),
+
+    path( 'brokerclassfortruetype/<int:classifierid>/<int:gentype>/',
+          views.Elasticc2BrokerClassificationForTrueType.as_view(),
+          name='brokerclassfortruetype' ),
     
     path('brokermessage/<int:info>/', views.BrokerMessageView.as_view(), name='brokermesssage-int'),
     path('brokermessage/<path:info>/', views.BrokerMessageView.as_view(), name='brokermessage-path'),
