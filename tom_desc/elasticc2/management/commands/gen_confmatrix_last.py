@@ -33,6 +33,18 @@ class Command(BaseCommand):
     destdir = ( _rundir / "../../static/elasticc2/confmatrix_lastclass" ).resolve()
     outdir = destdir.parent / f'{destdir.name}_working'
 
+    def add_arguments( self, parser ):
+        parser.add_argument( '-b', '--just-do-broker', default=None, type=int,
+                             help=( "Just do the classifier with this id.  "
+                                    "Will save plot to CWD rather than standard location." ) )
+        parser.add_argument( '--start-mjd', default=None, type=float,
+                             help=( "Lowest mjd of sources to consider (default: back to beginning). "
+                                    "Ignored if just-do-broker isn't given" ) )
+        parser.add_argument( '--end-mjd', default=None, type=float,
+                             help=( "Highest mjd of sources to consider (default: no limit). "
+                                    "Ignored if just-do-broker isn't given" ) )
+
+
     @numpy.vectorize
     def conf_annotation( count, fraction ):
         percent = numpy.round( fraction * 100 )
@@ -64,6 +76,11 @@ class Command(BaseCommand):
             cursor.execute( "SELECT * FROM elasticc2_brokerclassifier "
                             "ORDER BY brokername, brokerversion, classifiername, classifierparams" )
             cfers = { r['classifier_id']: dict(r) for r in cursor.fetchall() }
+
+            if options['just_do_broker'] is not None:
+                if options['just_do_broker'] not in cfers.keys():
+                    raise ValueError( f"Can't find broker {options['just_do_broker']}" )
+                cfers = { options['just_do_broker'] : cfers[ options['just_do_broker'] ] }
 
             # Figure out true types
 
@@ -104,11 +121,19 @@ class Command(BaseCommand):
                           "INNER JOIN elasticc2_ppdbdiasource s ON a.diasource_id=s.diasource_id "
                           "WHERE a.alertsenttimestamp IS NOT NULL "
                           "  AND ot.gentype IN %(gentypes)s "
-                          "  AND m.classifier_id=%(cfer)s "
-                          "ORDER BY a.diaobject_id, s.midpointtai DESC" )
-                    cursor.execute( q, { 'gentypes': tuple( [ int(i) for i in
-                                                              trueclasses.loc[ trueclass, 'gentype' ] ] ),
-                                         'cfer': cferid } )
+                          "  AND m.classifier_id=%(cfer)s " )
+                    subst = { 'gentypes': tuple( [ int(i) for i in trueclasses.loc[ trueclass, 'gentype' ] ] ),
+                              'cfer': cferid }
+                    if options[ 'just_do_broker' ]:
+                        if options[ 'start_mjd' ] is not None:
+                            q += '  AND s.midpointtai>=%(startmjd)s '
+                            subst['startmjd'] = options['start_mjd']
+                        if options[ 'end_mjd' ]  is not None:
+                            q += '  AND s.midpointtai<=%(endmjd)s '
+                            subst['endmjd'] = options[ 'end_mjd' ]
+                    q += "ORDER BY a.diaobject_id, s.midpointtai DESC"
+                    cursor.execute( q, subst )
+                    _logger.debug( f"Query was:\n{cursor.query}" )
                     _logger.info( "...query run,fetching." )
                     # There's probably a python performance hit here, as psycopg2 wll
                     # make lists, and then we have to parse those lists back
@@ -173,20 +198,24 @@ class Command(BaseCommand):
                     ax.set_xlabel( "Predicted Class", fontsize=14 )
                     ax.set_ylabel( "True Class", fontsize=14 )
                     ax.set_title( f"{brokerdesc}\nBased on latest source classified", fontsize=18 )
-                    fig.savefig( self.outdir / f'{cferid}_axnorm{axnorm}.svg' )
+                    if options[ 'just_do_broker' ]:
+                        fig.savefig( _rundir / f'{cferid}_axnorm{axnorm}.svg' )
+                    else:
+                        fig.savefig( self.outdir / f'{cferid}_axnorm{axnorm}.svg' )
                     pyplot.close( fig )
                 _logger.info( f"Done with {brokerdesc}" )
 
-            _logger.info( "Moving plots to destination" )
-            for f in self.destdir.iterdir():
-                if f.is_file():
-                    f.unlink()
-            for f in self.outdir.iterdir():
-                if f.is_file():
-                    shutil.move( f, self.destdir )
+            if not options[ 'just_do_broker' ]:
+                _logger.info( "Moving plots to destination" )
+                for f in self.destdir.iterdir():
+                    if f.is_file():
+                        f.unlink()
+                for f in self.outdir.iterdir():
+                    if f.is_file():
+                        shutil.move( f, self.destdir )
 
-            _logger.info( "Done; installing statics." )
-            django.core.management.call_command( 'collectstatic', '--clear', '--noinput' )
+                _logger.info( "Done; installing statics." )
+                django.core.management.call_command( 'collectstatic', '--clear', '--noinput' )
 
         except Exception as e:
             _logger.error( traceback.format_exc() )
