@@ -127,11 +127,11 @@ class Command(BaseCommand):
                                    .set_index( [ 's.diasource_id', 'm.classid' ] ) )
 
                         # Make the "mean class probability" df
-                        classprobdf = ( cifydf[ [ 'relday', 'm.classid', 'm.probability' ] ]
+                        classprobdf = ( cifydf.reset_index().loc[ :, [ 'relday', 'm.classid', 'm.probability' ] ]
                                         .groupby( [ 'relday', 'm.classid' ] ).agg( numpy.average ) )
 
                         # Make the "max probability" df
-                        maxprobdf = ( cifydf[ [ 'relday', 'm.probability', 'm.classid' ] ]
+                        maxprobdf = ( cifydf.reset_index().loc[ :, [ 'relday', 'm.probability', 'm.classid' ] ]
                                       .sort_values( [ 'relday', 'm.probability' ] )
                                       .groupby( 'relday' )
                                       .agg( 'last' )[ 'm.classid' ] )
