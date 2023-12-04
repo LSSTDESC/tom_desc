@@ -17,10 +17,12 @@ from django.template import loader
 
 import rest_framework
 
+import pandas
 import psycopg2.extras
 
 from elasticc2.models import PPDBDiaObject, PPDBDiaSource, PPDBDiaForcedSource, PPDBAlert, DiaObjectTruth
 from elasticc2.models import DiaObject, DiaSource, DiaForcedSource, BrokerClassifier, BrokerMessage
+from elasticc2.models import ClassIdOfGentype
 from elasticc2.serializers import PPDBDiaObjectSerializer, PPDBDiaSourceSerializer, PPDBDiaForcedSourceSerializer
 
 # I tried inherting from the root logger, but it
@@ -149,7 +151,7 @@ class Elasticc2AlertStreamHistograms( LoginRequiredMixin, django.views.View ):
                 updatestr += f"<li><b>Alerts Sent:</b> {timestamps['flushed']}</li>"
                 updatestr += "</ul>"
         context['updatestr'] = updatestr
-        
+
         tmpldir = pathlib.Path(__file__).parent / "static/elasticc2/alertstreamhists"
         _logger.debug( f"Looking in directory {tmpldir}" )
         files = list( tmpldir.glob( "*.svg" ) )
@@ -363,6 +365,60 @@ class Elasticc2ConfMatrixLatest( LoginRequiredMixin, django.views.View, BrokerSo
 
         return HttpResponse( templ.render( context, request ) )
 
+# ======================================================================
+
+class Elasticc2ClassIds( LoginRequiredMixin, django.views.View ):
+
+    def get( self, *args, **kwargs ):
+        return self.post( *args, **kwargs )
+
+    def post( self, *args, **kwargs ):
+        with django.db.connection.cursor().connection.cursor( cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+            cursor.execute( "SELECT * FROM elasticc2_classidofgentype" )
+            classdf = pandas.DataFrame( cursor.fetchall() )
+
+            # I don't fully understand the future warning here...
+            # That means this will break with a future version of pandas.
+            classdf = ( classdf.groupby( [ 'classid', 'exactmatch', 'categorymatch',
+                                           'broadmatch', 'generalmatch' ] )['description', 'gentype' ]
+                        .aggregate( { 'description': 'first', 'gentype': list } )
+                        .reset_index()
+                        .set_index( 'classid' ) )
+
+            # Pull in the classids that aren't in the classidofgentype table
+            cursor.execute( "SELECT * FROM elasticc2_gentypeofclassid" )
+            tmpdf = pandas.DataFrame( cursor.fetchall() )
+            tmpdf = tmpdf[ ~tmpdf[ 'classid' ].isin( classdf.index.values ) ]
+            for i, row in tmpdf.iterrows():
+                classdf.loc[ row.classid ] = { 'description': row.description,
+                                               'gentype': [],
+                                               'exactmatch': False,
+                                               'categorymatch': False,
+                                               'broadmatch': False,
+                                               'generalmatch': False }
+            classdf.sort_index( inplace=True )
+            jsontxt = classdf.to_json( orient='index' )
+
+        return HttpResponse( jsontxt, content_type='application/json' )
+
+
+# ======================================================================
+
+class Elasticc2Classifiers( LoginRequiredMixin, django.views.View ):
+
+    def get( self, *args, **kwargs ):
+        return self.post( *args, **kwargs )
+
+    def post( self, *args, **kwargs ):
+        with django.db.connection.cursor().connection.cursor( cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+            cursor.execute( "SELECT classifier_id,brokername,brokerversion,classifiername,classifierparams "
+                            "FROM elasticc2_brokerclassifier" )
+            df = pandas.DataFrame( cursor.fetchall() )
+            df.set_index( 'classifier_id', inplace=True )
+        return HttpResponse( df.to_json( orient='index' ), content_type='application/json' )
+
+
+# ======================================================================
 
 class Elasticc2BrokerClassificationForTrueType( LoginRequiredMixin, django.views.View ):
     """REST interface to show all classifications from a given classifier for a given true type
@@ -379,27 +435,61 @@ class Elasticc2BrokerClassificationForTrueType( LoginRequiredMixin, django.views
 
     """
 
-    def get( self, request, classifier_id, gentype ):
-        return self.post( request, classifier_id, gentype )
+    def get( self, *args, **kwargs ):
+        return self.post( *args, **kwargs )
 
-    def post( self, request, classifier_id, gentype ):
-        # Jump through hoops to get the an actual postgres cursor
-        with django.db.connection.cursor().connection.cursor( cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-            cursor.execute( "SELECT s.midpointtai,s.filtername,s,psflux,s.snr,"
-                            "       m.diasource_id,m.classid,m.probability,t.zcmb,t.peakmjd "
-                            "FROM elasticc2_diaobjecttruth t "
-                            "INNER JOIN elasticc2_ppdbdiasource s ON t.diaobject_id=s.diaobject_id "
-                            "INNER JOIN elasticc2_brokermessage m ON s.diasource_id=m.diasource_id "
-                            "WHERE m.classifier_id=%(cls)s AND t.gentype=%(gentype)s "
-                            "ORDER BY s.diasource_id,s.midpointtai ",
-                            { 'cls': classifier_id, 'gentype': gentype } )
-            rows = list( cursor.fetchall() )
-            
-            
+    def post( self, request, what, classifier_id, classid ):
+        datadir = pathlib.Path( __file__ ).parent / "summary_data/confusionvst"
 
-    
+        columns = None
+        dictifier = None
+        if what == "objects":
+            path = datadir / f'{classifier_id}_{classid}_objdf.pkl'
+            indexes = [ 's.diaobject_id' ]
+        elif what == "sources":
+            path = datadir / f'{classifier_id}_{classid}_srcdf.pkl'
+            indexes = [ 's.diasource_id' ]
+        elif what == "classifications":
+            path = datadir / f'{classifier_id}_{classid}_cifydf.pkl'
+            indexes = [ 's.diasource_id', 'm.classid' ]
+        elif what == "meanprobabilities":
+            path = datadir / f'{classifier_id}_{classid}_classprobdf.pkl'
+            indexes = [ 'relday', 'm.classid' ]
+        elif what == "maxprobabilities":
+            path = datadir / f'{classifier_id}_{classid}_maxprobdf.pkl'
+            indexes = [ 'relday' ]
+            dictifier = lambda df: { 'columns': 'classid',
+                                     'index': [ int(i) for i in df.index.values ],
+                                     'data': [ int(i) for i in df.values ] }
+        else:
+            return HttpResponseBadRequest( json.dumps( { "error": f"Unknown data structure: {what}" } ),
+                                           content_type='application/json' )
 
+        if not path.is_file():
+            return HttpResponseBadRequest(
+                json.dumps( { "error": f"Can't find data file for classifier {classifier_id}, class {classid}" } ),
+                content_type="application/json" )
+        df = pandas.read_pickle( path )
+        dfdict = df.to_dict( orient='split' ) if dictifier is None else dictifier( df )
+        if len( indexes ) == 1:
+            data = { i: v for i, v in zip( dfdict['index'], dfdict['data'] ) }
+        elif len( indexes ) == 2:
+            # I should write a recursive function to support any length....
+            data = {}
+            for k, v in zip( dfdict[ 'index' ], dfdict[ 'data' ] ):
+                topk, lowerk = k
+                if topk not in data:
+                    data[ topk ] = {}
+                data[ topk ][ lowerk ] = v
+        else:
+            return HttpResponse( "This should never happen", content_type='text/plain', status=500 )
 
+        retdict = { 'columns': dfdict['columns'],
+                    'indexes': indexes,
+                    'data': data
+                   }
+
+        return HttpResponse( json.dumps( retdict ), content_type='application/json' )
 
 # ======================================================================
 # DJango REST interfaces
