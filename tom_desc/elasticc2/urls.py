@@ -22,7 +22,10 @@ urlpatterns = [
 
     path( 'confmatrixlatest', views.Elasticc2ConfMatrixLatest.as_view() ),
 
-    path( 'brokerclassfortruetype/<int:classifierid>/<int:gentype>/',
+    path( 'classids', views.Elasticc2ClassIds.as_view() ),
+    path( 'classifiers_json', views.Elasticc2Classifiers.as_view() ),
+
+    path( 'brokerclassfortruetype/<str:what>/<int:classifier_id>/<int:classid>/',
           views.Elasticc2BrokerClassificationForTrueType.as_view(),
           name='brokerclassfortruetype' ),
     
