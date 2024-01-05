@@ -25,10 +25,10 @@ urlpatterns = [
     path( 'classids', views.Elasticc2ClassIds.as_view() ),
     path( 'classifiers_json', views.Elasticc2Classifiers.as_view() ),
 
-    path( 'brokerclassfortruetype/<str:what>/<int:classifier_id>/<int:classid>/',
+    path( 'brokerclassfortruetype/<str:dataformat>/<str:what>/<int:classifier_id>/<int:classid>/',
           views.Elasticc2BrokerClassificationForTrueType.as_view(),
           name='brokerclassfortruetype' ),
-    
+
     path('brokermessage/<int:info>/', views.BrokerMessageView.as_view(), name='brokermesssage-int'),
     path('brokermessage/<path:info>/', views.BrokerMessageView.as_view(), name='brokermessage-path'),
     path('brokermessage/', views.BrokerMessageView.as_view(), name='brokermessage-noparam'),

@@ -101,7 +101,9 @@ class Command(BaseCommand):
                         df = pandas.DataFrame( rows, columns=fields )
 
                         _logger.debug( "....processing" )
+
                         # Filter out duplicates, keeping the most recently received broker message
+                        _logger.debug( "........removing duplicates" )
                         df = ( df.sort_values( ['s.diaobject_id', 's.midpointtai', 'm.descingesttimestamp'] )
                                .reset_index()
                                .groupby( [ 's.diaobject_id', 's.diasource_id' ] ).agg( 'last' )
@@ -110,27 +112,33 @@ class Command(BaseCommand):
                         df[ 'relday' ] = df[ 'deltat' ].apply( numpy.floor ).astype( numpy.int16 )
 
                         # Just keep things within the desired relday range
+                        _logger.debug( f"........cutting day range to [{minrelday},{maxrelday}] relative to peak" )
                         df = df[ ( df[ 'relday' ] >= minrelday ) & ( df[ 'relday' ] <= maxrelday ) ]
 
                         # Get a dataframe with just object info
+                        _logger.debug( "........extracing object info" )
                         objdf = ( df.loc[:, ['s.diaobject_id', 't.zcmb', 't.peakmjd', 't.gentype'] ]
                                   .groupby( 's.diaobject_id' ).agg( 'first' ) )
 
                         # Get a dataframe with just source info
+                        _logger.debug( "........extracting source info" )
                         srcdf = ( df.loc[:, [ 's.diaobject_id', 's.diasource_id', 's.midpointtai', 'deltat',
                                               'relday', 's.filtername', 's.psflux','s.snr' ] ]
                                   .groupby( 's.diasource_id' ).agg( 'first' ) )
 
                         # Make the classification df
+                        _logger.debug( "........generating gigantic classification table" )
                         cifydf = ( df.loc[ :, [ 's.diasource_id', 'm.classid', 'relday', 'm.probability' ] ]
                                    .explode( [ 'm.classid', 'm.probability' ] )
                                    .set_index( [ 's.diasource_id', 'm.classid' ] ) )
 
                         # Make the "mean class probability" df
+                        _logger.debug( "........making mean class probability summary table" )
                         classprobdf = ( cifydf.reset_index().loc[ :, [ 'relday', 'm.classid', 'm.probability' ] ]
                                         .groupby( [ 'relday', 'm.classid' ] ).agg( numpy.average ) )
 
                         # Make the "max probability" df
+                        _logger.debug( "........making max probability summary table" )
                         maxprobdf = ( cifydf.reset_index().loc[ :, [ 'relday', 'm.probability', 'm.classid' ] ]
                                       .sort_values( [ 'relday', 'm.probability' ] )
                                       .groupby( 'relday' )

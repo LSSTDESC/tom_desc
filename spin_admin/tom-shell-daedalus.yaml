@@ -79,8 +79,10 @@ spec:
           name: tom-deployment
         - mountPath: /sample
           name: tom-sample
-        - mountPath: /pgdata
-          name: tom-desc-postgres
+        - mountPath: /pgdump
+          name: pgdump
+        # - mountPath: /pgdata
+        #   name: tom-desc-postgres
         command: [ "tail" ]
         args: [ "-f", "/etc/issue" ]
       dnsConfig: {}
@@ -106,9 +108,13 @@ spec:
           path: /global/cfs/cdirs/desc-td/ELASTICC2
           type: Directory
         name: tom-sample
-      - name: tom-desc-postgres
-        persistentVolumeClaim:
-          claimName: tom-desc-postgres
+      - hostPath:
+          path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/pg_dump
+          type: Directory
+        name: pgdump
+      # - name: tom-desc-postgres
+      #   persistentVolumeClaim:
+      #     claimName: tom-desc-postgres
 ---
 apiVersion: v1
 kind: Service

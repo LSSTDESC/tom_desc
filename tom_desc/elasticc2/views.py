@@ -438,7 +438,7 @@ class Elasticc2BrokerClassificationForTrueType( LoginRequiredMixin, django.views
     def get( self, *args, **kwargs ):
         return self.post( *args, **kwargs )
 
-    def post( self, request, what, classifier_id, classid ):
+    def post( self, request, dataformat, what, classifier_id, classid ):
         datadir = pathlib.Path( __file__ ).parent / "summary_data/confusionvst"
 
         columns = None
@@ -470,6 +470,11 @@ class Elasticc2BrokerClassificationForTrueType( LoginRequiredMixin, django.views
                 json.dumps( { "error": f"Can't find data file for classifier {classifier_id}, class {classid}" } ),
                 content_type="application/json" )
         df = pandas.read_pickle( path )
+
+        if dataformat == 'pickle':
+            with open( path, "rb" ) as ifp:
+                return HttpResponse( ifp.read(), content_type='application/octet-stream' )
+        
         dfdict = df.to_dict( orient='split' ) if dictifier is None else dictifier( df )
         if len( indexes ) == 1:
             data = { i: v for i, v in zip( dfdict['index'], dfdict['data'] ) }
@@ -485,7 +490,7 @@ class Elasticc2BrokerClassificationForTrueType( LoginRequiredMixin, django.views
             return HttpResponse( "This should never happen", content_type='text/plain', status=500 )
 
         retdict = { 'columns': dfdict['columns'],
-                    'indexes': indexes,
+                    'index': indexes,
                     'data': data
                    }
 
@@ -627,7 +632,8 @@ class BrokerMessageView(PermissionRequiredMixin, django.views.View):
 
     def has_permission( self ):
         if self.request.method == 'PUT':
-            return self.request.user.has_perm( "elasticc.elasticc_broker" )
+            # return self.request.user.has_perm( "elasticc.elasticc_broker" )
+            return False
         else:
             return bool(self.request.user.is_authenticated)
 
