@@ -1,5 +1,3 @@
-raise RuntimeError( "May be out of date; Rob, review." )
-
 import sys
 import re
 import pathlib
@@ -28,7 +26,9 @@ class Command(BaseCommand):
     help = 'Update DiaObject, DiaSources, and DiaSorcedSources from PPDB with new sources learned from brokers.'
 
     def add_arguments( self, parser ):
-        pass
+        parser.add_argument( '--doall', action='store_true', default=False,
+                             help=( "Search the whole broker message table, not just the "
+                                    "brokersourceids table." ) )
 
     def handle( self, *args, **options ):
         conn = None
@@ -67,14 +67,16 @@ class Command(BaseCommand):
 
             # Figure out which sources we don't know about
 
+            sourcetab = 'elasticc2_brokermessage' if options['doall'] else 'elasticc2_brokersourceids'
+                             
             _logger.info( "Finding unknown sources" )
             cursor.execute( "CREATE TEMP TABLE tmp_unknownsources( diasource_id bigint )" )
-            cursor.execute( "INSERT INTO tmp_unknownsources "
-                            "  SELECT bid FROM "
-                            "    ( SELECT DISTINCT ON (b.diasource_id) b.diasource_id AS bid, s.diasource_id AS sid "
-                            "      FROM elasticc2_brokermessage b "
-                            "      LEFT JOIN elasticc2_diasource s ON b.diasource_id=s.diasource_id "
-                            "      WHERE s.diasource_id IS NULL ) subq" )
+            cursor.execute( f"INSERT INTO tmp_unknownsources "
+                            f"  SELECT bid FROM "
+                            f"    ( SELECT DISTINCT ON (b.diasource_id) b.diasource_id AS bid, s.diasource_id AS sid "
+                            f"      FROM {sourcetab} b "
+                            f"      LEFT JOIN elasticc2_diasource s ON b.diasource_id=s.diasource_id "
+                            f"      WHERE s.diasource_id IS NULL ) subq" )
 
             _logger.info( "Finding unknown objects" )
             cursor.execute( "CREATE TEMP TABLE tmp_unknownobjects( diaobject_id bigint )" )

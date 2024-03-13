@@ -102,7 +102,7 @@ spec:
           type: Directory
         name: tom-2-deployment
       - hostPath:
-          path: /global/cfs/cdirs/desc-td/ELASTICC2-old/20230903
+          path: /global/cfs/cdirs/desc-td/ELASTICC2/
           type: Directory
         name: tom-2-sample
       - hostPath:
