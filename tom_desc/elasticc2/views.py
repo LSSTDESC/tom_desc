@@ -5,6 +5,8 @@ import datetime
 import json
 import logging
 
+import astropy.time
+
 import django.db
 import django.views
 import django.forms.models
@@ -771,3 +773,57 @@ class BrokerMessageView(PermissionRequiredMixin, django.views.View):
         resp.headers['Location'] =  f'{loc}{dex}'
 
         return resp
+
+# ======================================================================
+
+class GetHotSNeView(PermissionRequiredMixin, django.views.View):
+    raise_exception = True
+
+    def has_permission( self ):
+        return bool( self.request.user.is_authenticated )
+
+    def get( self, request, info=None ):
+        return self.process( request, request.GET, info=info )
+
+    def post( self, request, info=None ):
+        return self.process( request, request.POST, info=info )
+
+    def process( self, request, kwargs, info=None ):
+        lastndays = kwargs['days'] if days in kwargs else 30
+
+        sne = {}
+        t = astropy.time( datetime.datetime.now( datetime.timezone.utc ) )
+
+        with django.db.connection.cursor().connection.cursor( cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+            cursor.execute( "SELECT f.diaobject_id AS diaobject_id, f.diaforcedsoruce_id AS diaforcedsource_id,"
+                            "       f.filtername AS band,f.midpointtai AS mjd, "
+                            "       f.psflux AS flux, f.psfluxerr AS fluxerr "
+                            "FROM elasticc2_diaforcedsource f "
+                            "WHERE f.diaobject_id IN ("
+                            "  SELECT DISTINCT ON(diaobject_id) diaobject_id "
+                            "  FROM elasticc2_diasource "
+                            "  WHERE midpointtai>=%(t0)s",
+                            ") ",
+                            "ORDER BY diaobject_id,midpointtai"
+                            { "t0": t.mjd - 30 } )
+            df = pandas.DataFrame( cursor.fetchall() )
+
+            objids = df['diaobject_id'].values.unique()
+            df.set_index( [ 'diaobject_id', 'diaforcedsource_id' ], inplace=True )
+            
+            for objid in objids:
+                subdf = df.xs( objid, level='diaobject_id' )
+                sne[objid] = { 'photometry': { 'mjd': list( subdf['mjd'] ),
+                                               'band': list( subdf['band'] ),
+                                               'flux': list( subdf['flux'] ),
+                                               'fluxerr': list( subdf['fluxerr'] ) },
+                               'zp': 27.5,   # standard SNANA zeropoint,
+                               'redshift': -99,
+                               'sntype': -99 }
+
+        resp = JsonResponse( sne )
+        return resp
+                    
+                            
+            
+        
