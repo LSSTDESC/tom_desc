@@ -24,9 +24,9 @@ services:
       - DB_HOST=postgres
       - DB_PORT=5432
       - DB_NAME=tom_desc
-      - CASSANDRA_HOST=cassandra
-      - CASSANDRA_USER=cassandra
-      - CASSANDRA_PASSWORD=cassandra
+#       - CASSANDRA_HOST=cassandra
+#       - CASSANDRA_USER=cassandra
+#       - CASSANDRA_PASSWORD=cassandra
     user: ${USERID:-0}:${GROUPID:-0}
 
   daedalus-shell:
@@ -51,9 +51,9 @@ services:
       - DB_HOST=postgres
       - DB_PORT=5432
       - DB_NAME=tom_desc
-      - CASSANDRA_HOST=cassandra
-      - CASSANDRA_USER=cassandra
-      - CASSANDRA_PASSWORD=cassandra
+#       - CASSANDRA_HOST=cassandra
+#       - CASSANDRA_USER=cassandra
+#       - CASSANDRA_PASSWORD=cassandra
     user: ${USERID:-0}:${GROUPID:-0}
     entrypoint: [ "tail", "-f", "/etc/issue" ]
 
@@ -66,8 +66,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      cassandra:
-        condition: service_healthy
+#       cassandra:
+#         condition: service_healthy
     volumes:
       - type: bind
         source: ./tom_desc
@@ -81,15 +81,15 @@ services:
       - DB_HOST=postgres
       - DB_PORT=5432
       - DB_NAME=tom_desc
-      - CASSANDRA_HOST=cassandra
-      - CASSANDRA_USER=cassandra
-      - CASSANDRA_PASSWORD=cassandra
+#       - CASSANDRA_HOST=cassandra
+#       - CASSANDRA_USER=cassandra
+#       - CASSANDRA_PASSWORD=cassandra
     entrypoint:
       - /bin/bash
       - -c
       - |
         python manage.py migrate
-        python manage.py sync_cassandra
+#         python manage.py sync_cassandra
 
   postgres:
     image: registry.nersc.gov/m1727/raknop/tom-postgres:daedalus
@@ -105,18 +105,18 @@ services:
       timeout: 10s
       retries: 5
 
-  cassandra:
-    image: registry.nersc.gov/m1727/raknop/tom_cassandra
-    build:
-      context: ./docker_cassandra
-      dockerfile: Dockerfile
-    volumes:
-      - tomcassandradata:/var/lib/cassandra
-    healthcheck:
-      test: cqlsh -u cassandra -p cassandra cassandra < /dev/null
-      interval: 10s
-      timeout: 2s
-      retries: 10
+  # cassandra:
+  #   image: registry.nersc.gov/m1727/raknop/tom_cassandra
+  #   build:
+  #     context: ./docker_cassandra
+  #     dockerfile: Dockerfile
+  #   volumes:
+  #     - tomcassandradata:/var/lib/cassandra
+  #   healthcheck:
+  #     test: cqlsh -u cassandra -p cassandra cassandra < /dev/null
+  #     interval: 10s
+  #     timeout: 2s
+  #     retries: 10
 
   kafka-zookeeper:
     image: registry.nersc.gov/m1727/raknop/kafka
@@ -142,7 +142,33 @@ services:
       timeout: 10s
       retries: 5
     entrypoint: [ "bin/kafka-server-start.sh", "config/server.properties" ]
-      
+
+  fakebroker:
+    depends_on:
+      kafka-server:
+        condition: service_healthy
+    image: registry.nersc.gov/m1727/raknop/fakebroker
+    build:
+      context: tests
+      dockerfile: Dockerfile.fakebroker
+    entrypoint:
+      - python
+      - /fake/fakebroker.py
+      - --source
+      - kafka-server:9092
+      - -t
+      - tmp-alerts-wfd
+      - tmp-alerts-ddf-full
+      - --dest
+      - kafka-server:9092
+      - -u
+      - classifications
+      - -b
+      - /fake/schema/elasticc.v0_9_1.brokerClassification.avsc
+      - -s
+      - /fake/schema/elasticc.v0_9_1.alert.avsc
+
+
 volumes:
   tomdbdata:
-  tomcassandradata:
+#  tomcassandradata:
