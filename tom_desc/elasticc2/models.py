@@ -333,7 +333,7 @@ class BaseAlert(Createable):
             if self._forcedsourceclass._objectindex is None:
                 raise RuntimeError( f"Failed to find the diaobject_id index for {self._forcedsourceclass}" )
 
-        # Extract the source that triggered this ale0rt
+        # Extract the source that triggered this alert
 
         t0 = time.perf_counter()
         if self._sourcefields is None:
@@ -1110,29 +1110,98 @@ class CassBrokerMessageBySource(DjangoCassandraModel):
                  "addedclassifications": None,
                  "firstbrokermessage_id": None }
 
-class CassBrokerMessageByTime(DjangoCassandraModel):
-    classifier_id = columns.BigInt( primary_key=True )
-    descingesttimestamp = columns.DateTime( default=datetime.datetime.utcnow, primary_key=True )
-    id = columns.UUID( primary_key=True, default=uuid.uuid4 )
 
-    topicname = columns.Text()
-    streammessage_id = columns.BigInt()
-    diasource_id = columns.BigInt()
-    alert_id = columns.BigInt()
-    msghdrtimestamp = columns.DateTime()
-    elasticcpublishtimestamp = columns.DateTime()
-    brokeringesttimestamp = columns.DateTime()
-    classid = columns.List( columns.Integer() )
-    probability = columns.List( columns.Float() )
+# ======================================================================
+# ======================================================================
+# ======================================================================
+# Summary information about objects, updated regularly
+
+class DiaObjectInfo(models.Model):
+    _id = models.BigAutoField( primary_key=True )
+    diaobject = models.ForeignKey( DiaObject, db_column='diaobject_id', on_delete=models.CASCADE, db_index=True )
+    filtername = models.TextField( db_index=True )
+
+    firstsource_id = models.BigIntegerField( db_index=True, null=True )
+    firstsourceflux = models.FloatField( null=True )
+    firstsourcefluxerr = models.FloatField( null=True )
+    firstsourcemjd = models.FloatField( db_index=True, null=True )
+
+    maxforcedsource_id = models.BigIntegerField( db_index=True, null=True )
+    maxforcedsourceflux = models.FloatField( null=True )
+    maxforcedsourcefluxerr = models.FloatField( null=True )
+    maxforcedsourcemjd = models.FloatField( db_index=True, null=True )
+
+    latestsource_id = models.BigIntegerField( db_index=True, null=True )
+    latestsourceflux = models.FloatField( null=True )
+    latestsourcefluxerr = models.FloatField( null=True )
+    latestsourcemjd = models.FloatField( db_index=True, null=True )
+
+    latestforcedsource_id = models.BigIntegerField( db_index=True, null=True )
+    latestforcedsourceflux = models.FloatField( null=True )
+    latestforcedsourcefluxerr = models.FloatField( null=True )
+    latestforcedsourcemjd = models.FloatField( db_index=True, null=True )
 
     class Meta:
-        get_pk_field = 'id'
+        constraints = [
+            models.UniqueConstraint( fields=[ 'diaobject_id', 'filtername' ], name='diaobjectinfo_unique' )
+        ]
 
-    @staticmethod
-    def load_batch( messages, logger=_logger ):
-        """Calls CassBrokerMessageBySource.load_batch"""
+class DiaObjectClassification(models.Model):
+    _id = models.BigAutoField( primary_key=True )
+    diaobject = models.ForeignKey( DiaObjectInfo, db_column='diaobject_id',
+                                   on_delete=models.CASCADE, null=False )
+    classifier = models.ForeignKey( BrokerClassifier, db_column='classifier_id',
+                                    on_delete=models.CASCADE, null=False )
 
-        CassBrokerMessageBySource.load_batch( messages, logger )
+    latestclass1id = models.SmallIntegerField( null=False )
+    latestclass2id = models.SmallIntegerField( null=True )
+    latestclass3id = models.SmallIntegerField( null=True )
+    latestclass4id = models.SmallIntegerField( null=True )
+
+    latestclass1prob = Float32Field( null=False )
+    latestclass2prob = Float32Field( null=True )
+    latestclass3prob = Float32Field( null=True )
+    latestclass4prob = Float32Field( null=True )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint( fields=[ 'diaobject_id', 'classifier_id' ],
+                                     name='diaobjectclassification_unique' )
+        ]
+
+
+# ======================================================================
+# ======================================================================
+# ======================================================================
+# Cassandra tables (not currently used)
+
+# class CassBrokerMessageByTime(DjangoCassandraModel):
+#     classifier_id = columns.BigInt( primary_key=True )
+#     descingesttimestamp = columns.DateTime( default=datetime.datetime.utcnow, primary_key=True )
+#     id = columns.UUID( primary_key=True, default=uuid.uuid4 )
+
+#     topicname = columns.Text()
+#     streammessage_id = columns.BigInt()
+#     diasource_id = columns.BigInt()
+#     alert_id = columns.BigInt()
+#     msghdrtimestamp = columns.DateTime()
+#     elasticcpublishtimestamp = columns.DateTime()
+#     brokeringesttimestamp = columns.DateTime()
+#     classid = columns.List( columns.Integer() )
+#     probability = columns.List( columns.Float() )
+
+#     class Meta:
+#         get_pk_field = 'id'
+
+#     @staticmethod
+#     def load_batch( messages, logger=_logger ):
+#         """Calls CassBrokerMessageBySource.load_batch"""
+
+#         CassBrokerMessageBySource.load_batch( messages, logger )
+
+
+
+
 
 # ======================================================================
 
