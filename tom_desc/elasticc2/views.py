@@ -25,6 +25,7 @@ import psycopg2.extras
 from elasticc2.models import PPDBDiaObject, PPDBDiaSource, PPDBDiaForcedSource, PPDBAlert, DiaObjectTruth
 from elasticc2.models import DiaObject, DiaSource, DiaForcedSource, BrokerClassifier, BrokerMessage
 from elasticc2.models import ClassIdOfGentype
+from elasticc2.models import SpectrumInfo, WantedSpectra, RequestedSpectra
 from elasticc2.serializers import PPDBDiaObjectSerializer, PPDBDiaSourceSerializer, PPDBDiaForcedSourceSerializer
 
 # I tried inherting from the root logger, but it
@@ -822,6 +823,33 @@ class GetHotSNeView(PermissionRequiredMixin, django.views.View):
         resp = JsonResponse( sne )
         return resp
                     
-                            
-            
-        
+# ======================================================================
+
+class AskForSpectrumView(PermissionRequiredMixin, django.views.View):
+    raise_exception = True
+
+    def has_permission( self ):
+        return bool( self.request.user.is_authenticatd )
+
+    def post( self, request ):
+        data = json.loads( request.body )
+        if ( ( 'requester' not in data ) or
+             ( 'objectids' not in data ) or
+             ( 'priorities' not in data ) or
+             ( not isinstance( data['objectids'], list ) ) or
+             ( not isinstance( data['objects'], list ) ) or
+             ( len( data['objectids'] ) != len( data['objects'] ) ) ):
+            return HttpResponse( "Mal-formed data for askforspectrum", status=500 )
+
+        tocreate = [ { 'requester': data['requester'],
+                       'diaobject_id': data['objectids'][i],
+                       'user_id': request.user.id,
+                       'priority': ( 0 if int(data['priorities'][i]) < 0
+                                     else 5 if int(data['priorities'][i]) > 5
+                                     else int(data['priorities'][i] )) }
+                       for i in range(len(data['objectids'])) ]
+
+        objs = WantedSpectra.bulk_load_or_create( tocreate )
+        return JsonResponse( { 'status': 'ok',
+                               'message': f'wanted spectra created',
+                               'num': len(objs) } )

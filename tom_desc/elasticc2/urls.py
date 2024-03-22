@@ -34,6 +34,7 @@ urlpatterns = [
     path('brokermessage/', views.BrokerMessageView.as_view(), name='brokermessage-noparam'),
 
     path('gethotsne/<int:days>/', views.GetHotSNeView.as_view(), name='gethotsne'),
+    path('askforspectrum', views.AskForSpectrumView.as_view(), name='askforspectrum'),
     
     path( '', include( ( router.urls, 'elasticc2' ), namespace=app_name ) )
 ]

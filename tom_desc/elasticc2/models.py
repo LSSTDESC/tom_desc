@@ -18,6 +18,8 @@ from django.db.models import F
 from guardian.shortcuts import assign_perm
 from django.contrib.auth.models import Group
 from django.contrib.postgres.fields import ArrayField
+import django.conf
+import django.utils
 
 from cassandra.cqlengine import columns
 import cassandra.query
@@ -503,7 +505,7 @@ class BaseObjectTruth(Createable):
     av = Float32Field( )
     mu = Float32Field( )
     lensdmu = Float32Field( )
-    peakmjd = Float32Field( db_index=True ) 
+    peakmjd = Float32Field( db_index=True )
     mjd_detect_first = models.FloatField( db_index=True )
     mjd_detect_last = models.FloatField( db_index=True )
     dtseason_peak = Float32Field( )
@@ -1132,7 +1134,49 @@ class CassBrokerMessageByTime(DjangoCassandraModel):
 
         CassBrokerMessageBySource.load_batch( messages, logger )
 
+# ======================================================================
+
+class SpectrumInfo(Createable):
+    specinfo_id = models.AutoField( primary_key=True, unique=True, db_index=True )
+    diaobject = models.ForeignKey( DiaObject, db_column='diaobject_id',
+                                   on_delete=models.CASCADE, null=False )
+    specsource = models.TextField( null=True )
+    inserted_at = models.DateTimeField( null=False, default=django.utils.timezone.now )
+    mjd = Float32Field( db_index=True )
+    z = Float32Field()
+    classid = models.IntegerField( db_index=True )
+
+    _pk = 'specinfio_id'
+    _create_kws = [ 'diaobject_id', 'specsource', 'mjd', 'z', 'classid' ]
+
+class WantedSpectra(Createable):
+    wantspec_id = models.AutoField( primary_key=True, unique=True, db_index=True )
+    wanttime = models.DateTimeField( null=False, db_index=True, default=django.utils.timezone.now )
+    diaobject = models.ForeignKey( DiaObject, db_column='diaobject_id',
+                                   on_delete=models.CASCADE, null=False )
+    user = models.ForeignKey( django.conf.settings.AUTH_USER_MODEL, db_column='user_id',
+                              on_delete=models.RESTRICT )
+    requester = models.TextField( null=True )
+    priority = models.IntegerField()
+
+    _pk = 'wantspec_id'
+    _create_kws = [ 'diaobject_id', 'user_id', 'requester', 'priority' ]
+
+class RequestedSpectra(Createable):
+    reqspec_id = models.AutoField( primary_key=True, unique=True, db_index=True )
+    wantspec = models.ForeignKey( WantedSpectra, db_column='wantspec_id', null=False,
+                                  on_delete=models.RESTRICT )
+    sentto = models.TextField()
+    reqtime = models.DateTimeField()
+
+    _pk = 'reqspec_id'
+    _create_kws = [ 'wantspec_id', 'sentto', 'reqtime' ]
+
+
+# ======================================================================
+
 # This is a thing I use as a "don't run twice at once" lock
 
 class ImportPPDBRunning(models.Model):
     running = models.BooleanField( default=False )
+
