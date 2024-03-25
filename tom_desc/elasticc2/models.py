@@ -1219,7 +1219,7 @@ class SpectrumInfo(Createable):
     _create_kws = [ 'diaobject_id', 'specsource', 'mjd', 'z', 'classid' ]
 
 class WantedSpectra(Createable):
-    wantspec_id = models.AutoField( primary_key=True, unique=True, db_index=True )
+    wantspec_id = models.TextField( primary_key=True, unique=True, db_index=True )
     wanttime = models.DateTimeField( null=False, db_index=True, default=django.utils.timezone.now )
     diaobject = models.ForeignKey( DiaObject, db_column='diaobject_id',
                                    on_delete=models.CASCADE, null=False )
@@ -1229,7 +1229,7 @@ class WantedSpectra(Createable):
     priority = models.IntegerField()
 
     _pk = 'wantspec_id'
-    _create_kws = [ 'diaobject_id', 'user_id', 'requester', 'priority' ]
+    _create_kws = [ _pk, 'diaobject_id', 'user_id', 'requester', 'priority' ]
 
 class RequestedSpectra(Createable):
     reqspec_id = models.AutoField( primary_key=True, unique=True, db_index=True )

@@ -1,3 +1,4 @@
+import sys
 import io
 import psycopg2
 import psycopg2.extras

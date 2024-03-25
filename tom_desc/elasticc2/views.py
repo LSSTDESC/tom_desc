@@ -833,7 +833,7 @@ class AskForSpectrumView(PermissionRequiredMixin, django.views.View):
     raise_exception = True
 
     def has_permission( self ):
-        return bool( self.request.user.is_authenticatd )
+        return bool( self.request.user.is_authenticated )
 
     def post( self, request ):
         data = json.loads( request.body )
@@ -841,19 +841,25 @@ class AskForSpectrumView(PermissionRequiredMixin, django.views.View):
              ( 'objectids' not in data ) or
              ( 'priorities' not in data ) or
              ( not isinstance( data['objectids'], list ) ) or
-             ( not isinstance( data['objects'], list ) ) or
-             ( len( data['objectids'] ) != len( data['objects'] ) ) ):
-            return HttpResponse( "Mal-formed data for askforspectrum", status=500 )
+             ( not isinstance( data['priorities'], list ) ) or
+             ( len( data['objectids'] ) != len( data['priorities'] ) ) ):
+            return HttpResponse( "Mal-formed data for askforspectrum", status=500,
+                                 content_type='text/plain; charset=utf-8' )
 
         tocreate = [ { 'requester': data['requester'],
                        'diaobject_id': data['objectids'][i],
+                       'wantspec_id': f"{data['objectids'][i]} ; {data['requester']}",
                        'user_id': request.user.id,
                        'priority': ( 0 if int(data['priorities'][i]) < 0
                                      else 5 if int(data['priorities'][i]) > 5
                                      else int(data['priorities'][i] )) }
                        for i in range(len(data['objectids'])) ]
 
-        objs = WantedSpectra.bulk_load_or_create( tocreate )
+        try:
+            objs = WantedSpectra.bulk_load_or_create( tocreate )
+        except Exception as ex:
+            return HttpResponse( str(ex), status=500, content_type='text/plain; charset=utf-8' )
+
         return JsonResponse( { 'status': 'ok',
                                'message': f'wanted spectra created',
                                'num': len(objs) } )
