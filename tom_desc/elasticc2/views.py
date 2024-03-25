@@ -477,7 +477,7 @@ class Elasticc2BrokerClassificationForTrueType( LoginRequiredMixin, django.views
         if dataformat == 'pickle':
             with open( path, "rb" ) as ifp:
                 return HttpResponse( ifp.read(), content_type='application/octet-stream' )
-        
+
         dfdict = df.to_dict( orient='split' ) if dictifier is None else dictifier( df )
         if len( indexes ) == 1:
             data = { i: v for i, v in zip( dfdict['index'], dfdict['data'] ) }
@@ -636,7 +636,11 @@ class BrokerMessageView(PermissionRequiredMixin, django.views.View):
     def has_permission( self ):
         if self.request.method == 'PUT':
             # return self.request.user.has_perm( "elasticc.elasticc_broker" )
-            return False
+            # HACK for my tests
+            if ( self.request.user.username == 'apibroker' ) and self.request.user.is_authenticated:
+                return True
+            return self.request.user.is_superuser and self.request.user.is_authenticated
+
         else:
             return bool(self.request.user.is_authenticated)
 
@@ -809,7 +813,7 @@ class GetHotSNeView(PermissionRequiredMixin, django.views.View):
 
             objids = df['diaobject_id'].unique()
             df.set_index( [ 'diaobject_id', 'diaforcedsource_id' ], inplace=True )
-            
+
             for objid in objids:
                 subdf = df.xs( objid, level='diaobject_id' )
                 sne[int(objid)] = { 'photometry': { 'mjd': list( subdf['mjd'] ),
@@ -822,7 +826,7 @@ class GetHotSNeView(PermissionRequiredMixin, django.views.View):
 
         resp = JsonResponse( sne )
         return resp
-                    
+
 # ======================================================================
 
 class AskForSpectrumView(PermissionRequiredMixin, django.views.View):

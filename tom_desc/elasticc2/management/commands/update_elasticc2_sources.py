@@ -67,17 +67,22 @@ class Command(BaseCommand):
 
             cursor = conn.cursor( cursor_factory=psycopg2.extras.RealDictCursor )
 
-                             
+
             # Figure out which sources we don't know about
 
             sourcetab = 'elasticc2_brokermessage' if options['doall'] else 'elasticc2_brokersourceids'
+
+            _logger.info( "Copying unknown sources" )
+            cursor.execute( f"CREATE TEMP TABLE tmp_orig_unknownsources( diasource_id bigint )" )
+            cursor.execute( f"INSERT INTO tmp_orig_unknownsources "
+                            f"  SELECT diasource_id FROM {sourcetab}" )
 
             _logger.info( "Finding unknown sources" )
             cursor.execute( "CREATE TEMP TABLE tmp_unknownsources( diasource_id bigint )" )
             cursor.execute( f"INSERT INTO tmp_unknownsources "
                             f"  SELECT bid FROM "
                             f"    ( SELECT DISTINCT ON (b.diasource_id) b.diasource_id AS bid, s.diasource_id AS sid "
-                            f"      FROM {sourcetab} b "
+                            f"      FROM tmp_orig_unknownsources b "
                             f"      LEFT JOIN elasticc2_diasource s ON b.diasource_id=s.diasource_id "
                             f"      WHERE s.diasource_id IS NULL ) subq" )
 
@@ -164,6 +169,13 @@ class Command(BaseCommand):
                             "      latestsourceflux=excluded.latestsourceflux, "
                             "      latestsourcefluxerr=excluded.latestsourcefluxerr, "
                             "      latestsourcemjd=excluded.latestsourcemjd" )
+
+
+            if ( not options['doall'] ):
+                _logger.info( "Cleaning up elasticc2_brokersourceids" )
+                cursor.execute( "DELETE FROM elasticc2_brokersourceids "
+                                "WHERE diasource_id IN "
+                                "  ( SELECT diasource_id FROM tmp_orig_unknownsources )" )
 
         except Exception as e:
             _logger.exception( "Exception during transaction, rolling back." )
