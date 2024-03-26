@@ -25,6 +25,9 @@ from cassandra.cqlengine import columns
 import cassandra.query
 from django_cassandra_engine.models import DjangoCassandraModel
 
+import astropy.time
+
+
 # NOTE FOR ROB
 #
 # Many schema are similar to elasticc.
@@ -1233,8 +1236,8 @@ class WantedSpectra(Createable):
 
 class RequestedSpectra(Createable):
     reqspec_id = models.AutoField( primary_key=True, unique=True, db_index=True )
-    wantspec = models.ForeignKey( WantedSpectra, db_column='wantspec_id', null=False,
-                                  on_delete=models.RESTRICT )
+    diaobject = models.ForeignKey( DiaObject, db_column='diaobject_id',
+                                   on_delete=models.CASCADE, null=False )
     sentto = models.TextField()
     reqtime = models.DateTimeField()
 

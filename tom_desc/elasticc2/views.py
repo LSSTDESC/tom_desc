@@ -4,6 +4,7 @@ import pathlib
 import datetime
 import json
 import logging
+import traceback
 
 import astropy.time
 
@@ -863,3 +864,199 @@ class AskForSpectrumView(PermissionRequiredMixin, django.views.View):
         return JsonResponse( { 'status': 'ok',
                                'message': f'wanted spectra created',
                                'num': len(objs) } )
+
+# ======================================================================
+
+class WhatSpectraAreWanted(PermissionRequiredMixin, django.views.View):
+    raise_exception = True
+
+    def has_permission( self ):
+        return bool( self.request.user.is_authenticated )
+
+    def post( self, request ):
+        try:
+            data = json.loads( request.body )
+            if 'lim_mag' in data.keys():
+                limmag = float( data['lim_mag'] )
+                if 'lim_mag_band' in data.keys():
+                    lim_mag_band = data['lim_mag_band']
+            else:
+                limmag = None
+
+            if 'requested_since' in data.keys():
+                match = re.search( '^ *(?P<y>\d+)-(?P<m>\d+)-(?P<d>\d+)'
+                                   '(?P<time>[ T]+(?P<H>\d+):(?P<M>\d+):(?P<S>\d+))? *$',
+                                   data['requested_since'] )
+                if match is None:
+                    return HttpResponse( f"Failed to parse YYYY-MM-DD HH:MM:SS from {data['requestedsince']}",
+                                         status=500, content_type='text/plain; charset=utf8' )
+                y = int( match.group('y') )
+                m = int( match.group('m') )
+                d = int( match.group('d') )
+                if match.group('time') is not None:
+                    hour = int( match.group( 'H' ) )
+                    minute = int( match.group( 'M' ) )
+                    second = int( match.group( 'S' ) )
+                else:
+                    hour = 0
+                    minute = 0
+                    second = 0
+                since = datetime.datetime( y, m, d, hour, minute, second )
+            else:
+                since = datetime.datetime.now() - datetime.timedelta( days=14 )
+
+            if 'not_claimed_in_last_days' in data.keys():
+                notclaimedinlastdays = int( data['not_claimed_in_last_days'] )
+            else:
+                notclaimedinlastdays = 7
+            claimsince = datetime.datetime.now() - datetime.timedelta( days=notclaimedinlastdays )
+
+            if 'detected_since' in data.keys():
+                detsince = float( data['detected_since'] )
+            else:
+                if 'detected_in_last_days' in data.keys():
+                    detected_in_last_days = int( data['detected_in_last_days' ] )
+                else:
+                    detected_in_last_days = 14
+                detsince = astropy.time.Time( datetime.datetime.now()
+                                              - datetime.timedelta( days=detected_in_last_days ) ).mjd
+
+            if 'no_spectra_in_last_days' in data.keys():
+                no_spectra_in_last_days = int( data['not_observed_in_last_days'] )
+            else:
+                no_spectra_in_last_days = 7
+            nospecsince = astropy.time.Time( datetime.datetime.now()
+                                             - datetime.timedelta( days=no_spectra_in_last_days ) ).mjd
+
+            djangocursor = django.db.connection.cursor()
+            pgconn = djangocursor.connection
+            with pgconn.cursor( cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+                cursor.execute( "CREATE TEMP TABLE tmp_wanted( diaobject_id bigint, requester text, priority int )" )
+                q = ( "INSERT INTO tmp_wanted ( "
+                      "  SELECT DISTINCT ON(diaobject_id,requester,priority) diaobject_id, requester, priority "
+                      "  FROM ( "
+                      "    SELECT w.diaobject_id, w.requester, w.priority, r.reqspec_id "
+                      "    FROM elasticc2_wantedspectra w "
+                      "    LEFT JOIN elasticc2_requestedspectra r "
+                      "      ON r.diaobject_id=w.diaobject_id AND r.reqtime>%(reqtime)s "
+                      "  ) subq "
+                      "  WHERE reqspec_id IS NULL "
+                      "  GROUP BY diaobject_id,requester,priority )" )
+                cursor.execute( q, { 'reqtime': claimsince } )
+
+                cursor.execute( "SELECT COUNT(diaobject_id) FROM tmp_wanted" )
+                row = cursor.fetchall()
+                if row[0]['count'] == 0:
+                    sys.stderr.write( "Empty table tmp_wanted\n" )
+                    return JsonResponse( {} )
+
+                cursor.execute( "CREATE TEMP TABLE tmp_wanted2( diaobject_id bigint, requester text, priority int ) " )
+                q = ( "INSERT INTO tmp_wanted2 ( "
+                      "  SELECT DISTINCT ON(diaobject_id,requester,priority) diaobject_id, requester, priority "
+                      "  FROM ( "
+                      "    SELECT t.diaobject_id, t.requester, t.priority, s.specinfo_id "
+                      "    FROM tmp_wanted t "
+                      "    LEFT JOIN elasticc2_spectruminfo s "
+                      "      ON s.diaobject_id=t.diaobject_id AND s.mjd>=%(obstime)s "
+                      "  ) subq "
+                      "  WHERE specinfo_id IS NULL "
+                      "  GROUP BY diaobject_id, requester, priority )" )
+                cursor.execute( q, { 'obstime': nospecsince } )
+
+                cursor.execute( "SELECT COUNT(diaobject_id) FROM tmp_wanted2" )
+                row = cursor.fetchall()
+                if row[0]['count'] == 0:
+                    sys.stderr.write( "Empty table tmp_wanted2" )
+                    return JsonResponse( {} )
+
+                cursor.execute( "CREATE TEMP TABLE tmp_wanted3( diaobject_id bigint, requester text, priority int ) " )
+                q = ( "INSERT INTO tmp_wanted3 ( "
+                      "  SELECT DISTINCT ON(t.diaobject_id,requester,priority) t.diaobject_id, requester, priority "
+                      "  FROM tmp_wanted2 t "
+                      "  INNER JOIN elasticc2_diasource s "
+                      "    ON t.diaobject_id=s.diaobject_id AND s.midpointtai>%(detsince)s "
+                      "  ORDER BY diaobject_id,requester,priority )" )
+                cursor.execute( q, { 'detsince': detsince } )
+
+                cursor.execute( "SELECT COUNT(diaobject_id) FROM tmp_wanted3" )
+                row = cursor.fetchall()
+                if row[0]['count'] == 0:
+                    sys.stderr.write( "Empty table tmp_wanted3" )
+                    return JsonResponse( {} )
+
+                cursor.execute( "CREATE TEMP TABLE tmp_wanted4( diaobject_id bigint, mjd real, "
+                                "                               filtername text, mag real )" )
+
+                # WARNING -- I've hardcoded in the SNANA zeropoint of 27.5 here
+
+                cursor.execute( "INSERT INTO tmp_wanted4 ( "
+                                "  SELECT diaobject_id,mjd,filtername,mag "
+                                "  FROM ( "
+                                "    SELECT DISTINCT ON(f.diaobject_id,f.filtername) "
+                                "        f.diaobject_id,f.filtername,f.midpointtai as mjd,-2.5*LOG(f.psflux)+27 AS mag"
+                                "    FROM tmp_wanted3 t "
+                                "    INNER JOIN elasticc2_diaforcedsource f "
+                                "      ON t.diaobject_id=f.diaobject_id "
+                                "    WHERE f.psflux > 0 AND f.psflux > 3.*f.psfluxerr "
+                                "    ORDER BY f.diaobject_id,f.filtername "
+                                "  ) subq "
+                                "  ORDER BY mjd DESC )" )
+
+                cursor.execute( "SELECT COUNT(diaobject_id) FROM tmp_wanted4" )
+                row = cursor.fetchall()
+                if row[0]['count'] == 0:
+                    sys.stderr.write( "empty table tmp_wanted4" )
+                    return JsonResponse( {} )
+
+                cursor.execute( "SELECT w3.diaobject_id AS objid, w3.requester, w3.priority, "
+                                "       w4.filtername, w4.mjd, w4.mag, o.ra, o.decl AS dec "
+                                "FROM tmp_wanted3 w3 "
+                                "INNER JOIN tmp_wanted4 w4 "
+                                "  ON w3.diaobject_id=w4.diaobject_id "
+                                "INNER JOIN elasticc2_diaobject o "
+                                "  ON w3.diaobject_id=o.diaobject_id " )
+                df = pandas.DataFrame( cursor.fetchall() ).set_index( 'objid', 'filtername' )
+
+            pgconn.rollback()
+
+            if limmag is not None:
+                subdf = df.xs( lim_mag_band, level='filtername' )
+                subdf = subdf[ subdf.mag < limmag ].reset_index()
+                df[ df.index.get_level_values('objid').isin( list( subdf.objid ) ) ]
+
+            retval = {}
+            for row in df.reset_index().itertuples():
+                objid = int( row.objid )
+                if objid not in retval.keys():
+                    retval[ objid ] = { 'ra': float( row.ra ),
+                                        'dec': float( row.dec ),
+                                        'req': row.requester,
+                                        'prio': int( row.priority ),
+                                        'latest': {} }
+                retval[ objid ]['latest'][row.filtername] = { 'mjd': float( row.mjd ),
+                                                              'mag': float( row.mag ) }
+
+            return JsonResponse( retval )
+
+        except Exception as ex:
+            sys.stderr.write( "Exception in WhatSpectraAreWanted" )
+            traceback.print_exc( file=sys.stderr )
+            return HttpResponse( f"Exception in WhatSpectraAreWanted: {ex}",
+                                 status=500, content_type='text/plain; charset=utf8' )
+
+# ======================================================================
+
+class PlanToDoSpectrum(PermissionRequiredMixin, django.views.View):
+    pass
+
+
+# ======================================================================
+
+class RemoveSpectrumPlan(PermissionRequiredMixin, django.views.View):
+    pass
+
+# ======================================================================
+
+class ReportSpectrumInfo(PermissionRequiredMixin, django.views.View):
+    pass
+
