@@ -167,7 +167,7 @@ All of the examples below assume that you have the following code somewhere befo
 See (TODO: ref to tom client doc) for more information on using `TomClient`.
 
 
-###<a name="elasticc2hotsne"></a>Finding hot SNe
+### <a name="elasticc2hotsne"></a>Finding hot SNe
 
 Currently hot SNe can be found at the URL `elasticc2/gethotsne`.  POST to this URL, with the post body a json-encoded dict.  You can specifiy one of two keys in this dict:
 * `detected_since_mjd: float` — will return all SNe detected since the indicated mjd
@@ -200,7 +200,7 @@ If you get a good return, then `res.json()` will give you a dictionary with two 
 
 The `objectid` is what you will use to indicate a given SN in further communication with the TOM.  `redshift` will be less than -1 if the TOM doesn't have a redshift estimate.  `sncode` is an integer specifying the best-guess as to the object's type.  (TODO: document taxonomy, give a way to ask for details about the code classification.)  `sncode=-99` indicates the object's type is unknown.  NOTE: right now, this URL will always return `redshift` and `snocde` as -99 for everything.  Actually getting those values in there is a TODO.
 
-###<a name="elasticc2askspec"></a>Asking for a spectrum
+### <a name="elasticc2askspec"></a>Asking for a spectrum
 
 This URL is primarily for the SRSs ("Spectrum Recommendation System"), e.g. RESSPECT.  It tells the TOM that it wants to get a spectrum of a given object.  The URL is `elasticc2/askforspectrum`.  POST to this URL with a dictionary:
 
@@ -222,7 +222,7 @@ Example:
 If all is well, `res.status_code` will be 200, and `res.json()` will return a dictionary with three keys.  `"status"` will be `"ok"`, `"message"` will be `"wanted spectra created"`, and `"num`" will be an integer with the number of database entries created indicating a wanted spectrum.  This number may be less than the number you asked for, because it's possible that requester/objectid already existed in the TOM's databsae.
 
 
-###<a name="elasticc2getwantedspec"></a> Finding out what spectra are wanted
+### <a name="elasticc2getwantedspec"></a> Finding out what spectra are wanted
 
 This is to figure out which spectra have been requested by an SRS.  If you aren't ineterested in what the SRSes have asked for, you may choose the spectra to take directly from [the list of hot SNe](#elasticc2hotsne).
 
@@ -251,7 +251,7 @@ The `latest` dictionary has the latest forced photometry detection (S/N>3) of th
 
 (TODO: nondetections.)
 
-###<a name="elasticc2planspec"></a> Declaring intent to take a spectrum
+### <a name="elasticc2planspec"></a> Declaring intent to take a spectrum
 
 Hit this URL if you plan to take a spectrum of an object.  This may be objects you found using one of the URLs above, but it doesn't have to be; it can be any object, as long as the object ID is known by the TOM.  (The TOM's object ids correspond to LSST AP DiaObjectId.)  The reason for this is so that multiple observatories can coordinate; you can declare that you're taking a spectrum of this object, so that others calling `elasticc2/getwantedspec` will then have that object filtered out.
 
@@ -265,7 +265,7 @@ The URL is `elasticc2/planspectrum`.  Use `TomClient` to post to it as in the ex
 If all is well (the `status_code` of the returned object is 200), then the `json()` method of the returned object will be a dictionary with the same keys that you passed, in addition to `status` (which is `ok`) and `created_at` (which should be roughly the time when you hit the URL0.
 
 
-###<a name="elasticc2reportspec"></a> Reporting spectrum information
+### <a name="elasticc2reportspec"></a> Reporting spectrum information
 
 TODO
 
