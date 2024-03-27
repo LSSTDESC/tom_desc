@@ -1212,11 +1212,11 @@ class SpectrumInfo(Createable):
     specinfo_id = models.AutoField( primary_key=True, unique=True, db_index=True )
     diaobject = models.ForeignKey( DiaObject, db_column='diaobject_id',
                                    on_delete=models.CASCADE, null=False )
-    specsource = models.TextField( null=True )
+    facility = models.TextField( null=True )
     inserted_at = models.DateTimeField( null=False, default=django.utils.timezone.now )
     mjd = Float32Field( db_index=True )
-    z = Float32Field()
-    classid = models.IntegerField( db_index=True )
+    z = Float32Field( null=True )
+    classid = models.IntegerField( db_index=True, null=True )
 
     _pk = 'specinfio_id'
     _create_kws = [ 'diaobject_id', 'specsource', 'mjd', 'z', 'classid' ]
@@ -1234,12 +1234,14 @@ class WantedSpectra(Createable):
     _pk = 'wantspec_id'
     _create_kws = [ _pk, 'diaobject_id', 'user_id', 'requester', 'priority' ]
 
-class RequestedSpectra(Createable):
+class PlannedSpectra(Createable):
     reqspec_id = models.AutoField( primary_key=True, unique=True, db_index=True )
     diaobject = models.ForeignKey( DiaObject, db_column='diaobject_id',
                                    on_delete=models.CASCADE, null=False )
-    sentto = models.TextField()
-    reqtime = models.DateTimeField()
+    facility = models.TextField()
+    created_at = models.DateTimeField( default=django.utils.timezone.now )
+    plantime = models.DateTimeField( null=True )
+    comment = models.TextField( default="" )
 
     _pk = 'reqspec_id'
     _create_kws = [ 'wantspec_id', 'sentto', 'reqtime' ]

@@ -2,6 +2,48 @@
 
 Based on the [Tom Toolkit](https://lco.global/tomtoolkit/)
 
+* [Using the TOM](#using-the-tom)
+  * [Accessing the TOM[(#accessing-the-tom)
+    * [Interactively with a browser](#interactively-with-a-browser)
+    * [Via SQL](#via-sql)
+* [The ELAsTiCC application](#elasticc)
+  * [Example REST interface usage](#example-rest-interface-usage)
+  * [Database Schema and Notes](#database-schema-and-notes)
+  * [classId and gentype](#classid-and-gentype)
+* [The ELAsTiCC2 application](#elasticc2)
+  * [Getting and pushing spectrum information](#elasticc2spec)
+    * [Finding hot SNe](#elasticc2hotsne)
+    * [Asking for a spectrum](#elasticc2askspec)
+    * [Finding out what spectra are wanted](#elasticc2getwantedspec)
+    * [Declaring intent to take a spectrum](#elasticc2planspec)
+    * [Reporting spectrum information](#elasticc2reportspec)
+
+* [Internal Documentation](#internal-documentation)
+  * [Branch Management](#branch-management)
+  * [Deploying a dev environment with Docker](#deploying-a-dev-environment-with-docker)
+    * [Populating the database](#populating-the-database)
+      * [For ELAsTiCC](#for-elasticc)
+      * [For ELAsTiCC2](#for-elasticc2)
+    * [Development and database migrations](#development-and-database-migrations)
+      * [Cassandra Migrations](#cassandra-migrations)
+  * [Deployment at NERSC](#deployment-at-nersc)
+    * [Steps for deployment](#steps-for-deployment)
+      * [The steps necessarcy to create the production TOM from scratch](#prodscratch)
+      * [Updating the running code](#updating-the-running code)
+      * [Additional YAML files](#additional-yaml-files)
+      * [Removing it all from Spin](#removing-it-all-from-spin)
+* [Notes for ELAsTiCC](#notes-for-elasticc)
+  * [ELAsTiCC](#noteselasticc)
+    * [Streaming to ZADS](#elasticcstream)
+    * [Pulling from brokers](#elasticcpull)
+  * [ELAsTiCC2](#noteselasticc2)
+    * [Streaming to ZADS](#elasticc2stream)
+    * [Fake Broker](#elasticc2fakebroker)
+  * [Testing](#elasticctesting)
+    * [Building the framework](#elasticctestbuild)
+    * [Running a shell in the framework](#elasticctestshell)
+    * [Automatically running all the tests](#elasticctestauto)
+
 # Using the TOM
 
 The "production" server at nersc is `https://desc-tom.lbl.gov` ; ask Rob (raknop@lbl.gov or Rob Knop on the LSST Slack) if you need a user account.
@@ -111,6 +153,122 @@ There are two database tables to help matching broker classifications to truth, 
 
 TODO
 
+## <a name="elasticc2spec"></a>Getting and pushing spectrum information
+
+The easiest way to do all of this is to use `tomclient.py`.  Make an object, and then call that object's `post` method to hit the URLs described below.
+
+All of the examples below assume that you have the following code somewhere before that example:
+
+```
+   from tom_client import TomClient
+   tom = TomClient( url="<url>", username="<username>", passwordfile="<passwordfile>" )
+```
+
+See (TODO: ref to tom client doc) for more information on using `TomClient`.
+
+
+###<a name="elasticc2hotsne"></a>Finding hot SNe
+
+Currently hot SNe can be found at the URL `elasticc2/gethotsne`.  POST to this URL, with the post body a json-encoded dict.  You can specifiy one of two keys in this dict:
+* `detected_since_mjd: float` — will return all SNe detected since the indicated mjd
+* `detected_in_last_days: int` — will return all SNe detected between this many days before now and now.  The TOM will search what it knows about forced photometry, considering any point with S/N>5 as a detection.
+
+Example:
+```
+   res = tom.post( 'elasticc2/gethotsne', json={ 'detected_since_mjd': 60380 } )
+   assert res.status_code == 200
+   assert res.json()['status'] == ok
+   sne = res.json()['sne']
+```
+
+If you get something other than `status_code` 200 back from the server, it means something went wrong.  Look at `res.text` (assuming `res` is as in the example above) for a hint as to what that might be.
+
+If you get a good return, then `res.json()` will give you a dictionary with two keywords: `status` (which is always `ok`), and `sne`.  The latter keyword is a list of dictionaries, where each element of the list has structure:
+```
+  { 'objectid': <int:objectid>,
+    'ra': <float:ra>,
+    'dec': <float:dec>,
+    'zp': <float:zeropoint>,
+    'redshift: <float:redshift>,
+    'sncode': <int:sncode>,
+    'photometry': { 'mjd': [ <float>, <float>, ... ],
+                    'band': [ <str>, <str>, ... ],
+                    'flux': [ <float>, <float>, ... ],
+                    'fluxerr': [ <float>, <float>, ... ] }
+  }
+```
+
+The `objectid` is what you will use to indicate a given SN in further communication with the TOM.  `redshift` will be less than -1 if the TOM doesn't have a redshift estimate.  `sncode` is an integer specifying the best-guess as to the object's type.  (TODO: document taxonomy, give a way to ask for details about the code classification.)  `sncode=-99` indicates the object's type is unknown.  NOTE: right now, this URL will always return `redshift` and `snocde` as -99 for everything.  Actually getting those values in there is a TODO.
+
+###<a name="elasticc2askspec"></a>Asking for a spectrum
+
+This URL is primarily for the SRSs ("Spectrum Recommendation System"), e.g. RESSPECT.  It tells the TOM that it wants to get a spectrum of a given object.  The URL is `elasticc2/askforspectrum`.  POST to this URL with a dictionary:
+
+```
+postdata = { 'requester': <str>,
+             'objectids': [ <int>, <int>, ... ],
+             'priorities': [ <int>, <int>, ... ] }
+```
+
+`requester` should be the name of the SRS instance or other facility asking for a spectrum.  `objectids` is a list of integers; these are the ones you found calling `elasticc2/gethotsne`, after filtering them and deciding which ones you really wanted.  `priorities` is a list of priorities, an integer between 1 (low priority) and 5 (high priority).  How prorities will be used is not clear at the moment.  The lengths of the objectids and priorities lists must be the same.
+
+Example:
+```
+   res = tom.post( 'elasticc2/askforspectrum', json={ 'requester': 'RESSPECT',
+                                                      'objectids': [ 4, 8, 15, 16, 23, 42 ],
+                                                      'priorities': [ 5, 4, 3, 2, 1, 3 ] }
+```
+
+If all is well, `res.status_code` will be 200, and `res.json()` will return a dictionary with three keys.  `"status"` will be `"ok"`, `"message"` will be `"wanted spectra created"`, and `"num`" will be an integer with the number of database entries created indicating a wanted spectrum.  This number may be less than the number you asked for, because it's possible that requester/objectid already existed in the TOM's databsae.
+
+
+###<a name="elasticc2getwantedspec"></a> Finding out what spectra are wanted
+
+This is to figure out which spectra have been requested by an SRS.  If you aren't ineterested in what the SRSes have asked for, you may choose the spectra to take directly from [the list of hot SNe](#elasticc2hotsne).
+
+The URL is `elasticc2/spectrawanted`.  Pass as the POST body a json-encoded dictionary.  This can be an empty dictionary, but it has five optional keys:
+
+* `lim_mag : <float>`  If you pass this, you must also pass `lim_mag_band` with the single-character filter that `lim_mag` is in.  Passing this will only return objects whose most recent detection in the indicated band is this magnitude or brigther.  If you don't include this key, it doesn't use a limiting magnitude.
+* `requested_since : YYYY-MM-DD` Only ask for spectra that have been requested (via an SRS posting to `elasticc2/askforspectrum`) since the indicated date.  If you don't pass this, it defaults to things requested in the last 14 days.
+* `not_claimed_in_last_days : <int>`  The URL will only return objects where somebody else hasn't already said they will take a spectrum of it.  (That is, nobody else has called `elasticc2/planspectrum` (see below) for that object.)  By default, it will consider plans that have been made in the last 7 days.  Pass this to change that time window.  If you want everything that's been requested regardless of whether somebody else has already said they'll take a spectrum of it, pass 0 (or a negative number) here.
+* `detected_since_mjd: <float>`  Only return objects that have a detection reported by LSST (i.e. a DiaSource was saved) between this mjd and now.  If you don't include this keyword, instead the server will use...
+* `detected_in_last_days: <int>`  Only return objects that have a detected reported by LSST between this many days ago and now.  If you don't specify this value, it defaults to 14.
+* `no_spectra_in_last_days: <int>`  Only return objects that don't have a spectrum yet.  This is a bit fraught; it only includes the spectra that the TOM knows about, of course, which means it only includes the one where somebody has called `elasticc2/planspectrum` (see below).  It will only consider spectra whose reported mjd of observation is between this many days ago and now.  If you don't specify this value, it defaults to 7.  If you want to have everything regardless of whether another spectrum has already been reported as taken, pass 0 (or a negative number) here.
+
+Hit the URL with `tom.post` (like the other examples above).  Assuming all is well (the `status_code` field of the response is 200), then the `json()` method of the response will give a dectionary with two keys.  `status` will be `ok`, and `wantedspectra` will be a list.  Each element of that list is a dictionary with keys:
+
+```
+  { 'oid': <int>,    # The object id (called objectid elsewhere)
+    'ra': <float>,   # The RA of the object as understood by the TOM database
+    'dec': <float>,  # The Dec of the object as understood by the TOM database
+    'req': <str>,    # The name of the system that requested the spectrum.
+    'prio': <int>,   # The priority (between 1 (low priority) and 5 (high priority)) that the requested indicated
+    'latest': <dict>
+  }
+```
+
+The `latest` dictionary has the latest forced photometry detection (S/N>3) of this object.  Its keys are the filter (single-character), and the values are dictionaries with two keys, `mjd` and `mag`.
+
+(TODO: nondetections.)
+
+###<a name="elasticc2planspec"></a> Declaring intent to take a spectrum
+
+Hit this URL if you plan to take a spectrum of an object.  This may be objects you found using one of the URLs above, but it doesn't have to be; it can be any object, as long as the object ID is known by the TOM.  (The TOM's object ids correspond to LSST AP DiaObjectId.)  The reason for this is so that multiple observatories can coordinate; you can declare that you're taking a spectrum of this object, so that others calling `elasticc2/getwantedspec` will then have that object filtered out.
+
+The URL is `elasticc2/planspectrum`.  Use `TomClient` to post to it as in the examples above.  The POST body should be a json-encoded dictionary with keys;
+
+* `objectid : int` — the object ID (as understood by the TOM) of the object.  If it's not known, you'll get an HTTP 500 ("internal server error") back.
+* `facility : str` — the name of the telescope or project or similar that will be taking this spectrum.
+* `plantime : YYYY-MM-DD or YYYY-MM-DD HH:MM:SS` — (or, really, anything that python's `dateutil.parser.parse` will properly interpret).  The night or time (UTC) you plan to take the spectrum.
+* `comment: str` (optional) — additional text saved to the database with this declaration of intent.
+
+If all is well (the `status_code` of the returned object is 200), then the `json()` method of the returned object will be a dictionary with the same keys that you passed, in addition to `status` (which is `ok`) and `created_at` (which should be roughly the time when you hit the URL0.
+
+
+###<a name="elasticc2reportspec"></a> Reporting spectrum information
+
+TODO
+
 ---
 
 # Internal Documentation
@@ -124,7 +282,7 @@ The branch `main` has the current production code.
 Make a branch `/u/{yourname}/{name}` to do dev work, which (if appropriate) may later be merged into `main`.
 
 
-## Deployment a dev environment with Docker
+## Deploying a dev environment with Docker
 
 If you want to test the TOM out, you can deploy it on your local machine.  If you're lucky, all you need to do is, within the top level of the git checkout:
 
@@ -266,7 +424,7 @@ where you cut and paste the full ugly pod name from the output of `get all` or `
 
 (It's also possible to use the web interface to monitor what's going; you should know about that if you've been trained on NERSC Spin.)
 
-#### The steps necessary to create the production TOM from scratch:
+#### <a name="prodscratch"></a> The steps necessary to create the production TOM from scratch:
 
 If you're making a new deployment somewhere (rather than just recreating
 desc_tom on the Spin production server), you *will* need to edit the YAML files before applying them
@@ -328,31 +486,31 @@ This is fiddly.  You have to do a bunch of `rancher kubectl delete <thing> --nam
 
 # Notes for ELASTICC
 
-## ELASTICC
+## <a name="noteselasticc"></a> ELASTICC
 
 Since the first ELAsTiCC campaign is long over, the realtime stuff here is not relevant any more.
 
-### Streaming to ZADS
+### <a name="elasticcstream"></a> Streaming to ZADS
 
 This is in the `LSSTDESC/elasticc` archive, under the `stream-to-zads` directory.  The script `stream-to-zads.py` is designed to run in a Spin container; it reads alerts from where they are on disk, and based on the directory names of the alerts (which are linked to dates), and configuration, figures out what it needs to send
 
-### Pulling from brokers
+### <a name="elasticcpull"></a> Pulling from brokers
 
 The django management command `elasticc/management/commands/brokerpoll.py` handled the broker polling.  It ran in its own Spin container with the same Docker image as the main tom web server (but did not open a webserver port to the outside world).
 
 
-## ELASTICC2
+## <a name="noteselasticc2"></a> ELASTICC2
 
-### Streaming to ZADS
+### <a name="elasticc2stream"></a> Streaming to ZADS
 
 The django management command `elasticc2/management/commands/send_elasticc2_alerts.py` is able to construct avro alerts from the tables in the database, and send those avro alerts on to a kafka server.  This command is run in the cron job described by `spin_admin/tom-send-alerts-cron.yaml`.
 
-### Fake broker
+### <a name="elasticc2fakebroker"></a> Fake broker
 
 In the `LSSTDESC/elasticc` archive, under the `stream-to-zads` directory, there is a script `fakebroker.py`.  This is able to read ELaSTiCC alerts from one kafka server, construct broker messages (which are the right structure, but have no real thought behind the classifications), and send those broker messages on to another kafka server.  It's run as aprt of the test suite (see below).
 
 
-## Testing
+## <a name="elasticctesting"> Testing
 
 The `tests` subdirectory has tests.  They don't test the basic TOM functionality; they test the DESC stuff that we've added on top of the TOM.  (The hope is that the TOM passes its own tests internally.)  Currently, tests are still being written, so much of the functionality doesn't have any tests, sadly.  One key important test, though, is the one that verifies that the flow of alerts from TOM to kafka server, and back from broker's kafka servers to the TOM, or posted to the TOM via the API that AMPEL uses, works.
 
@@ -368,14 +526,14 @@ The tests are designed to run inside the framework described by the `docker-comp
 
 The `docker-compose.yaml` file has an additional service `createdb` that creates the database tables once the postgres server is up; subsequent services don't start until that service is finished.  It starts up one or two different client services, based on how you run it; either one to automatedly run all the tests (which can potentially take a very long time), or one to provice a shell host where you can manually run individual tests or poke about.
 
-### Building the framework
+### <a name="elasticctestbuild"></a> Building the framework
 
 Make sure all of the necessary images are built on your system by moving into the `tests` subdirectory and running:
 ```
 docker compose build
 ```
 
-### Running a shell in the framework
+### <a name="elasticctestshell"></a> Running a shell in the framework
 
 To get an environment in which to run the tests manually, run
 ```
@@ -400,7 +558,7 @@ docker compose down -v
 
 if you also want to delete the created volumes (which you should if you're running tests, so the next run will start with a clean environment).
 
-### Automatically running all the tests
+### <a name="elasticctestauto"></a> Automatically running all the tests
 
 In the `tests` directory (on your machine, _not_ inside a container), after having built the framework, do:
 ```

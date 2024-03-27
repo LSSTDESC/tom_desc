@@ -2,6 +2,7 @@ import sys
 import re
 import pathlib
 import datetime
+import dateutil.parser
 import json
 import logging
 import traceback
@@ -23,10 +24,11 @@ import rest_framework
 import pandas
 import psycopg2.extras
 
+import elasticc2.models
 from elasticc2.models import PPDBDiaObject, PPDBDiaSource, PPDBDiaForcedSource, PPDBAlert, DiaObjectTruth
 from elasticc2.models import DiaObject, DiaSource, DiaForcedSource, BrokerClassifier, BrokerMessage
 from elasticc2.models import ClassIdOfGentype
-from elasticc2.models import SpectrumInfo, WantedSpectra, RequestedSpectra
+from elasticc2.models import SpectrumInfo, WantedSpectra, PlannedSpectra
 from elasticc2.serializers import PPDBDiaObjectSerializer, PPDBDiaSourceSerializer, PPDBDiaForcedSourceSerializer
 
 # I tried inherting from the root logger, but it
@@ -788,45 +790,76 @@ class GetHotSNeView(PermissionRequiredMixin, django.views.View):
     def has_permission( self ):
         return bool( self.request.user.is_authenticated )
 
-    def get( self, request, days=30 ):
-        return self.process( request, days=days )
+    def get( self, request ):
+        return self.process( request )
 
-    def post( self, request, days=30 ):
-        return self.process( request, days=days )
+    def post( self, request ):
+        return self.process( request )
 
-    def process( self, request, days=30 ):
-        sne = {}
-        t = astropy.time.Time( datetime.datetime.now( datetime.timezone.utc ) )
+    def process( self, request ):
+        try:
+            data = json.loads( request.body )
 
-        with django.db.connection.cursor().connection.cursor( cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-            cursor.execute( "SELECT f.diaobject_id AS diaobject_id, f.diaforcedsource_id AS diaforcedsource_id,"
-                            "       f.filtername AS band,f.midpointtai AS mjd, "
-                            "       f.psflux AS flux, f.psfluxerr AS fluxerr "
-                            "FROM elasticc2_diaforcedsource f "
-                            "WHERE f.diaobject_id IN ("
-                            "  SELECT DISTINCT ON(diaobject_id) diaobject_id "
-                            "  FROM elasticc2_diaforcedsource "
-                            "  WHERE midpointtai>=%(t0)s AND psflux/psfluxerr >= 5."
-                            ") "
-                            "ORDER BY diaobject_id,midpointtai",
-                            { "t0": t.mjd - days } )
-            df = pandas.DataFrame( cursor.fetchall() )
+            mjd0 = 0.
+            if 'detected_since_mjd' in data.keys():
+                if 'detected_in_last_days' in data.keys():
+                    return HttpResponse( f'Error, only give one of detected_since_mjd or '
+                                         f'detected_in_last_days', status=500,
+                                         content_type='text/plain; charset=utf-8' )
+                mjd0 = float( data['detected_since_mjd'] )
+            else:
+                lastdays = 30
+                if 'detected_in_last_days' in data.keys():
+                    lastdays = int( data['detected_in_last_days'] )
+                mjd0 = astropy.time.Time( datetime.datetime.now( datetime.timezone.utc )
+                                          - datetime.timedelta( days=lastdays ) ).mjd
 
-            objids = df['diaobject_id'].unique()
-            df.set_index( [ 'diaobject_id', 'diaforcedsource_id' ], inplace=True )
+            djangoconn = django.db.connection
+            with djangoconn.cursor().connection.cursor( cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+                cursor.execute( "SELECT f.diaobject_id AS diaobject_id, o.ra AS ra, o.decl AS dec,"
+                                "       f.diaforcedsource_id AS diaforcedsource_id,"
+                                "       f.filtername AS band,f.midpointtai AS mjd,"
+                                "       f.psflux AS flux, f.psfluxerr AS fluxerr "
+                                "FROM elasticc2_diaforcedsource f "
+                                "INNER JOIN elasticc2_diaobject o ON f.diaobject_id=o.diaobject_id "
+                                "WHERE f.diaobject_id IN ("
+                                "  SELECT DISTINCT ON(diaobject_id) diaobject_id "
+                                "  FROM elasticc2_diaforcedsource "
+                                "  WHERE midpointtai>=%(t0)s AND psflux/psfluxerr >= 5."
+                                ") "
+                                "ORDER BY f.diaobject_id,f.midpointtai",
+                                { "t0": mjd0 } )
+                df = pandas.DataFrame( cursor.fetchall() )
 
-            for objid in objids:
-                subdf = df.xs( objid, level='diaobject_id' )
-                sne[int(objid)] = { 'photometry': { 'mjd': list( subdf['mjd'] ),
-                                                    'band': list( subdf['band'] ),
-                                                    'flux': list( subdf['flux'] ),
-                                                    'fluxerr': list( subdf['fluxerr'] ) },
-                                    'zp': 27.5,   # standard SNANA zeropoint,
-                                    'redshift': -99,
-                                    'sncode': -99 }
+                sne = []
+                if len(df) > 0:
+                    objids = df['diaobject_id'].unique()
+                    df.set_index( [ 'diaobject_id', 'diaforcedsource_id' ], inplace=True )
 
-        resp = JsonResponse( sne )
-        return resp
+                    for objid in objids:
+                        subdf = df.xs( objid, level='diaobject_id' )
+                        sys.stderr.write( f"len(subdf) = {len(subdf)}\n" )
+                        sys.stderr.write( f"subdf =\n{subdf}\n" )
+                        sys.stderr.write( f"subdf.ra =\n{subdf.ra}\n" )
+                        sne.append( { 'objectid': int(objid),
+                                      'ra': subdf.ra.values[0],
+                                      'dec': subdf.dec.values[0],
+                                      'photometry': { 'mjd': list( subdf['mjd'] ),
+                                                      'band': list( subdf['band'] ),
+                                                      'flux': list( subdf['flux'] ),
+                                                      'fluxerr': list( subdf['fluxerr'] ) },
+                                      'zp': 27.5,   # standard SNANA zeropoint,
+                                      'redshift': -99,
+                                      'sncode': -99 } )
+
+            resp = JsonResponse( { 'status': 'ok',
+                                   'sne': sne } )
+            return resp
+        except Exception as ex:
+            sys.stderr.write( f"Exception in GetHotSNeView: {ex}\n" )
+            traceback.print_exc( file=sys.stderr )
+            return HttpResponse( f"Exception in GetHotSNeView: {str(ex)}", status=500,
+                                 content_type='text/plain; charset=utf-8' )
 
 # ======================================================================
 
@@ -889,7 +922,7 @@ class WhatSpectraAreWanted(PermissionRequiredMixin, django.views.View):
                                    data['requested_since'] )
                 if match is None:
                     return HttpResponse( f"Failed to parse YYYY-MM-DD HH:MM:SS from {data['requestedsince']}",
-                                         status=500, content_type='text/plain; charset=utf8' )
+                                         status=500, content_type='text/plain; charset=utf-8' )
                 y = int( match.group('y') )
                 m = int( match.group('m') )
                 d = int( match.group('d') )
@@ -911,8 +944,8 @@ class WhatSpectraAreWanted(PermissionRequiredMixin, django.views.View):
                 notclaimedinlastdays = 7
             claimsince = datetime.datetime.now() - datetime.timedelta( days=notclaimedinlastdays )
 
-            if 'detected_since' in data.keys():
-                detsince = float( data['detected_since'] )
+            if 'detected_since_mjd' in data.keys():
+                detsince = float( data['detected_since_mjd'] )
             else:
                 if 'detected_in_last_days' in data.keys():
                     detected_in_last_days = int( data['detected_in_last_days' ] )
@@ -937,8 +970,8 @@ class WhatSpectraAreWanted(PermissionRequiredMixin, django.views.View):
                       "  FROM ( "
                       "    SELECT w.diaobject_id, w.requester, w.priority, r.reqspec_id "
                       "    FROM elasticc2_wantedspectra w "
-                      "    LEFT JOIN elasticc2_requestedspectra r "
-                      "      ON r.diaobject_id=w.diaobject_id AND r.reqtime>%(reqtime)s "
+                      "    LEFT JOIN elasticc2_plannedspectra r "
+                      "      ON r.diaobject_id=w.diaobject_id AND r.created_at>%(reqtime)s "
                       "  ) subq "
                       "  WHERE reqspec_id IS NULL "
                       "  GROUP BY diaobject_id,requester,priority )" )
@@ -1014,7 +1047,8 @@ class WhatSpectraAreWanted(PermissionRequiredMixin, django.views.View):
                                 "INNER JOIN tmp_wanted4 w4 "
                                 "  ON w3.diaobject_id=w4.diaobject_id "
                                 "INNER JOIN elasticc2_diaobject o "
-                                "  ON w3.diaobject_id=o.diaobject_id " )
+                                "  ON w3.diaobject_id=o.diaobject_id "
+                                "ORDER BY w3.priority DESC,w3.diaobject_id" )
                 df = pandas.DataFrame( cursor.fetchall() ).set_index( 'objid', 'filtername' )
 
             pgconn.rollback()
@@ -1024,39 +1058,213 @@ class WhatSpectraAreWanted(PermissionRequiredMixin, django.views.View):
                 subdf = subdf[ subdf.mag < limmag ].reset_index()
                 df[ df.index.get_level_values('objid').isin( list( subdf.objid ) ) ]
 
-            retval = {}
+            tmpretvals = {}
+            retval = []
             for row in df.reset_index().itertuples():
                 objid = int( row.objid )
-                if objid not in retval.keys():
-                    retval[ objid ] = { 'ra': float( row.ra ),
-                                        'dec': float( row.dec ),
-                                        'req': row.requester,
-                                        'prio': int( row.priority ),
-                                        'latest': {} }
-                retval[ objid ]['latest'][row.filtername] = { 'mjd': float( row.mjd ),
-                                                              'mag': float( row.mag ) }
-
-            return JsonResponse( retval )
+                if objid not in tmpretvals.keys():
+                    tmpretvals[objid] = { 'oid': objid,
+                                          'ra': float( row.ra ),
+                                          'dec': float( row.dec ),
+                                          'req': row.requester,
+                                          'prio': int( row.priority ),
+                                          'latest': {} }
+                    
+                tmpretvals[ objid ]['latest'][row.filtername] = { 'mjd': float( row.mjd ),
+                                                                  'mag': float( row.mag ) }
+            retval = [ v for v in tmpretvals.values() ]
+            return JsonResponse( { 'status': 'ok',
+                                   'wantedspectra': retval } )
 
         except Exception as ex:
             sys.stderr.write( "Exception in WhatSpectraAreWanted" )
             traceback.print_exc( file=sys.stderr )
             return HttpResponse( f"Exception in WhatSpectraAreWanted: {ex}",
-                                 status=500, content_type='text/plain; charset=utf8' )
+                                 status=500, content_type='text/plain; charset=utf-8' )
 
 # ======================================================================
 
 class PlanToDoSpectrum(PermissionRequiredMixin, django.views.View):
-    pass
+    raise_exception = True
+
+    def has_permission( self ):
+        return bool( self.request.user.is_authenticated )
+
+    def post( self, request ):
+        try:
+            data = json.loads( request.body )
+            if ( 'objectid' not in data.keys() ) or ( 'facility' not in data.keys() ):
+                return HttpResponse( f"Post data must be json with keys objectid and facility",
+                                     status=500, content_type='text/plain; charset=utf-8' )
+            objectid = int( data['objectid'] )
+            facility = data['facility']
+            if len(facility) == 0:
+                return HttpResponse( f"facility can't be an empty string", status=500,
+                                     content_type='text/plain; charset=utf-8' )
+            if 'plantime' in data.keys():
+                try:
+                    plantime = dateutil.parser.parse( data['plantime'] )
+                except Exception as ex:
+                    return HttpResponse( f"Failed to parse '{data['plantime']}' as YYYY-MM-DD or "
+                                         f"YYYY-MM-DD HH:MM:SS", status=500,
+                                         content_type='text/plain; charset=utf-8' )
+            else:
+                plantime = None
+
+            comment = data['comment'] if 'comment' in data.keys() else ""
+
+            obj = DiaObject.objects.filter( pk=objectid )
+            if len(obj) == 0:
+                return HttpRespose( f"Unknown objectid {objectid}", status=500,
+                                    content_type='text/plain; charset=utf-8' )
+            obj = obj[0]
+
+            oldps = PlannedSpectra.objects.filter( facility=facility ).filter( diaobject_id=objectid )
+            if oldps.count() != 0:
+                oldps.delete()
+
+            newps = PlannedSpectra( diaobject_id=objectid,
+                                    facility=facility,
+                                    plantime=plantime,
+                                    comment=comment )
+            newps.save()
+
+            res = { 'status': 'ok',
+                    'objectid': newps.diaobject_id,
+                    'facility': newps.facility,
+                    'created_at': newps.created_at,
+                    'plantime': newps.plantime,
+                    'comment': newps.comment }
+            return JsonResponse( res )
+        except Exception as ex:
+            sys.stderr.write( "Exception in PlanToDoSpectrum" )
+            traceback.print_exc( file=sys.stderr )
+            return HttpResponse( f"Exception in PlanToDoSpectrum: {ex}",
+                                 status=500, content_type='text/plain; charset=utf-8' )
+        
+                
 
 
 # ======================================================================
 
 class RemoveSpectrumPlan(PermissionRequiredMixin, django.views.View):
-    pass
+    raise_exception = True
+
+    def has_permission( self ):
+        return bool( self.request.user.is_authenticated )
+
+    def post( self, request ):
+        try:
+            data = json.loads( request.body )
+            if ('objectid' not in data.keys() ) or ( 'facility' not in data.keys() ):
+                return HttpResponse( f"Post data must be json with keys objectid and facility",
+                                     status=500, content_type='text/plain; charset=utf-8' )
+            objectid = int( data['objectid'] )
+            facility = data['facility']
+            if len(facility) == 0:
+                return HttpResponse( f"facility can't be an empty string", status=500,
+                                     content_type='text/plain; charset=utf-8' )
+
+            oldps = PlannedSpectra.objects.filter( facility=facility ).filter( diaobject_id=objectid )
+            ndel = len(oldps)
+            if ndel > 0:
+                oldps.delete()
+
+            res = { 'status': 'ok',
+                    'facillity': facility,
+                    'objectid': objectid,
+                    'n_deleted': ndel
+                   }
+            return JsonResponse( res )
+        except Exception as ex:
+            sys.stderr.write( "Exception in RemoveSpectrumPlan" )
+            traceback.print_exc( file=sys.stderr )
+            return HttpResponse( f"Exception in RemoveSpectrumPlan: {ex}",
+                                 status=500, content_type='text/plain; charset=utf-8' )
+            
+            
 
 # ======================================================================
 
 class ReportSpectrumInfo(PermissionRequiredMixin, django.views.View):
-    pass
+    raise_exception = True
 
+    def has_permission( self ):
+        return bool( self.request.user.is_authenticated )
+
+    def post( self, request ):
+        try:
+            data = json.loads( request.body )
+            neededkeys = set( 'objectid', 'facility', 'mjd', 'z', 'classid' )
+            missingkeys = set()
+            unknownkeys = set()
+            for k in neededkeys:
+                if k not in data.keys():
+                    missingkeys.add( k )
+            for k in data.keys():
+                if k not in neededkeys:
+                    unknownkeys = set()
+
+            if ( len( missingkeys ) > 0 ) or ( len( unknownkeys) > 0 ):
+                errstr = "Incorrect fields."
+                if len(missingkeys ) > 0:
+                    errstr += " Missing required fields: {missingkeys}."
+                if len( unknownkeys ) > 0:
+                    errstr += " Unknown fields: {unknownfields}"
+                return HttpResponse( errstr, status=500, content_type='text/plain; charset=utf-8' )
+
+            objectid = int( data['objectid'] )
+            facility = data['facility']
+            if len(facility) == 0:
+                return HttpResponse( f"facility can't be an empty string", status=500,
+                                     content_type='text/plain; charset=utf-8' )
+            mjd = float( data['mjd'] )
+            if ( data['z'] is not None ) and ( data['z'] is not "" ):
+                z = float( data['z'] )
+            else:
+                z = None
+            if ( data['classid'] is not None ) and ( data['classid'] is not "" ):
+                classid = int( data['classid'] )
+                # TODO : verify that it's legal!
+            else:
+                classid = None
+
+            obj = DiaObject.objects.filter( pk=objectid )
+            if len(obj) == 0:
+                return HttpResponse( f"Unknown objectid {objectid}", status=500,
+                                     content_type='text/plain; charset=utf-8' )
+            obj = obj[0]
+
+            newsi = SpectrumInfo( diaobject_id=objectid,
+                                  facility=facility,
+                                  mjd=mjd,
+                                  z=z,
+                                  clsasid=classid )
+            newsi.save()
+
+            oldps = PlannedSpectra.objects.filter( facility=facility ).filter( diaobject_id=objectid )
+            if len(oldps) > 0:
+                oldps.delete()
+
+            oldws = WantedSpectra.objects.filter( diaobject_id=objectid )
+            if len(oldws) > 0:
+                oldws.delete()
+
+            res = { 'status': 'ok',
+                    'objectid': newsi.diaobject_id,
+                    'facility': newsi.facility,
+                    'inserted_at': newsi.inserted_at,
+                    'mjd': newsi.mjd,
+                    'z': newsi.z,
+                    'classid': newsi.classid }
+            return JsonResponse( res )
+        except Exception as ex:
+            sys.stderr.write( "Exception in ReportSpectrumInfo" )
+            traceback.print_exc( file=sys.stderr )
+            return HttpResponse( f"Exception in ReportSpectrumInfo: {ex}",
+                                 status=500, content_type='text/plain; charset=utf-8' )
+        
+                    
+            
+
+            
