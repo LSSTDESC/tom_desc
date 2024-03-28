@@ -76,7 +76,11 @@ You can hit the Web API directly using then python `requests` module (or anythin
    classidinfo = response.json()
 ```
 
-You must specify either `password` or `passwordfile`; **make sure not to commit your password to any git repository**.  This is why I use a passwordfile myself, in a non-world-readable directory where I keep things like that.  (This is, of course, not ideal, but it seems to be the best solution to not having to type things all the time.)
+In the constuctor, `username` is your username on the TOM.  This is *not* the same account as anywhere else.
+Contact Rob if you need an account on the TOM.  You must specify either `password` or `passwordfile`; **make sure
+not to commit your password to any git repository**.  This is why I use a passwordfile myself, in a
+non-world-readable directory where I keep things like that.  (This is, of course, not ideal, but it seems to be the
+best solution to not having to type things all the time.)
 
 **Note: `desc-tom-2.lbl.gov` is a development TOM.**  Only use that URL in the TomClient constructor if you know what you're doing.  The production tom is `desc-tom.lbl.gov`, and is the default value for `url` (so you can leave the `url=` argument out of the TomClient constructor if you're going to `desc-tom.lbl.gov`).
 
@@ -243,9 +247,8 @@ All of the examples below assume that you have the following code somewhere befo
    tom = TomClient( url="<url>", username="<username>", passwordfile="<passwordfile>" )
 ```
 
-where `<url>` is the TOM's url; if you're going to the default (https://desc-tom.lbl.gov), then this is optional.  `<username>` is your 
-
-See (TODO: ref to tom client doc) for more information on using `TomClient`.
+where `<url>` is the TOM's url; if you're going to the default (https://desc-tom.lbl.gov), then this is optional.  
+See [Acessing the TOM:Via Web API](#via-web-api) for more information on using `TomClient`.
 
 
 ### <a name="elasticc2hotsne"></a>Finding hot SNe
