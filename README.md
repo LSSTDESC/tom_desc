@@ -232,7 +232,7 @@ TODO
 
 ## <a name="elasticc2spec"></a>Getting and pushing spectrum information
 
-The easiest way to do all of this is to use `tomclient.py`.  Make an object, and then call that object's `post` method to hit the URLs described below.
+The easiest way to do all of this is to use `tom_client.py`.  Make an object, and then call that object's `post` method to hit the URLs described below.
 
 _*WARNING*_ : all of the APIs below should be considered preliminary, and may change.  In particular, there are things we probably need to add to some of them.
 
