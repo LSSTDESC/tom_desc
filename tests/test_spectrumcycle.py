@@ -66,7 +66,7 @@ class TestSpectrumCycle:
         # Should probably check more than this...
         assert set( sne[0].keys() ) == { 'objectid', 'ra', 'dec', 'photometry', 'zp', 'redshift', 'sncode' }
         assert set( sne[0]['photometry'].keys() ) == { 'mjd', 'band', 'flux', 'fluxerr' }
-                              
+
 
     def test_ask_for_spectra( self, ask_for_spectra, tomclient ):
         objs, prios = ask_for_spectra
@@ -131,7 +131,7 @@ class TestSpectrumCycle:
                                      'facility': 'Test Spectrumifier' } )
 
         assert elasticc2.models.PlannedSpectra.objects.count() == 1
-        
+
         retval = res.json()
         assert retval['status'] == 'ok'
         assert retval['objectid'] == wanted0['oid']
@@ -142,10 +142,10 @@ class TestSpectrumCycle:
         assert retval['comment'] == ''
 
         firstcreatetime = dateutil.parser.parse( retval['created_at'] )
-        
+
         # Make sure this object no longer shows up in wanted spectra if we ask
-        #   for things 
-                      
+        #   for things
+
         res = tomclient.post( 'elasticc2/spectrawanted', json={ 'detected_since_mjd': 0,
                                                                 'not_claimed_in_last_days': 1 } )
         wantedobjs = res.json()
@@ -185,8 +185,60 @@ class TestSpectrumCycle:
                                      'facility': 'Test Spectrumifier 2' } )
         assert elasticc2.models.PlannedSpectra.objects.count() == 2
 
-        # TODO - run RemoveSpectrumPlan and check that it did the right thing
-        
+        # Make sure we can remove a plan
+
+        res = tomclient.post( 'elasticc2/removespectrumplan',
+                              json={ 'objectid': wanted0['oid'],
+                                     'facility': 'Test Spectrumifier' } )
+        assert res.status_code == 200
+        res = res.json()
+        assert res['status'] == 'ok'
+        assert res['facility'] == 'Test Spectrumifier'
+        assert res['objectid'] == wanted0['oid']
+        assert res['n_deleted'] == 1
+
+        plans = elasticc2.models.PlannedSpectra.objects.all()
+        assert len(plans) == 1
+        assert plans[0].facility == 'Test Spectrumifier 2'
+
 
     def test_report_spectrum( self, ask_for_spectra, tomclient ):
-        pass
+        plans = elasticc2.models.PlannedSpectra.objects.all()
+        oid = plans[0].diaobject_id
+        facility = plans[0].facility
+
+        res = tomclient.post( 'elasticc2/reportspectruminfo', json={ 'objectid': oid,
+                                                                     'facility': facility,
+                                                                     'mjd': 65536.,
+                                                                     'z': 0.25,
+                                                                     'classid': 2222    #SN Ia
+                                                                    } )
+        res = res.json()
+        assert res['status'] == 'ok'
+        assert res['objectid'] == oid
+        assert res['facility'] == facility
+        assert res['mjd'] == pytest.approx( 65536., abs=0.01 )
+        assert res['z'] == pytest.approx( 0.25, abs=0.001 )
+        assert res['classid'] == 2222
+        now = astropy.time.Time( datetime.datetime.now() ).mjd
+        instime = astropy.time.Time( res['inserted_at'] ).mjd
+        assert instime == pytest.approx( now, abs=0.01 )
+
+        # Make sure the entry is there
+
+        sinfos = elasticc2.models.SpectrumInfo.objects.all()
+        assert len(sinfos) == 1
+        assert sinfos[0].facility == 'Test Spectrumifier 2'
+        assert sinfos[0].diaobject_id == oid
+        assert sinfos[0].mjd == pytest.approx( 65536., abs=0.01 )
+        assert sinfos[0].z == pytest.approx( 0.25, abs=0.001 )
+        assert sinfos[0].classid == 2222
+        assert ( astropy.time.Time( sinfos[0].inserted_at ).mjd ==
+                 pytest.approx( astropy.time.Time( datetime.datetime.now() ).mjd, abs=3./3600./24. ) )
+
+        # Make sure both the plan and the wanted went away
+
+        assert elasticc2.models.PlannedSpectra.objects.count() == 0
+        wanted = elasticc2.models.WantedSpectra.objects.all()
+        assert len(wanted) == 24
+        assert oid not in [ o.diaobject_id for o in wanted ]

@@ -3,100 +3,72 @@ import os
 import requests
 import json
 
-# This is a utility function that we use below.  It shows how
-# you actually query the databse, once it's set up.
-# See the main() function below.
-def send_query( rqs, query, subdict, url="https://desc-tom.lbl.gov" ):
-    """Send a SQL query to the TOM.
+from tom_client import TomClient
 
-    rqs - a python requests session (returned by requests.session())
-          must already be logged into the TOM
-    query - The query as expected by psycopg2
-    subdict - The substitution dictionary as expected by psycopg2
-    url - The base url of the TOM (default: "https://desc-tom.lbl.gov")
+# This is a utility class we use below.  The purpose is to do some
+# boilerplate error checking in send_query so that we don't have to
+# repeate the checks every time we tomclient.post.
+class Querier:
+    def __init__( self, tomclient ):
+        self.tomclient = tomclient
 
-    Returns: An array of rows returned from the database.  Each row is a
-    dict of column->value.
+    def send_query( self, query, subdict=None ):
+        """Send a SQL query to the TOM.
 
-    Raises exceptions: RunTimeError if anything goes wrong.  This includes
-    if the HTTP request went just fine, but there was an error response
-    from the database; in that case, the text of the RunTimeError is
-    the error text returned from the server.
-    """
+        query - The query as expected by psycopg2.  Either a string, or a list of strings.
 
-    try:
-        result = rqs.post( f'{url}/db/runsqlquery/',
-                           json={ 'query': query, 'subdict': subdict } )
-    except Exception as e:
-        raise RuntimeError( f'HTTP call failed: {str(e)}' )
+        subdict - The substitution dictionary as expected by psycopg2.
+           Either None, a dict, or a list of dicts.  If query is a list
+           of strings, then this must be either None or a list with the
+           same length as query.
 
-    if result.status_code != 200:
-        raise RuntimeError( f"Error, got status {result.status_code} from HTTP call" )
-    data = json.loads( result.text )
-    if ( 'status' in data ) and ( data['status'] == 'error' ):
-        raise RuntimeError( data['error'] )
-    elif ( 'status' not in data ) or ( data['status'] != 'ok' ):
-        raise RuntimeError( f"Got unexpected response from server: {json.dumps(data,indent=4)}" )
-    return data['rows']
-    
+        Returns: An array of rows returned from the database.  Each row is a
+        dict of column->value.
+
+        Raises exceptions: RunTimeError if anything goes wrong.  This includes
+        if the HTTP request went just fine, but there was an error response
+        from the database; in that case, the text of the RunTimeError is
+        the error text returned from the server.
+
+        """
+
+        if isinstance( query, list ):
+            subdict = [ {} for i in range(len(query)) ] if subdict is None else subdict
+            sendjson = { 'queries': query, 'subdicts': subdict }
+        else:
+            subdict = {} if subdict is None else subdict
+            sendjson = { 'query': query, 'subdict': subdict }
+        result = self.tomclient.post( 'db/runsqlquery/', json=sendjson )
+        if ( result.status_code != 200 ):
+            raise RuntimeError( f"Got http status {result.status_code}" )
+        data = json.loads( result.text )
+        if ( 'status' in data ) and ( data['status'] == 'error' ):
+            sys.stderr.write( f"ERROR: {data['error']}" )
+            return []
+        elif ( 'status' not in data ) or ( data['status'] != 'ok' ):
+            raise RuntimeError( f"Got unexpected response: {data}" )
+        return data['rows']
 
 def main():
-    # Put in your TOM username and password here.  What I have here
-    # reads the password from a private directory, so this code will not
-    # work as is for you.  You just need to set the username and
-    # password variables for use in the rqs.post call below.
-    
-    # url = "https://desc-tom.lbl.gov"
-    url = "https://desc-tom-rknop-dev.lbl.gov"
+    # Create a TOM client.  See the docs in tom_client.py for
+    #  information about passwords.
+
+    url = "https://desc-tom.lbl.gov"
+    # url = "https://desc-tom-2.lbl.gov"
+    # url = "https://desc-tom-rknop-dev.lbl.gov"
     username = "rknop"
-    with open( os.path.join( os.getenv("HOME"), "secrets", "tom_rknop_passwd" ) ) as ifp:
-        password = ifp.readline().strip()
-
-    # First, log in.  Because of Django's prevention against cross-site
-    # scripting attacks, there is some dancing about you have to do in
-    # order to make sure it always gets the right "csrftoken" header.
-
-    rqs = requests.session()
-    rqs.get( f'{url}/accounts/login/' )
-    res = rqs.post( f'{url}/accounts/login/',
-                    data={ "username": username,
-                           "password": password,
-                           "csrfmiddlewaretoken": rqs.cookies['csrftoken'] } )
-    if res.status_code != 200:
-        raise RuntimeError( f"Failed to log in; http status: {res.status_code}" )
-    if 'Please enter a correct' in res.text:
-        # This is a very cheesy attempt at checking if the login failed.
-        # I haven't found clean documentation on how to log into a django site
-        # from an app like this using standard authentication stuff.  So, for
-        # now, I'm counting on the HTML that happened to come back when
-        # I ran it with a failed login one time.  One of these days I'll actually
-        # figure out how Django auth works and make a version of /accounts/login/
-        # designed for use in API scripts like this one, rather than desgined
-        # for interactive users.
-        raise RuntimeError( "Failed to log in.  I think.  Put in a debug break and look at res.text" )
-    rqs.headers.update( { 'X-CSRFToken': rqs.cookies['csrftoken'] } )
-
-    # Next, send your query, passing the csrfheader with each request.
-    # (The rqs.headers.update call above makes that happen if you just
-    # keep using the rqs object.)
-    #
-    # You send the query as a json-encoded dictionary with two fields:
-    #   'query' : the SQL query, with %(name)s for things that should
-    #                be substituted.  (This is standard psycopg2.)
-    #   'subdict' : a dictionary of substitutions for %(name)s things in your query
-    #
-    # The backend is to this web API call is readonly, so you can't
-    # bobby tables this. Only elasticc admins are able to read most of
-    # the tables.  Anybody with an account can read the elasticc_broker*
-    # tables.
-    #
-    # (Some relevant schema are at the bottom.)
+    sys.stderr.write( "logging into tom...\n" )
+    tomclient = TomClient( url=url, username=username,
+                           passwordfile=os.path.join( os.getenv("HOME"), "secrets", "tom_rknop_passwd" ) )
+    querier = Querier( tomclient )
     
     # Note that I have to double-quote the column name beacuse otherwise
     #  Postgres converts things to lc for some reason or another.
+    # (ASIDE : this query may time out the web proxy, in which case an execption will get raised.)
     query = 'SELECT * FROM elasticc_view_sourceclassifications ORDER BY "msgHdrTimestamp" LIMIT %(num)s'
     subdict = { 'num': 10 }
-    rows = send_query( rqs, query, subdict, url=url )
+    sys.stderr.write( "sending query..." )
+    rows = querier.send_query( query, subdict )
 
     # If all goes well, rows has the rows returned by the SQL query;
     # each element of the row is a dict.  There's probably a more

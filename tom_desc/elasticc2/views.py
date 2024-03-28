@@ -1171,7 +1171,7 @@ class RemoveSpectrumPlan(PermissionRequiredMixin, django.views.View):
                 oldps.delete()
 
             res = { 'status': 'ok',
-                    'facillity': facility,
+                    'facility': facility,
                     'objectid': objectid,
                     'n_deleted': ndel
                    }
@@ -1195,7 +1195,7 @@ class ReportSpectrumInfo(PermissionRequiredMixin, django.views.View):
     def post( self, request ):
         try:
             data = json.loads( request.body )
-            neededkeys = set( 'objectid', 'facility', 'mjd', 'z', 'classid' )
+            neededkeys = set( [ 'objectid', 'facility', 'mjd', 'z', 'classid' ] )
             missingkeys = set()
             unknownkeys = set()
             for k in neededkeys:
@@ -1239,7 +1239,7 @@ class ReportSpectrumInfo(PermissionRequiredMixin, django.views.View):
                                   facility=facility,
                                   mjd=mjd,
                                   z=z,
-                                  clsasid=classid )
+                                  classid=classid )
             newsi.save()
 
             oldps = PlannedSpectra.objects.filter( facility=facility ).filter( diaobject_id=objectid )

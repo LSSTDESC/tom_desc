@@ -3,8 +3,9 @@
 Based on the [Tom Toolkit](https://lco.global/tomtoolkit/)
 
 * [Using the TOM](#using-the-tom)
-  * [Accessing the TOM[(#accessing-the-tom)
+  * [Accessing the TOM](#accessing-the-tom)
     * [Interactively with a browser](#interactively-with-a-browser)
+    * [Via Web API](#via-web-api)
     * [Via SQL](#via-sql)
 * [The ELAsTiCC application](#elasticc)
   * [Example REST interface usage](#example-rest-interface-usage)
@@ -16,6 +17,7 @@ Based on the [Tom Toolkit](https://lco.global/tomtoolkit/)
     * [Asking for a spectrum](#elasticc2askspec)
     * [Finding out what spectra are wanted](#elasticc2getwantedspec)
     * [Declaring intent to take a spectrum](#elasticc2planspec)
+    * [Removing declared intent to take a spectrum](#elasticc2removespecplan)
     * [Reporting spectrum information](#elasticc2reportspec)
 
 * [Internal Documentation](#internal-documentation)
@@ -61,11 +63,86 @@ Being a Django server, the TOM is divided into different "applications".  The mo
 
 Just go.  Look at (for example) the ELAsTiCC, ELAsTiCC2, and Targets links in the header navigation bar.
 
+### Via Web API
+
+You can hit the Web API directly using then python `requests` module (or anything else that can POST to and pull from HTTP).  However, there are some annoying bits having to do with django and headers and authentication.  To make this easier, look at the file `tom_client.py` in the top level of the repository.  Read the documentation there.  In summary, you can connect by doing something like:
+
+```
+   from tom_client import TomClient
+   tomclient = TomClient( url='https://desc-tom-2.lbl.gov', username='rknop',
+                          passwordfile='/home/raknop/secrets/tom_rknop_passwd' )
+   response = tomclient.post( "elasticc2/classids" )
+   assert response.status_code = 200
+   classidinfo = response.json()
+```
+
+You must specify either `password` or `passwordfile`; **make sure not to commit your password to any git repository**.  This is why I use a passwordfile myself, in a non-world-readable directory where I keep things like that.  (This is, of course, not ideal, but it seems to be the best solution to not having to type things all the time.)
+
+**Note: `desc-tom-2.lbl.gov` is a development TOM.**  Only use that URL in the TomClient constructor if you know what you're doing.  The production tom is `desc-tom.lbl.gov`, and is the default value for `url` (so you can leave the `url=` argument out of the TomClient constructor if you're going to `desc-tom.lbl.gov`).
+
 ### Via SQL
 
-TODO: make sure this is up to date
+You can use the TomClient to hit the url `db/runsqlquery` on the TOM.
 
-You can access the database directly by passing SQL to a thin http interface; see `sql_query_tom_db.py` or (similar code as a Jupyter notebook) `sql_query_tom_db.ipynb`; see [Database Schema and Notes](#database-schema-and-notes) for more information.  Both of these (IF THEY'RE UP TO DATE) use `tomclient.py`, which defines a class `TomClient` that is really just a very simple front-end to python `requests` that handles some annoying django login details..  The docstring for the class in that file describes how to use it.
+For an example of this in action, see `sql_query_tom_db.ipynb` or `sql_query_tom_db.py`.
+
+Pass it a json-encoded dictionary as POST data.  The dictionary should have one of two sets of two keys; the first possibility:
+
+* `query : str` — The query to send to the database.  This will be run through `psycopg2`'s `cursor.execute()`.  Any parameters that you calculate at runtime should in general *not* be interpolated into the string directly (using f-strings or `.format` or similar); rather, use standard `psycopg2` substitution with things like `%(varname)s`.
+* `subdict : dict` — A dictionary of substitutions in `query`, e.g. `{ 'varname': 'Bobby Tables' }`.  You can omit this if you don't have any substitutions to make.
+
+A call would look something like:
+```
+  res = tomclient.post( 'db/runsqlquery',
+                        json={ 'query': 'SELECT * FROM nonexistent_table WHERE name=%(name)s',
+                               'subdict': { 'name': 'Bobby Tables' } } )
+```
+
+The response returned by `TomClient.post()` is a standard python Requests response.  If all is well, `res.status_code` will be 200; if it's not, something opaque went wrong that you probably can't do anything about.  (The most common failure will probably be timeouts, if you send a query that takes more than 5 minutes.  The postgres server can do this, but the web proxy will time out.)
+
+Look at `res.json()`; that has a dictionary with key `status`.  If `status` is `"error"`, then something went wrong that the server code was able to catch; look at `res.json()['error']` for the error message.  (This is where SQL errors will show up.)
+
+If `status` is `"ok"`, then `res.json()['rows']` will be a list of the rows returned by `cursor.fetchall()` after the the `cursor.execute()` call on the server.  (The server uses `cursor_factory=psycopg2.extras.RealDictCursor`, so each row is a dictionary of `{ column: value }`.)
+
+If you want to send a sequence of multiple queries to be issued as part of the same transaction (e.g. if you need to create temporary tables), then instead off `query` and `subdict`, the json-encoded dictionary in the POST data should have keys:
+
+* `queries : list of str` — The queries, in order, to send to the database.
+* `subdicts : list of dict` — The substitution dictionaries for each of the queries.  The length of `subdict` must match the length of `query`.
+
+A call would look something like (using a very stupid SQL example):
+
+```
+   queries = [ 'CREATE TEMP TABLE tmptab( name text )',
+               'INSERT INTO tmptab SELECT name FROM nonexistent_table WHERE name=%(bobby)s',
+               'SELECT * FROM tmptab' ]
+   subdicts = [ {},
+                { 'bobby': 'Bobby Tables' },
+                {} ]
+   res = tomclient.post( 'db/runsqlquery', json={ 'queries': queries, 'subdicts': subdicts } )
+```
+
+As before, if `res.status_code` is not 200, something mysterious went wrong (perhaps a web proxy timeout).  If `res.status_code` is 200, then `res.json()` holds a dictionary response with keyword `status`.  If `status` is `"error"`, there will also be a keyword `error` with hopefully helpful text (likely the text of the exception raised by `psycopg2`, which should give you a hint about SQL errors).  If `status` is `"ok"`, then `res.json()['rows']` holds the results of a `cursor.fetchall()` after the *last* `cursor.execute()` call (i.e. the return from the last query).
+
+#### Getting SQL schema
+
+Ideally, the schema were documented somewhere.  If you want to see the schema for yourself, *be careful about assuming what columns are*, because they might not mean what you think they mean.
+
+You can get all of the tables in (say) elasticc by sending the SQL query:
+```
+  SELECT table_name FROM information_schema.tables WHERE table_name LIKE 'elasticc_%'
+```
+
+(Use `table_name LIKE 'elasticc2_%'` to see the ELAsTiCC2 tables.)
+
+You can get the schema of a single table by sending the SQL query:
+```
+  SELECT column_name, data_type, column_default FROM information_schema.columns
+     WHERE table_name='elasticc2_brokermessage'
+```
+
+(TODO: document getting foreign key info.)
+
+---
 
 # <a name="elasticc"></a>The ELAsTiCC application
 
@@ -157,12 +234,16 @@ TODO
 
 The easiest way to do all of this is to use `tomclient.py`.  Make an object, and then call that object's `post` method to hit the URLs described below.
 
+_*WARNING*_ : all of the APIs below should be considered preliminary, and may change.  In particular, there are things we probably need to add to some of them.
+
 All of the examples below assume that you have the following code somewhere before that example:
 
 ```
    from tom_client import TomClient
    tom = TomClient( url="<url>", username="<username>", passwordfile="<passwordfile>" )
 ```
+
+where `<url>` is the TOM's url; if you're going to the default (https://desc-tom.lbl.gov), then this is optional.  `<username>` is your 
 
 See (TODO: ref to tom client doc) for more information on using `TomClient`.
 
@@ -264,10 +345,31 @@ The URL is `elasticc2/planspectrum`.  Use `TomClient` to post to it as in the ex
 
 If all is well (the `status_code` of the returned object is 200), then the `json()` method of the returned object will be a dictionary with the same keys that you passed, in addition to `status` (which is `ok`) and `created_at` (which should be roughly the time when you hit the URL0.
 
+### <a name="elasticc2removespecplan"></a> Removing declared intent to take a spectrum
+
+This is *not* necessary if you have succesfully taken a spectrum and use `elasticc2/reportspectruminfo` (below);
+the plan will automatically be removed in that case.  However, if declared a plan to take a spectrum with
+`elasticc2/planspectrum`, but then it was cloudy and you didn't get actually get the spectrum, it will help our
+planning if you remove the plan, no longer indicating that you expect to get the spectrum.
+
+You can remove a spectrum plan at the URL `elasticc2/removespectrumplan`.  The POST body should be a json-encoded ditionary with two keys: `objectid` and `facility`.  The values match the values that you passed to `elasticc2/planspectrum`.  If all is well, you'll get back a dictionary with the information as to what you removed, including a field `n_deleted` that tells you how many rows were actually deleted from the database.
+
 
 ### <a name="elasticc2reportspec"></a> Reporting spectrum information
 
-TODO
+When you've actually taken a spectrum, it will help us greatly if you tell us about it.  This both lets us know that a spectrum has been taken, and gives us information about type and redshift.  Eventually, we may have additional fields (something about S/N, something about type confidence, perhaps), but for now we're just asking for a redshift and a classid.
+
+Post to URL `elasticc2/reportspectruminfo`.  The POST body should be a json-encoded dict with keys:
+
+* `objectid : int` — the id of the object, the same number that all the previous URLs have used
+* `facility : str` — the name of the facility.  If you submitted a plan, this should match the facililty that you sent to `elasticc2/planspectrum`.  (It's OK to report spectra that you didn't declare a plan for ahead of time!)
+* `mjd : float` — the mjd of when the spectrum was taken.  (Beginning, middle, or end of exposure, doesn't matter.)
+* `z : float` — the redshift of the supernova from the spectrum.  Leave this blank ("") if it cannot be determined.
+* `classid : int` — the type from the spectrum.  Use the ELAsTiCC/DESC taxonomy found here: https://github.com/LSSTDESC/elasticc/blob/main/taxonomy/taxonomy.ipynb
+
+If the type is totally indeterminate from the specrum, use type 300 ("NotClassified").  Otherwise, use the most specific type that can be confidently identified from the spectrum.
+
+(TODO: think about allowing mulitiple types and probabilities.)
 
 ---
 
@@ -336,6 +438,9 @@ You will be prompted for the postgres password, which is "fragile".  (This postg
 #### For ELAsTiCC2
 
 Here are three files with a subset of ELAsTiCC2:
+
+(TODO: make sure the numbers listed below are up to date.)
+
 * <a href="https://portal.nersc.gov/cfs/lsst/DESC_TD_PUBLIC/users/raknop/elasticc2_dump_10obj.sql">elasticc2_dump_10obj.sql</a> (128&nbsp;KiB — 10 objects, 97 sources, 2,029 forced sources, 97 alerts (48 sent), 332 broker messages)
 * <a href="https://portal.nersc.gov/cfs/lsst/DESC_TD_PUBLIC/users/raknop/elasticc2_dump_100obj.sql">elasticc2_dump_100obj.sql</a> (1.4&nbsp;MiB — 100 objects, 3,226 sources, 26,686 forced sources, 3,226 alerts (990 sent), 6,463 broker messages)
 * <a href="https://portal.nersc.gov/cfs/lsst/DESC_TD_PUBLIC/users/raknop/elasticc2_dump_1000obj.sql">elasticc2_dump_1000obj.sql</a> (14&nbsp;MiB — 1000 ojects, 27,888 sources, 230,370 forced sources, 27,888 alerts (10,167 sent), 66,740 broker messages)
