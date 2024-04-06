@@ -1,0 +1,152 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tom-shell
+  namespace: desc-tom-buckley-dev
+  labels:
+    workload.user.cattle.io/workloadselector: deployment-desc-tom-buckley-dev-fastdbdev-shell
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      workload.user.cattle.io/workloadselector: deployment-desc-tom-buckley-dev-fastdbdev-shell
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        workload.user.cattle.io/workloadselector: deployment-desc-tom-buckley-dev-fastdbdev-shell
+    spec:
+      containers:
+      - env:
+        - name: PPDB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: tom-secrets
+              key: postgres-password
+        - name: MONGODB_USER
+          valueFrom:
+            secretKeyRef:
+              name: tom-secrets
+              key: mongodb_admin
+        - name: MONGODB_ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: tom-secrets
+              key: mongodb_admin_password
+        - name: MONGODB_ALERT_WRITER
+          valueFrom:
+            secretKeyRef:
+              name: tom-secrets
+              key: mongodb_alert_writer
+        - name: MONGODB_ALERT_WRITER_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: tom-secrets
+              key: mongodb_alert_writer_password
+        - name: PPDB_WRITER_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: tom_secrets
+              key: ppdb_writer_password
+        - name: PPDB_READER_PASSWORD
+          valueFrom:
+            secretKeyRef:
+            name: tom_secrets
+            key: ppdb_reader_password
+        - name: DB_HOST
+          value: tom-postgres
+        - name: DB_NAME
+          value: tom_desc
+        - name: DB_PASS
+          value: fragile
+        - name: DB_USER
+          value: postgres
+        - name: FINK_GROUP_ID
+          value: lsstfr-johann
+        - name: FINK_SERVER
+          value: 134.158.74.95:24499,
+        - name: FINK_TOPIC
+          value: fink_early_sn_candidates_ztf
+        - name: FINK_USERNAME
+          value: johann
+        - name: GOOGLE_APPLICATION_CREDENTIALS
+          value: /secrets/pitt_google_auth_key.json
+        - name: GOOGLE_CLOUD_PROJECT
+          value: elasticc-challenge
+        image: registry.nersc.gov/m1727/raknop/tom_desc_extcode:chimaera
+        imagePullPolicy: Always
+        name: tom-shell
+        resources: {}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            add:
+            - NET_BIND_SERVICE
+            drop:
+            - ALL
+          privileged: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          runAsUser: 56805
+        stdin: true
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        tty: true
+        volumeMounts:
+        - mountPath: /secrets
+          name: tom-secrets
+        - mountPath: /tom_desc
+          name: tom-deployment
+        - mountPath: /sample
+          name: tom-sample
+        command: [ "tail" ]
+        args: [ "-f", "/etc/issue" ]
+      dnsConfig: {}
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext:
+        fsGroup: 57177
+      terminationGracePeriodSeconds: 30
+      imagePullSecrets:
+        - name: registry-nersc
+      volumes:
+      - name: tom-secrets
+        secret:
+          defaultMode: 256
+          optional: false
+          secretName: tom-secrets
+      - hostPath:
+          path: /global/cfs/cdirs/desc-td/SOFTWARE/tom_deployment/production/tom_desc_buckley_dev/tom_desc
+          type: Directory
+        name: tom-deployment
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fastdbdev-shell
+  namespace: desc-tom-buckley-dev
+spec:
+  clusterIP: None
+  clusterIPs:
+  - None
+  ports:
+  - name: default
+    port: 42
+    protocol: TCP
+    targetPort: 42
+  selector:
+    workload.user.cattle.io/workloadselector: deployment-desc-tom-buckley-dev-fastdbdev-shell
+  sessionAffinity: None
+  type: ClusterIP
+status:
+  loadBalancer: {}
+---

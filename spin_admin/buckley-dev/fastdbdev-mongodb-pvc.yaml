@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: fastdbdev-mongodb-pvc-20240401
+  namespace: tom-desc
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2048Gi
+  storageClassName: nfs-client
+  volumeMode: Filesystem

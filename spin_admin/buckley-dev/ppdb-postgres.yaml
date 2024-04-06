@@ -1,0 +1,108 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ppdb-postgres
+  namespace: desc-tom-buckley-dev
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      workload.user.cattle.io/workloadselector: deployment-desc-tom-buckley-dev-ppdb-postgres
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+        cattle.io/timestamp: "2022-10-06T17:57:50Z"
+        field.cattle.io/ports: '[[]]'
+        nersc.gov/collab_uids: "70268"
+        nersc.gov/gid: "95089"
+        nersc.gov/gids: 45703,60152,57177,58102,59318,60070,63477,64483,79186,70268,92576,95089,96414
+        nersc.gov/roles: user
+        nersc.gov/uid: "56805"
+        nersc.gov/username: buckley
+      creationTimestamp: null
+      labels:
+        workload.user.cattle.io/workloadselector: deployment-desc-tom-buckley-dev-ppdb-postgres
+    spec:
+      initContainers:
+      - name: volume-mount-hack
+        image: busybox
+        command: [ "sh", "-c", "chown 100:108 /pgdata" ]
+        volumeMounts:
+        - name: ppdb-postgres
+          mountPath: /pgdata
+      containers:
+      - env:
+        - name: POSTGRES_DATA_DIR
+          value: /var/lib/postgresql/data
+        image: registry.nersc.gov/m1727/raknop/tom-postgres:daedalus
+        imagePullPolicy: Always
+        name: ppdb-postgres
+        resources: {}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            add:
+            - CHOWN
+            - DAC_OVERRIDE
+            - FOWNER
+            - SETGID
+            - SETUID
+            drop:
+            - ALL
+          privileged: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: false
+        stdin: true
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        tty: true
+        volumeMounts:
+        - mountPath: /var/lib/postgresql/data
+          name: ppdb-postgres
+        - mountPath: /dev/shm
+          name: dshm
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+      imagePullSecrets:
+        - name: registry-nersc
+      volumes:
+      - name:ppdb-postgres
+        persistentVolumeClaim:
+          claimName: ppdb-postgres-pvc-20240401
+      - emptyDir:
+          medium: Memory
+          sizeLimit: 128Gi
+        name: dshm
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name:ppdb-postgres
+  namespace: desc-tom-buckley-dev
+spec:
+  clusterIP: None
+  clusterIPs:
+  - None
+  ports:
+  - name: default
+    port: 42
+    protocol: TCP
+    targetPort: 42
+  selector:
+    workload.user.cattle.io/workloadselector: deployment-desc-tom-buckley-dev-ppdb-postgres
+  sessionAffinity: None
+  type: ClusterIP
+status:
+  loadBalancer: {}
+---

@@ -21,6 +21,7 @@ urlpatterns = [
     path('db/', include('db.urls')),
     path('elasticc/', include('elasticc.urls')),
     path('elasticc2/', include('elasticc2.urls')),
+    path("fastdb_dev/", include("fastdb_dev.urls")),
 ]
 
 # this is to serve static file from a debug Dockerfile environment (with collectstatic)

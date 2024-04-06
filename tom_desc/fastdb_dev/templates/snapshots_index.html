@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <style>
+table {
+  font-family: arial, sans-serif;
+  border-collapse: collapse;
+  width: 100%;
+}
+
+td, th {
+  border: 1px solid #dddddd;
+  text-align: left;
+  padding: 8px;
+}
+
+tr:nth-child(even) {
+  background-color: #dddddd;
+}
+</style>
+</head>
+<body>
+  <h1>FASTDB</h1>
+
+   <h2>Tags</h2>
+  {% if snapshot_tags %}
+  <table>
+    <thead>
+      <tr>
+	<th>Tag Name</th>
+	<th>Snapshot Name</th>
+	<th>Creation Date</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in snapshot_tags %}
+      <tr>
+	<td>{{ t.name }}</td>
+	<td>{{ t.snapshot_name }}</td>
+	<td>{{ t.insert_time }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>No tags are available.</p>
+  {% endif %}
+
+  <ul>
+    <li><a href="./create_new_snapshot_tag">Create New Tag</a></li>
+  </ul>
+
+  <h2>Snapshots</h2>
+  {% if snapshots %}
+  <table>
+    <thead>
+      <tr>
+	<th>Snapshot Name</th>
+	<th>Creation Date</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in snapshots %}
+      <tr>
+	<td>{{ s.name }}</td>
+	<td>{{ s.insert_time }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>No snapshots are available.</p>
+  {% endif %}
+
+  <ul>
+    <li><a href="./create_new_snapshot">Create New Snapshot</a></li>
+  </ul>
+
+  <h2>Processing Versions</h2>
+  {% if processing_versions %}
+  <table>
+    <thead>
+      <tr>
+	<th>Version</th>
+	<th>Valid Start Date</th>
+	<th>Valid End Date</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for v in processing_versions %}
+      <tr>
+	<td><a href="./edit_processing_version?version={{v.version}}">{{ v.version }}</td>
+	<td>{{ v.validity_start }}</td>
+	<td>{{ v.validity_end }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>No Processing Versions are available.</p>
+  {% endif %}
+
+  <ul>
+    <li><a href="./create_new_processing_version">Create New Processing Version</a></li>
+  </ul>
+
+
+  <h2>Views</h2>
+  {% if db_views %}
+  <table>
+    <thead>
+      <tr>
+	<th>View Name</th>
+	<th>SQL</th>
+	<th>Creation Date</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for v in db_views %}
+      <tr>
+	<td>{{ v.view_name }}</td>
+	<td>{{ v.view_sql }}</td>
+	<td>{{ v.insert_time }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>No Views are available.</p>
+  {% endif %}
+
+  <ul>
+    <li><a href="./create_new_view">Create New View</a></li>
+  
+</body>
+    

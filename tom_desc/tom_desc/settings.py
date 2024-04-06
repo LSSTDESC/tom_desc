@@ -74,6 +74,7 @@ INSTALLED_APPS = [
     'elasticc.apps.ElasticcConfig',
     'elasticc2.apps.Elasticc2Config',
     'tests.apps.TestsConfig',
+    'fastdb_dev.apps.FastdbDevConfig',
 ]
 
 SITE_ID = 1
@@ -440,6 +441,11 @@ HINT_LEVEL = 20
 
 REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
+    ],
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.TokenAuthentication',
+        'rest_framework.authentication.BasicAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
     ],
     'TEST_REQUEST_DEFAULT_FORMAT': 'json',
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.LimitOffsetPagination',

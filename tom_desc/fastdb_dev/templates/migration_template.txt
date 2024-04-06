@@ -1,0 +1,31 @@
+from django.db import migrations, models
+from psqlextra.backend.migrations.operations import PostgresAddListPartition
+
+class Migration(migrations.Migration):
+
+    dependencies = [
+        ('alerts', '{{depend}}'),
+    ]
+
+    operations = [
+        PostgresAddListPartition(
+           model_name="DStoPVtoSS",
+           name='{{name}}',
+           values=['{{version}}',],
+        ),
+         PostgresAddListPartition(
+           model_name="DFStoPVtoSS",
+           name='{{name}}',
+           values=['{{version}}',],
+        ),
+     PostgresAddListPartition(
+           model_name="DiaSource",
+           name='{{name}}',
+           values=['{{version}}',],
+        ),
+      PostgresAddListPartition(
+           model_name="DiaForcedSource",
+           name='{{name}}',
+           values=['{{version}}',],
+        ),
+      ]
