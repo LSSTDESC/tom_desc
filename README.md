@@ -248,15 +248,16 @@ where `<url>` is the TOM's url; if you're going to the default (https://desc-tom
 See (TODO: ref to tom client doc) for more information on using `TomClient`.
 
 
-### <a name="elasticc2hotsne"></a>Finding hot SNe
+### <a name="elasticc2hotsne"></a>Finding hot transients
 
-Currently hot SNe can be found at the URL `elasticc2/gethotsne`.  POST to this URL, with the post body a json-encoded dict.  You can specifiy one of two keys in this dict:
-* `detected_since_mjd: float` — will return all SNe detected since the indicated mjd
-* `detected_in_last_days: int` — will return all SNe detected between this many days before now and now.  The TOM will search what it knows about forced photometry, considering any point with S/N>5 as a detection.
+Currently hot transients can be found at the URL `elasticc2/gethottransients`.  POST to this URL, with the post body a json-encoded dict.  You can specifiy one of two keys in this dict:
+* `detected_since_mjd: float` — will return all SNe detected since the indicated mjd. ("Detected" means a LSST alert was sent out, and at least one broker has returned a classification.)
+* `detected_in_last_days: float` — will return all SNe detected between this many days before now and now.  The TOM will search what it knows about forced photometry, considering any point with S/N>5 as a detection.
+* `mjd_now: float` — The mjd of right now.  Usually you don't want to specify this, and the server will automatically determine the current MJD.  This is here so it can be used with simulations, where "right now" in the simulation may not be the real right now.  You will not get back any detections or forced photometry with an MJD newer than this value.
 
 Example:
 ```
-   res = tom.post( 'elasticc2/gethotsne', json={ 'detected_since_mjd': 60380 } )
+   res = tom.post( 'elasticc2/gethottransients', json={ 'detected_since_mjd': 60380 } )
    assert res.status_code == 200
    assert res.json()['status'] == ok
    sne = res.json()['sne']

@@ -800,47 +800,60 @@ class GetHotSNeView(PermissionRequiredMixin, django.views.View):
         try:
             data = json.loads( request.body )
 
+            mjdnow = None
             mjd0 = 0.
             if 'detected_since_mjd' in data.keys():
                 if 'detected_in_last_days' in data.keys():
                     return HttpResponse( f'Error, only give one of detected_since_mjd or '
                                          f'detected_in_last_days', status=500,
                                          content_type='text/plain; charset=utf-8' )
+                # _logger.info( f"Getting hot SNe since {data['detected_since_mjd']}" )
                 mjd0 = float( data['detected_since_mjd'] )
             else:
                 lastdays = 30
                 if 'detected_in_last_days' in data.keys():
-                    lastdays = int( data['detected_in_last_days'] )
-                mjd0 = astropy.time.Time( datetime.datetime.now( datetime.timezone.utc )
-                                          - datetime.timedelta( days=lastdays ) ).mjd
+                    lastdays = float( data['detected_in_last_days'] )
+                # _logger.info( f"Getting hot SNe detected in last {lastdays} days" )
+                if 'mjd_now' in data.keys():
+                    mjdnow = float( data['mjd_now'] )
+                    mjd0 = mjdnow - lastdays
+                else:
+                    mjd0 = astropy.time.Time( datetime.datetime.now( datetime.timezone.utc )
+                                              - datetime.timedelta( days=lastdays ) ).mjd
+
+
+            # _logger.info( f"Getting SNe detected since mjd {mjd0}" )
 
             djangoconn = django.db.connection
             with djangoconn.cursor().connection.cursor( cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-                cursor.execute( "SELECT f.diaobject_id AS diaobject_id, o.ra AS ra, o.decl AS dec,"
-                                "       f.diaforcedsource_id AS diaforcedsource_id,"
-                                "       f.filtername AS band,f.midpointtai AS mjd,"
-                                "       f.psflux AS flux, f.psfluxerr AS fluxerr "
-                                "FROM elasticc2_diaforcedsource f "
-                                "INNER JOIN elasticc2_diaobject o ON f.diaobject_id=o.diaobject_id "
-                                "WHERE f.diaobject_id IN ("
-                                "  SELECT DISTINCT ON(diaobject_id) diaobject_id "
-                                "  FROM elasticc2_diaforcedsource "
-                                "  WHERE midpointtai>=%(t0)s AND psflux/psfluxerr >= 5."
-                                ") "
-                                "ORDER BY f.diaobject_id,f.midpointtai",
-                                { "t0": mjd0 } )
+                # _logger.info( "GetHotSNeView: sending query." )
+                q = ( "SELECT f.diaobject_id AS diaobject_id, o.ra AS ra, o.decl AS dec,"
+                      "       f.diaforcedsource_id AS diaforcedsource_id,"
+                      "       f.filtername AS band,f.midpointtai AS mjd,"
+                      "       f.psflux AS flux, f.psfluxerr AS fluxerr "
+                      "FROM elasticc2_diaforcedsource f "
+                      "INNER JOIN elasticc2_diaobject o ON f.diaobject_id=o.diaobject_id "
+                      "WHERE f.diaobject_id IN ("
+                      "  SELECT DISTINCT ON(diaobject_id) diaobject_id "
+                      "  FROM elasticc2_diaforcedsource "
+                      "  WHERE midpointtai>=%(t0)s AND psflux/psfluxerr >= 5." )
+                if mjdnow is not None:
+                    q += "    AND midpointtai<=%(t1)s"
+                q += ( ") "
+                       "ORDER BY f.diaobject_id,f.midpointtai" )
+                # _logger.info( f"Sending query: {cursor.mogrify(q,{'t0':mjd0,'t1':mjdnow})}" )
+                cursor.execute( q , { "t0": mjd0, "t1": mjdnow } )
                 df = pandas.DataFrame( cursor.fetchall() )
+                # _logger.info( f"GetHotSNeView: pulled dataframe of length {len(df)}" )
 
                 sne = []
                 if len(df) > 0:
                     objids = df['diaobject_id'].unique()
+                    _logger.info( f"GetHotSNEView: got {len(objids)} objects" )
                     df.set_index( [ 'diaobject_id', 'diaforcedsource_id' ], inplace=True )
 
                     for objid in objids:
                         subdf = df.xs( objid, level='diaobject_id' )
-                        sys.stderr.write( f"len(subdf) = {len(subdf)}\n" )
-                        sys.stderr.write( f"subdf =\n{subdf}\n" )
-                        sys.stderr.write( f"subdf.ra =\n{subdf.ra}\n" )
                         sne.append( { 'objectid': int(objid),
                                       'ra': subdf.ra.values[0],
                                       'dec': subdf.dec.values[0],
@@ -852,8 +865,9 @@ class GetHotSNeView(PermissionRequiredMixin, django.views.View):
                                       'redshift': -99,
                                       'sncode': -99 } )
 
+            # _logger.info( "GetHotSNeView; returning" )
             resp = JsonResponse( { 'status': 'ok',
-                                   'sne': sne } )
+                                   'diaobject': sne } )
             return resp
         except Exception as ex:
             sys.stderr.write( f"Exception in GetHotSNeView: {ex}\n" )
@@ -1069,7 +1083,7 @@ class WhatSpectraAreWanted(PermissionRequiredMixin, django.views.View):
                                           'req': row.requester,
                                           'prio': int( row.priority ),
                                           'latest': {} }
-                    
+
                 tmpretvals[ objid ]['latest'][row.filtername] = { 'mjd': float( row.mjd ),
                                                                   'mag': float( row.mag ) }
             retval = [ v for v in tmpretvals.values() ]
@@ -1141,8 +1155,8 @@ class PlanToDoSpectrum(PermissionRequiredMixin, django.views.View):
             traceback.print_exc( file=sys.stderr )
             return HttpResponse( f"Exception in PlanToDoSpectrum: {ex}",
                                  status=500, content_type='text/plain; charset=utf-8' )
-        
-                
+
+
 
 
 # ======================================================================
@@ -1181,8 +1195,8 @@ class RemoveSpectrumPlan(PermissionRequiredMixin, django.views.View):
             traceback.print_exc( file=sys.stderr )
             return HttpResponse( f"Exception in RemoveSpectrumPlan: {ex}",
                                  status=500, content_type='text/plain; charset=utf-8' )
-            
-            
+
+
 
 # ======================================================================
 
@@ -1219,11 +1233,11 @@ class ReportSpectrumInfo(PermissionRequiredMixin, django.views.View):
                 return HttpResponse( f"facility can't be an empty string", status=500,
                                      content_type='text/plain; charset=utf-8' )
             mjd = float( data['mjd'] )
-            if ( data['z'] is not None ) and ( data['z'] is not "" ):
+            if ( data['z'] is not None ) and ( data['z'] != "" ):
                 z = float( data['z'] )
             else:
                 z = None
-            if ( data['classid'] is not None ) and ( data['classid'] is not "" ):
+            if ( data['classid'] is not None ) and ( data['classid'] != "" ):
                 classid = int( data['classid'] )
                 # TODO : verify that it's legal!
             else:
@@ -1263,8 +1277,3 @@ class ReportSpectrumInfo(PermissionRequiredMixin, django.views.View):
             traceback.print_exc( file=sys.stderr )
             return HttpResponse( f"Exception in ReportSpectrumInfo: {ex}",
                                  status=500, content_type='text/plain; charset=utf-8' )
-        
-                    
-            
-
-            
