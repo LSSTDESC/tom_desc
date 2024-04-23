@@ -1,3 +1,4 @@
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -32,19 +33,7 @@ spec:
           value: fragile
         - name: DB_USER
           value: postgres
-        - name: FINK_GROUP_ID
-          value: lsstfr-johann
-        - name: FINK_SERVER
-          value: 134.158.74.95:24499,
-        - name: FINK_TOPIC
-          value: fink_early_sn_candidates_ztf
-        - name: FINK_USERNAME
-          value: johann
-        - name: GOOGLE_APPLICATION_CREDENTIALS
-          value: /secrets/GCP_auth_key-pitt_broker_user_project.json
-        - name: GOOGLE_CLOUD_PROJECT
-          value: pitt-broker-user-project
-        image: rknop/tom-desc-dev
+        image: registry.nersc.gov/m1727/raknop/tom_desc_extcode:daedalus
         imagePullPolicy: Always
         name: tom-rknop-dev-app
         resources: {}
@@ -68,8 +57,8 @@ spec:
           name: tom-rknop-dev-secrets
         - mountPath: /tom_desc
           name: tom-rknop-dev-deployment
-        - mountPath: /snana_data
-          name: tom-rknop-dev-snana-data
+#         - mountPath: /snana_data
+#           name: tom-rknop-dev-snana-data
         command: [ "tail" ]
         args: [ "-f", "/etc/issue" ]
       dnsConfig: {}
@@ -79,6 +68,8 @@ spec:
       securityContext:
         fsGroup: 57177
       terminationGracePeriodSeconds: 30
+      imagePullSecrets:
+        - name: registry-nersc
       volumes:
       - name: tom-rknop-dev-secrets
         secret:
@@ -89,7 +80,26 @@ spec:
           path: /global/cfs/cdirs/desc-td/SOFTWARE/tom_deployment/dev/tom_desc/tom_desc
           type: Directory
         name: tom-rknop-dev-deployment
-      - hostPath:
-          path: /global/cfs/cdirs/desc-td/ELASTICC_DATA
-          type: Directory
-        name: tom-rknop-dev-snana-data
+#       - hostPath:
+#           path: /global/cfs/cdirs/desc-td/ELASTICC_DATA
+#           type: Directory
+#         name: tom-rknop-dev-snana-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tom-rknop-dev-app-shell
+  namespace: desc-tom
+spec:
+  ports:
+  - name: default
+    port: 42
+    protocol: TCP
+    targetPort: 42
+  selector:
+    workload.user.cattle.io/workloadselector: deployment-desc-tom-tom-rknop-dev-app-shell
+  sessionAffinity: None
+  type: ClusterIP
+status:
+  loadBalancer: {}
+---

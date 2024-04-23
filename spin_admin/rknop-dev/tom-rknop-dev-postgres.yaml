@@ -1,3 +1,4 @@
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -33,7 +34,7 @@ spec:
       initContainers:
       - name: volume-mount-hack
         image: busybox
-        command: [ "sh", "-c", "chown 101:105 /pgdata" ]
+        command: [ "sh", "-c", "chown 100:108 /pgdata" ]
         volumeMounts:
         - name: tom-rknop-dev-postgres-pvc
           mountPath: /pgdata
@@ -41,7 +42,7 @@ spec:
       - env:
         - name: POSTGRES_DATA_DIR
           value: /var/lib/postgresql/data
-        image: rknop/tom-desc-postgres
+        image: registry.nersc.gov/m1727/raknop/tom-postgres:daedalus
         imagePullPolicy: Always
         name: tom-rknop-dev-postgres
         resources: {}
@@ -73,6 +74,8 @@ spec:
       schedulerName: default-scheduler
       securityContext: {}
       terminationGracePeriodSeconds: 30
+      imagePullSecrets:
+        - name: registry-nersc
       volumes:
       - name: tom-rknop-dev-postgres-pvc
         persistentVolumeClaim:
@@ -81,3 +84,25 @@ spec:
           medium: Memory
           sizeLimit: 16Gi
         name: dshm
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tom-rknop-dev-postgres
+  namespace: desc-tom
+spec:
+  clusterIP: None
+  clusterIPs:
+  - None
+  ports:
+  - name: default
+    port: 42
+    protocol: TCP
+    targetPort: 42
+  selector:
+    workload.user.cattle.io/workloadselector: deployment-desc-tom-tom-rknop-dev-postgres
+  sessionAffinity: None
+  type: ClusterIP
+status:
+  loadBalancer: {}
+---
