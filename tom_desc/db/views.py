@@ -12,6 +12,10 @@ from django.contrib.auth.mixins import PermissionRequiredMixin, LoginRequiredMix
 import django.views
 from db.models import QueryQueue
 
+# WARNING -- I've harcoded a couple of paths here, in anticipation
+#  that they'll be bind-mounted there inside whatever container
+#  is running the TOM.
+
 # ======================================================================
 # A low-level query interface.
 #
@@ -35,7 +39,7 @@ class RunSQLQuery(LoginRequiredMixin, django.views.View):
         #     pwfile = "/secrets/postgres_ro_password"
         with open( pwfile ) as ifp:
             password = ifp.readline().strip()
-        
+
         data = json.loads( request.body )
         dbconn = psycopg2.connect( dbname=os.getenv('DB_NAME'), host=os.getenv('DB_HOST'),
                                    user=dbuser, password=password,
@@ -85,7 +89,7 @@ class RunSQLQuery(LoginRequiredMixin, django.views.View):
             dbconn.rollback()
             dbconn.close()
         return JsonResponse( { 'status': 'ok', 'rows': rows } )
-        
+
 
 # ======================================================================
 
@@ -93,7 +97,7 @@ class SubmitLongSQLQuery(LoginRequiredMixin, django.views.View):
     raise_exception = True
 
     def post( self, request, *args, **kwargs ):
-    
+
         data = json.loads( request.body )
 
         try:
@@ -127,16 +131,16 @@ class SubmitLongSQLQuery(LoginRequiredMixin, django.views.View):
                 format = data[ 'format' ]
                 if format not in [ 'csv', 'pandas', 'numpy' ]:
                     raise ValueError( f"Unknown format {format}" )
-            
+
             queryid = uuid.uuid4()
             newqueue = QueryQueue.objects.create( queryid=queryid, submitted=datetime.datetime.now(),
                                                   queries=queries, subdicts=subdicts, format=format )
 
             return JsonResponse( { 'status': 'ok', 'queryid': str(queryid) } )
-            
+
         except Exception as ex:
             return JsonResponse( { 'status': 'error', 'error': str(ex) } )
-        
+
 # ======================================================================
 
 class CheckLongSQLQuery(LoginRequiredMixin, django.views.View):
@@ -146,15 +150,21 @@ class CheckLongSQLQuery(LoginRequiredMixin, django.views.View):
         try:
             queueobj = QueryQueue.objects.filter( queryid=queryid )
             if len( queueobj ) == 0:
-                return JsonResponse( { 'status': 'error', 'error': f"Unknown query {queryid}" } )
+                return JsonResponse( { 'status': 'error',
+                                       'error': f"Unknown query {queryid}" } )
             queueobj = queueobj[0]
 
-            if queueobj.error:
-                return JsonResponse( { 'status': 'error', 'error': 'query returned some kind of error' } )
+            response = { 'queryid': queueobj.queryid,
+                         'queries': queueobj.queries,
+                         'subdicts': queueobj.subdicts,
+                         'submitted': queueobj.submitted.isoformat() }
 
-            response = { 'queryid': queryid,
-                         'submitted': queueobj.submitted.isoformat()
-                        }
+            if queueobj.error:
+                response.update( { 'status': 'error',
+                                   'finished': queryobj.finished.isoformat(),
+                                   'error': queryobj.errortext } )
+                if queueobj.started is not None:
+                    response['started'] = queueobj.started.isoformat()
 
             if queueobj.finished is not None:
                 response.update( { 'status': 'finished',
@@ -172,3 +182,46 @@ class CheckLongSQLQuery(LoginRequiredMixin, django.views.View):
 
         except Exception as ex:
             return JsonResponse( { 'status': 'error', 'error': str(ex) } )
+
+# ======================================================================
+
+class GetLongSQLQueryResults(LoginRequiredMixin, django.views.View):
+    raise_exception = True
+
+    def post( self, request, queryid, *args, **kwargs ):
+        try:
+            queueobj = QueryQueue.objects.filter( queryid=queryid )
+            if len( queueobj ) == 0:
+                return HttpResponse( f"Unknown query {queueobj.queryid}",
+                                     content_type="text/plain; charset=utf-8",
+                                     status=500 )
+
+            queueobj = queueobj[0]
+            if queueobj.error:
+                return HttpResponse( f"Query errored out: {queueobj.errortext}",
+                                     content_type="text/plain; charset=utf-8",
+                                     status=500 )
+
+            if queueobj.finished is None:
+                if queueobj.started is None:
+                    return HttpResponse( f"Query {queryid} hasn't started yet",
+                                         content_type="text/plain; charset=utf-8",
+                                         status=500 )
+                else:
+                    return HttpResponse( f"Query {queryid} hasn't finished yet",
+                                         content_type="text/plain; charset=utf-8",
+                                         status=500 )
+
+
+            if ( queueobj.format == "numpy" ) or ( queueobj.format == "pandas" ):
+                with open( f"/query_results/{str(queueobj.queryid)}", "rb" ) as ifp:
+                    return HttpResponse( ifp.read(), content_type='applciation/octet-stream' )
+            elif ( queueobj.format == "csv" ):
+                with open( f"/query_results/{str(queueobj.queryid)}", "r" ) as ifp:
+                    return HttpResponse( ifp.read(), content_type='text/csv; charset=utf-8' )
+            else:
+                return HttpResponse( f"Query is finished, but results are in an unknown format "
+                                     f"{queueobj.format}", content_type="text/plain; charset=utf-8",
+                                     status=500 )
+        except Exception as ex:
+            return HttpResponse( str(ex), content_type="text/plain; charset=utf-8", status=500 )
