@@ -31,7 +31,7 @@ class TestSpectrumCycle:
         objs = elasticc2.models.DiaObject.objects.all().order_by("diaobject_id")
         objs = list( objs )
 
-        assert len( objs ) == 72
+        assert len( objs ) == 131
         objs = [ o.diaobject_id for o in objs[ 0:25 ] ]
 
         random.seed( 42 )
@@ -49,19 +49,19 @@ class TestSpectrumCycle:
         elasticc2.models.WantedSpectra.objects.all().delete()
 
 
+    # TODO : test things other than detected_since_mjd sent to gethottransients
     def test_hot_sne( self, update_diasource_100daysmore, tomclient ):
         # Testing detected_in_last_days is fraught because
         #   the mjds in elasticc2 are what they are, are
         #   in the future (as of this comment writing).
         # So, go old school and just not test it.
 
-        res = tomclient.post( 'elasticc2/gethotsne', json={ 'detected_since_mjd': 61100 } )
-        sne = res.json()['sne']
-        assert len(sne) == 13
+        res = tomclient.post( 'elasticc2/gethottransients', json={ 'detected_since_mjd': 60660 } )
+        sne = res.json()['diaobject']
+        assert len(sne) == 5
 
         snids = { s['objectid'] for s in sne }
-        assert snids == { 58826688, 88841752, 44571082, 136636810, 144398218, 2612942,
-                          119917556, 47425205, 97581303, 22936696, 72194202, 76894939, 96715100 }
+        assert snids == { 15232, 416626, 1263066, 1286131, 1913410 }
 
         # Should probably check more than this...
         assert set( sne[0].keys() ) == { 'objectid', 'ra', 'dec', 'photometry', 'zp', 'redshift', 'sncode' }
@@ -89,27 +89,27 @@ class TestSpectrumCycle:
         wantedobjs = wantedobjs['wantedspectra']
         assert isinstance( wantedobjs, list )
 
-        assert len(wantedobjs ) == 25
+        assert len( wantedobjs ) == 25
 
         # I should do better than just check the first one...
-        assert wantedobjs[0]['oid'] == 19452966
-        assert wantedobjs[0]['ra'] == pytest.approx( 338.697693, abs=0.25/3600. )   # cos(dec) term...
-        assert wantedobjs[0]['dec'] == pytest.approx( -56.534954, abs=0.25/3600. )
+        assert wantedobjs[0]['oid'] == 114982
+        assert wantedobjs[0]['ra'] == pytest.approx( 93.721805, abs=0.25/3600. )   # cos(dec) term...
+        assert wantedobjs[0]['dec'] == pytest.approx( -65.509372, abs=0.25/3600. )
         assert wantedobjs[0]['prio'] == 5
-        assert wantedobjs[0]['latest']['i']['mjd'] == pytest.approx( 60909.273, abs=0.01 )
-        assert wantedobjs[0]['latest']['i']['mag'] == pytest.approx( 18.610, abs=0.01 )
+        assert wantedobjs[0]['latest']['i']['mjd'] == pytest.approx( 60294.17, abs=0.01 )
+        assert wantedobjs[0]['latest']['i']['mag'] == pytest.approx( 19.125, abs=0.01 )
 
-        # Now test that we only get things that have been detected since mjd 60910
+        # Now test that we only get things that have been detected since mjd 60660
         # First, figure out what we expect:
         objnewenough = set()
         for objinfo in wantedobjs:
             for band, bandinfo in objinfo['latest'].items():
-                if bandinfo['mjd'] >= 60910:
+                if bandinfo['mjd'] >= 60660:
                     objnewenough.add( objinfo['oid'] )
                     break
 
         # Then, see if we get those when we ask for it
-        res = tomclient.post( 'elasticc2/spectrawanted', json={ 'detected_since_mjd': 60910 } )
+        res = tomclient.post( 'elasticc2/spectrawanted', json={ 'detected_since_mjd': 60660 } )
         detsince_specinfo = res.json()['wantedspectra']
         assert { o['oid'] for o in detsince_specinfo } == objnewenough
 
