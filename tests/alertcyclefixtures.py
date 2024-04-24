@@ -1,7 +1,7 @@
 # IMPORTANT -- running any tests that use fixtures in this file requires
 # a completely fresh environment.  After any run of "pytest ...", you
 # have to tear down and rebuild the docker compose environment.  This is
-# because as noted above we can't easily clean up the kafka server's
+# because, as noted below, we can't easily clean up the kafka server's
 # state, so on a rerun, the server state will be wrong.
 
 import sys
@@ -90,7 +90,7 @@ class AlertCounter:
 
 @pytest.fixture( scope="session" )
 def alerts_300days( elasticc2_ppdb ):
-    result = subprocess.run( [ "python", "manage.py", "send_elasticc2_alerts", "-d", "61098",
+    result = subprocess.run( [ "python", "manage.py", "send_elasticc2_alerts", "-d", "60578",
                                "-k", "kafka-server:9092",
                                "--wfd-topic", "alerts-wfd", "--ddf-full-topic", "alerts-ddf-full",
                                "--ddf-limited-topic", "alerts-ddf-limited",
@@ -105,9 +105,9 @@ def alerts_300days( elasticc2_ppdb ):
                             consume_nmsgs=100 )
     counter = AlertCounter()
     consumer.poll_loop( counter.handle_test_alerts_exist, timeout=10, stopafter=datetime.timedelta(seconds=10) )
-    # I don't understand why this is 160.  159 were sent.
-    # The fake broker sees 159.
-    assert counter._test_alerts_exist_count == 160
+    # I don't understand why this is 546.  545 were sent.
+    # The fake broker sees 545.
+    assert counter._test_alerts_exist_count == 546
     consumer.close()
 
     yield True
@@ -128,7 +128,8 @@ def classifications_300days_exist( alerts_300days ):
     consumer.poll_loop( counter.handle_test_alerts_exist, timeout=5,
                         stopafter=datetime.timedelta(seconds=16) )
 
-    assert counter._test_alerts_exist_count == 318
+    # This is 2x545
+    assert counter._test_alerts_exist_count == 1090
     consumer.close()
 
     yield True
@@ -149,21 +150,19 @@ def classifications_300days_ingested( classifications_300days_exist ):
     cfer = elasticc2.models.BrokerClassifier
     bsid = elasticc2.models.BrokerSourceIds
 
-    assert brkmsg.objects.count() == 318
+    assert brkmsg.objects.count() == 1090
     assert cfer.objects.count() == 2
-    assert bsid.objects.count() == 159
+    assert bsid.objects.count() == 545
 
     numprobs = 0
     for msg in brkmsg.objects.all():
         assert len(msg.classid) == len(msg.probability)
         numprobs += len(msg.classid)
 
-    # 159 from NugentClassifier plus 20*159 for RandomSNType
-    # assert numprobssrc == 3339
-    # assert numprobssrc == numprobstim
-    assert numprobs == 3339
+    # 545 from NugentClassifier plus 20*545 for RandomSNType
+    assert numprobs == 11445
 
-    # TODO : check that the data is identicay for
+    # TODO : check that the data is identical for
     # corresponding entries in the two cassbroker
     # tables
 
@@ -187,18 +186,23 @@ def update_diasource_300days( classifications_300days_ingested ):
     bsid = elasticc2.models.BrokerSourceIds
 
     assert bsid.objects.count() == 0
-    assert obj.objects.count() == 60
+    assert obj.objects.count() == 102
     # TODO -- put these next two lines back in once we start doing this thing again
     # assert ooft.objects.count() == obj.objects.count()
     # assert targ.objects.count() == obj.objects.count()
-    assert src.objects.count() == 159
-    assert frced.objects.count() == 2241
+    assert src.objects.count() == 545
+    assert frced.objects.count() == 4242
     
     yield True
 
 
 @pytest.fixture( scope="session" )
 def alerts_100daysmore( alerts_300days ):
+    # This will send alerts up through mjd 60676.  Why not 60678, since the previous
+    #   sent through 60578?  There were no alerts between 60675 and 60679, so the last
+    #   alert sent will have been a source from mjd 60675.  That's what the 100 days
+    #   are added to.
+    # This is an additional 105 alerts, for a total of 650 (coming from 131 objects).
     result = subprocess.run( [ "python", "manage.py", "send_elasticc2_alerts", "-a", "100",
                                "-k", "kafka-server:9092",
                                "--wfd-topic", "alerts-wfd", "--ddf-full-topic", "alerts-ddf-full",
@@ -225,7 +229,8 @@ def classifications_100daysmore_ingested( alerts_100daysmore ):
     brkmsg = elasticc2.models.BrokerMessage
     cfer = elasticc2.models.BrokerClassifier
 
-    assert len( brkmsg.objects.all() ) == 520
+    # 650 total alerts times 2 classifiers = 1300 broker messages
+    assert len( brkmsg.objects.all() ) == 1300
     assert cfer.objects.count() == 2
     assert len( cfer.objects.all() ) == 2
 
@@ -233,10 +238,8 @@ def classifications_100daysmore_ingested( alerts_100daysmore ):
     for msg in brkmsg.objects.all():
         assert len(msg.classid) == len(msg.probability)
         numprobs += len(msg.classid)
-    # 260 from NugentClassifier plus 20*260 for RandomSNType
-    # assert numprobssrc == 5460
-    # assert numprobssrc == numprobstim
-    assert numprobs == 5460
+    # 650 from NugentClassifier plus 20*650 for RandomSNType
+    assert numprobs == 13650
 
     assert ( set( [ i.classifiername for i in cfer.objects.all() ] )
              == set( [ "NugentClassifier", "RandomSNType" ] ) )
@@ -258,12 +261,12 @@ def update_diasource_100daysmore( classifications_100daysmore_ingested ):
     bsid = elasticc2.models.BrokerSourceIds
 
     assert bsid.objects.count() == 0
-    assert obj.objects.count() == 72
+    assert obj.objects.count() == 131
     # TODO: put these next two lines back in once we start doing this again
     # assert ooft.objects.count() == obj.objects.count()
     # assert targ.objects.count() == obj.objects.count()
-    assert src.objects.count() == 260
-    assert frced.objects.count() == 2927
+    assert src.objects.count() == 650
+    assert frced.objects.count() == 5765
 
     yield True
     

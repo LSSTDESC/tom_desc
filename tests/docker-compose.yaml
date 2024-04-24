@@ -62,16 +62,21 @@ services:
         condition: service_healthy
       # cassandra:
       #   condition: service_healthy
-    image: registry.nersc.gov/m1727/raknop/tom_desc_bindmount:chimaera
+    image: registry.nersc.gov/m1727/raknop/tom_desc_bindmount:deadalus
     build:
       context: ../
       dockerfile: docker_server/Dockerfile
       target: tom-server-bindmount
     volumes:
-      - ${PWD}/django_secret_key:/secrets/django_secret_key
       - type: bind
         source: ../tom_desc
         target: /tom_desc/tom_desc
+      - type: bind
+        source: .
+        target: /tests
+      - type: bind
+        source: ../secrets
+        target: /secrets
     environment:
       DB_NAME: tom_desc
       DB_HOST: postgres
@@ -85,22 +90,32 @@ services:
         python tom_desc/manage.py migrate
         python tom_desc/manage.py create_test_superuser
         python tom_desc/manage.py create_test_apibroker
+        python /tests/create_postgres_ro_user.py
 #        python tom_desc/manage.py sync_cassandra
 
   tom:
     depends_on:
       createdb:
         condition: service_completed_successfully
+    # Want to move to daedalus image.  However, in production right
+    #   now, we use the chimaera image, because of some weird
+    #   incompatibility with kafka libraries and what's running
+    #   on ANTARES.
     image: registry.nersc.gov/m1727/raknop/tom_desc_bindmount:chimaera
     build:
       context: ../
       dockerfile: docker_server/Dockerfile
       target: tom-server-bindmount
     volumes:
-      - ${PWD}/django_secret_key:/secrets/django_secret_key
+      - type: bind
+        source: ../secrets
+        target: /secrets
       - type: bind
         source: ../tom_desc
         target: /tom_desc
+      - type: volume
+        source: query_results
+        target: /query_results
     environment:
       DB_NAME: tom_desc
       DB_HOST: postgres
@@ -116,13 +131,19 @@ services:
         condition: service_started
       fakebroker:
         condition: service_started
+    # Want to move to daedalus image.  However, in production right
+    #   now, we use the chimaera image, because of some weird
+    #   incompatibility with kafka libraries and what's running
+    #   on ANTARES.
     image: registry.nersc.gov/m1727/raknop/tom_desc_bindmount:chimaera
     build:
       context: ../
       dockerfile: docker_server/Dockerfile
       target: tom-server-bindmount
     volumes:
-      - ${PWD}/django_secret_key:/secrets/django_secret_key
+      - type: bind
+        source: ../secrets
+        target: /secrets
       - type: bind
         source: ../tom_desc
         target: /tom_desc
@@ -146,13 +167,15 @@ services:
        condition: service_started
       brokerpoll:
         condition: service_started
-    image: registry.nersc.gov/m1727/raknop/tom_desc_extcode:chimaera
+    image: registry.nersc.gov/m1727/raknop/tom_desc_extcode:daedalus
     build:
       context: ../
-      dockerfile: docker_server/Dockerfile
+      dockerfile: docker_server/Dockerfile.daedalus
       target: tom-server-extcode
     volumes:
-      - ${PWD}/django_secret_key:/secrets/django_secret_key
+      - type: bind
+        source: ../secrets
+        target: /secrets
       - type: bind
         source: ../tom_desc
         target: /tom_desc
@@ -160,8 +183,11 @@ services:
         source: .
         target: /tests
       - type: bind
-        source: ${ELASTICC2_TEST_DATA:-/dev/null}
+        source: ./elasticc2_alert_test_data
         target: /elasticc2data
+      - type: volume
+        source: query_results
+        target: /query_results
     environment:
       DB_NAME: tom_desc
       DB_HOST: postgres
@@ -170,37 +196,47 @@ services:
       DB_PORT: 5432
     entrypoint: [ "tail", "-f", "/etc/issue" ]
 
-  runtests:
-    depends_on:
-      tom:
-        condition: service_started
-      kafka-server:
-        condition: service_healthy
-      fakebroker:
-        condition: service_started
-      brokerpoll:
-        condition: service_started
-    image: registry.nersc.gov/m1727/raknop/tom_desc_extcode:chimaera
-    build:
-      context: ../
-      dockerfile: docker_server/Dockerfile
-      target: tom-server-extcode
-    volumes:
-      - ${PWD}/django_secret_key:/secrets/django_secret_key
-      - type: bind
-        source: ../tom_desc
-        target: /tom_desc
-      - type: bind
-        source: .
-        target: /tests
-      - type: bind
-        source: ${ELASTICC2_TEST_DATA:-/dev/null}
-        target: /elasticc2data
-    working_dir: /tests
-    environment:
-      DB_NAME: tom_desc
-      DB_HOST: postgres
-      DB_USER: postgres
-      DB_PASS: fragile
-      DB_PORT: 5432
-    entrypoint: [ "pytest", "-v" ]
+  # This won't work right now, there's scary things
+  #   about test data and such
+  # runtests:
+  #   depends_on:
+  #     tom:
+  #       condition: service_started
+  #     kafka-server:
+  #       condition: service_healthy
+  #     fakebroker:
+  #       condition: service_started
+  #     brokerpoll:
+  #       condition: service_started
+  #   image: registry.nersc.gov/m1727/raknop/tom_desc_extcode:daedalus
+  #   build:
+  #     context: ../
+  #     dockerfile: docker_server/Dockerfile.daedalus
+  #     target: tom-server-extcode
+  #   volumes:
+  #     - type: bind
+  #       source: ../secrets
+  #       target: /secrets
+  #     - type: bind
+  #       source: ../tom_desc
+  #       target: /tom_desc
+  #     - type: bind
+  #       source: .
+  #       target: /tests
+  #     - type: bind
+  #       source: ${ELASTICC2_TEST_DATA:-/dev/null}
+  #       target: /elasticc2data
+  #     - type: volume
+  #       source: query_results
+  #       target: /query_results
+  #   working_dir: /tests
+  #   environment:
+  #     DB_NAME: tom_desc
+  #     DB_HOST: postgres
+  #     DB_USER: postgres
+  #     DB_PASS: fragile
+  #     DB_PORT: 5432
+  #   entrypoint: [ "pytest", "-v" ]
+
+volumes:
+  query_results:
