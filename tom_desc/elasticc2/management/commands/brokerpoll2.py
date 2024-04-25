@@ -12,7 +12,10 @@ import json
 import multiprocessing
 import fastavro
 import confluent_kafka
-import pittgoogle
+# TODO : uncomment this next line
+#   and the whole PittGoogleBroker class
+#   when pittgoogle works again
+# import pittgoogle
 from concurrent.futures import ThreadPoolExecutor  # for pittgoogle
 import django.db
 from django.core.management.base import BaseCommand, CommandError
@@ -324,101 +327,101 @@ class AlerceConsumer(BrokerConsumer):
 
 # =====================================================================
 
-class PittGoogleBroker(BrokerConsumer):
-    def __init__(
-        self,
-        pitt_topic: str,
-        pitt_project: str,
-        max_workers: int = 8,  # max number of ThreadPoolExecutor workers
-        batch_maxn: int = 1000,  # max number of messages in a batch
-        batch_maxwait: int = 5,  # max seconds to wait between messages before processing a batch
-        loggername: str = "PITTGOOGLE",
-        **kwargs
-    ):
-        super().__init__(server=None, groupid=None, loggername=loggername, **kwargs)
+# class PittGoogleBroker(BrokerConsumer):
+#     def __init__(
+#         self,
+#         pitt_topic: str,
+#         pitt_project: str,
+#         max_workers: int = 8,  # max number of ThreadPoolExecutor workers
+#         batch_maxn: int = 1000,  # max number of messages in a batch
+#         batch_maxwait: int = 5,  # max seconds to wait between messages before processing a batch
+#         loggername: str = "PITTGOOGLE",
+#         **kwargs
+#     ):
+#         super().__init__(server=None, groupid=None, loggername=loggername, **kwargs)
 
-        topic = pittgoogle.pubsub.Topic(pitt_topic, pitt_project)
-        subscription = pittgoogle.pubsub.Subscription(name=f"{pitt_topic}-desc", topic=topic)
-        # if the subscription doesn't already exist, this will create one in the
-        # project given by the env var GOOGLE_CLOUD_PROJECT
-        subscription.touch()
+#         topic = pittgoogle.pubsub.Topic(pitt_topic, pitt_project)
+#         subscription = pittgoogle.pubsub.Subscription(name=f"{pitt_topic}-desc", topic=topic)
+#         # if the subscription doesn't already exist, this will create one in the
+#         # project given by the env var GOOGLE_CLOUD_PROJECT
+#         subscription.touch()
 
-        self.consumer = pittgoogle.pubsub.Consumer(
-            subscription=subscription,
-            msg_callback=self.handle_message,
-            batch_callback=self.handle_message_batch,
-            batch_maxn=batch_maxn,
-            batch_maxwait=batch_maxwait,
-            executor=ThreadPoolExecutor(
-                max_workers=max_workers,
-                initializer=self.worker_init,
-                initargs=(
-                    self.schema,
-                    subscription.topic.name,
-                    self.logger,
-                    self.countlogger
-                ),
-            ),
-        )
+#         self.consumer = pittgoogle.pubsub.Consumer(
+#             subscription=subscription,
+#             msg_callback=self.handle_message,
+#             batch_callback=self.handle_message_batch,
+#             batch_maxn=batch_maxn,
+#             batch_maxwait=batch_maxwait,
+#             executor=ThreadPoolExecutor(
+#                 max_workers=max_workers,
+#                 initializer=self.worker_init,
+#                 initargs=(
+#                     self.schema,
+#                     subscription.topic.name,
+#                     self.logger,
+#                     self.countlogger
+#                 ),
+#             ),
+#         )
 
-    @staticmethod
-    def worker_init(classification_schema: dict, pubsub_topic: str,
-                    broker_logger: logging.Logger, broker_countlogger: logging.Logger ):
-        """Initializer for the ThreadPoolExecutor."""
-        global countlogger
-        global logger
-        global schema
-        global topic
+#     @staticmethod
+#     def worker_init(classification_schema: dict, pubsub_topic: str,
+#                     broker_logger: logging.Logger, broker_countlogger: logging.Logger ):
+#         """Initializer for the ThreadPoolExecutor."""
+#         global countlogger
+#         global logger
+#         global schema
+#         global topic
 
-        countlogger = broker_countlogger
-        logger = broker_logger
-        schema = classification_schema
-        topic = pubsub_topic
+#         countlogger = broker_countlogger
+#         logger = broker_logger
+#         schema = classification_schema
+#         topic = pubsub_topic
 
-        logger.info( "In worker_init" )
+#         logger.info( "In worker_init" )
         
-    @staticmethod
-    def handle_message(alert: pittgoogle.pubsub.Alert) -> pittgoogle.pubsub.Response:
-        """Callback that will process a single message. This will run in a background thread."""
-        global logger
-        global schema
-        global topic
+#     @staticmethod
+#     def handle_message(alert: pittgoogle.pubsub.Alert) -> pittgoogle.pubsub.Response:
+#         """Callback that will process a single message. This will run in a background thread."""
+#         global logger
+#         global schema
+#         global topic
 
-        logger.info( "In handle_message" )
+#         logger.info( "In handle_message" )
         
-        message = {
-            "msg": fastavro.schemaless_reader(io.BytesIO(alert.bytes), schema),
-            "topic": topic,
-            # this is a DatetimeWithNanoseconds, a subclass of datetime.datetime
-            # https://googleapis.dev/python/google-api-core/latest/helpers.html
-            "timestamp": alert.metadata["publish_time"].astimezone(datetime.timezone.utc),
-            # there is no offset in pubsub
-            # if this cannot be null, perhaps the message id would work?
-            "msgoffset": alert.metadata["message_id"],
-        }
+#         message = {
+#             "msg": fastavro.schemaless_reader(io.BytesIO(alert.bytes), schema),
+#             "topic": topic,
+#             # this is a DatetimeWithNanoseconds, a subclass of datetime.datetime
+#             # https://googleapis.dev/python/google-api-core/latest/helpers.html
+#             "timestamp": alert.metadata["publish_time"].astimezone(datetime.timezone.utc),
+#             # there is no offset in pubsub
+#             # if this cannot be null, perhaps the message id would work?
+#             "msgoffset": alert.metadata["message_id"],
+#         }
 
-        return pittgoogle.pubsub.Response(result=message, ack=True)
+#         return pittgoogle.pubsub.Response(result=message, ack=True)
 
-    @staticmethod
-    def handle_message_batch(messagebatch: list) -> None:
-        """Callback that will process a batch of messages. This will run in the main thread."""
-        global logger
-        global countlogger
+#     @staticmethod
+#     def handle_message_batch(messagebatch: list) -> None:
+#         """Callback that will process a batch of messages. This will run in the main thread."""
+#         global logger
+#         global countlogger
         
-        logger.info( "In handle_message_batch" )
-        # import pdb; pdb.set_trace()
+#         logger.info( "In handle_message_batch" )
+#         # import pdb; pdb.set_trace()
         
-        added = BrokerMessage.load_batch(messagebatch, logger=logger)
-        countlogger.info(
-            f"...added {added['addedmsgs']} messages, "
-            f"{added['addedclassifiers']} classifiers, "
-            f"{added['addedclassifications']} classifications. "
-        )
+#         added = BrokerMessage.load_batch(messagebatch, logger=logger)
+#         countlogger.info(
+#             f"...added {added['addedmsgs']} messages, "
+#             f"{added['addedclassifiers']} classifiers, "
+#             f"{added['addedclassifications']} classifications. "
+#         )
 
-    def poll(self):
-        # this blocks indefinitely or until a fatal error
-        # use Control-C to exit
-        self.consumer.stream( pipe=self.pipe, heartbeat=60 )
+#     def poll(self):
+#         # this blocks indefinitely or until a fatal error
+#         # use Control-C to exit
+#         self.consumer.stream( pipe=self.pipe, heartbeat=60 )
 
 
 # =====================================================================

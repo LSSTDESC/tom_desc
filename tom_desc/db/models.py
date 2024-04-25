@@ -240,7 +240,8 @@ class QueryQueue(models.Model):
     started = models.DateTimeField( null=True, default=None )
     finished = models.DateTimeField( null=True, default=None )
     error = models.BooleanField( default=False )
+    errortext = models.TextField( null=True, default=None )
     queries = ArrayField( models.TextField(), default=list )
     subdicts = ArrayField( models.JSONField(), default=list )
     format = models.TextField( default='csv' )
-    
+

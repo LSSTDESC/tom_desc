@@ -134,3 +134,7 @@ vue/webpack-stats.json
 
 # Pitt-Google stuff
 GCP_auth_key*
+
+# Untarred test data
+
+tests/elasticc2_alert_test_data/

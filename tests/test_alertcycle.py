@@ -27,10 +27,10 @@ class TestAlertCycle:
 
     def test_ppdb_loaded( self, elasticc2_ppdb ):
         # I should probably have some better tests than just object counts....
-        assert elasticc2.models.PPDBDiaObject.objects.count() == 138
-        assert elasticc2.models.PPDBDiaSource.objects.count() == 429
+        assert elasticc2.models.PPDBDiaObject.objects.count() == 346
+        assert elasticc2.models.PPDBDiaSource.objects.count() == 1862
         assert elasticc2.models.PPDBAlert.objects.count() == elasticc2.models.PPDBDiaSource.objects.count()
-        assert elasticc2.models.PPDBDiaForcedSource.objects.count() == 34284
+        assert elasticc2.models.PPDBDiaForcedSource.objects.count() == 52172
         assert elasticc2.models.DiaObjectTruth.objects.count() == elasticc2.models.PPDBDiaObject.objects.count()
 
 
@@ -74,29 +74,25 @@ class TestAlertCycle:
         assert apibroker.classifiername == "AlwaysTheSame"
         assert apibroker.classifierparams == "0.5 111, 0.75 112"
 
-        # numprobssrc = 0
-        # numprobstim = 0
         numprobs = 0
-        # for msg in brkmsgsrc.objects.all():
-        #     assert len(msg.classid) == len(msg.probability)
-        #     numprobssrc += len(msg.classid)
-        # for msg in brkmsgtim.objects.all():
-        #     assert len(msg.classid) == len(msg.probability)
-        #     numprobstim += len(msg.classid)
+        # There are 650 alerts
+        # The test api broker will add 1300 probabilities
+        #   (since it assignes probabilities to two classes).
+        # Add that to the 13650 probabilities that
+        #   are in fixture classifications_100daysmore_ingested,
+        #   and you get 14950
         for msg in brkmsg.objects.all():
             assert len(msg.classid) == len(msg.probability)
             numprobs += len(msg.classid)
-        # 5460 from before, plus 2*260 for the new classifier
-        # assert numprobssrc == 5980
-        # assert numprobssrc == numprobstim
-        assert numprobs == 5980
+        assert numprobs == 14950
 
         # apiclassmsgssrc = brkmsgsrc.objects.filter( classifier_id=apibroker.classifier_id )
         # apiclassmsgstim = brkmsgtim.objects.filter( classifier_id=apibroker.classifier_id )
         # assert len( apiclassmsgssrc ) == len( apiclassmsgstim )
 
         apiclassmsg = brkmsg.objects.filter( classifier_id=apibroker.classifier_id )
-        assert len( apiclassmsg ) == 260
+        # There are 650 alerts, and the api broker should have classified all of them
+        assert len( apiclassmsg ) == 650
 
         onemsg = apiclassmsg[0]
         assert onemsg.classid == [ 111, 112 ]

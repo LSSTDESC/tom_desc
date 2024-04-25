@@ -416,10 +416,10 @@ If you ever run a server that exposes its interface to the outside web, you prob
 
 To shut down all the containers you started, just run
 ```
-docker compose down
+docker compose down -v
 ```
 
-If you add `-v` to the end of that command, it will also destroy the Postgres and Cassandra data volumes you created.  If you *don't* add `-v`, next time you do `docker compose up -d tom`, the information in the database you had from last time around will still be there.
+If you include the `-v` at the end of that command, it will also destroy the Postgres and Cassandra data volumes you created.  If you *don't* add `-v`, next time you do `docker compose up -d tom`, the information in the database you had from last time around will still be there.
 
 ### Populating the database
 
@@ -644,17 +644,20 @@ Make sure all of the necessary images are built on your system by moving into th
 docker compose build
 ```
 
+You may also need to extract the test data used by some of the tests.  In the `tests` subdirectory, there is a file `elasticc2_alert_test_data.tar.bz2` that has SNANA FITS files with a test dataset that some of the tests (e.g. `test_alertcycle.py`) use.  You must extract this dataset with
+```
+tar -xvf elasticc2_alert_test_data.tar.bz2
+```
+to make it available.  Once you've done it (if there are about 3M of files in the directory `elasticc2_alert_test_data`), you don't have to do it again.
+
 ### <a name="elasticctestshell"></a> Running a shell in the framework
 
 To get an environment in which to run the tests manually, run
 ```
-ELASTICC2_TEST_DATA=<dir> docker compose up -d shellhost
+docker compose up -d shellhost
 ```
-where `<dir>` is a directory that has three models from the 1% ELAsTiCC2 test set that the tests are designed to run with; on brahms (Rob's) desktop, this would be:
-```
-ELASTICC2_TEST_DATA=/data/raknop/elasticc2_train_1pct_3models docker compose up -d shellhost
-```
-If you're not going to use these, you can omit the variable.  You can then connect to that shell host with `docker compose exec -it shellhost /bin/bash`.  The postgres server will on the host named `postgres` (so you can `psql -h postgres -U postgres tom_desc` to poke at the database— the password is "fragile", which you can see in the `docker-compose.yaml` file).  The web server will be on the host named `tom`, listening on port 8080 without SSL  (so, you could do `netcat tom 8080`, or write a python script that uses requests to connect to `http://tom:8080`... or, for that matter, use the `tom_client.py` file included in the `tests` directory).
+
+You can then connect to that shell host with `docker compose exec -it shellhost /bin/bash`.  The postgres server will on the host named `postgres` (so you can `psql -h postgres -U postgres tom_desc` to poke at the database— the password is "fragile", which you can see in the `docker-compose.yaml` file).  The web server will be on the host named `tom`, listening on port 8080 without SSL  (so, you could do `netcat tom 8080`, or write a python script that uses requests to connect to `http://tom:8080`... or, for that matter, use the `tom_client.py` file included in the `tests` directory).
 
 When you're done with everything, do
 ```

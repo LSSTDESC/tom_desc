@@ -15,6 +15,7 @@ django.setup()
 
 import elasticc2.models
 from tom_client import TomClient
+
 @pytest.fixture( scope="session" )
 def tomclient():
     return TomClient( "http://tom:8080", username="root", password="testing" )
