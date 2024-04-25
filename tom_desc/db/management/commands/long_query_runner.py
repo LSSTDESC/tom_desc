@@ -63,7 +63,7 @@ class Command(BaseCommand):
             if len(rows) == 0:
                 return None
 
-            self.logger.info( "Claming query request {rows[0]['queryid']}" )
+            self.logger.info( f"Claiming query request {rows[0]['queryid']}" )
             cursor.execute( "UPDATE db_queryqueue SET started=%(t)s WHERE queryid=%(id)s",
                             { 't': datetime.datetime.now( tz=datetime.timezone.utc ),
                               'id': rows[0]['queryid'] } )
