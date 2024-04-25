@@ -41,7 +41,7 @@ spec:
           value: fragile
         - name: DB_USER
           value: postgres
-        image: registry.nersc.gov/m1727/raknop/tom_desc_extcode:chimaera
+        image: registry.nersc.gov/m1727/raknop/tom_desc_bindmount:chimaera
         imagePullPolicy: Always
         name: tom-rknop-dev-app
         resources: {}
