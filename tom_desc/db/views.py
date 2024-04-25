@@ -161,12 +161,12 @@ class CheckLongSQLQuery(LoginRequiredMixin, django.views.View):
 
             if queueobj.error:
                 response.update( { 'status': 'error',
-                                   'finished': queryobj.finished.isoformat(),
-                                   'error': queryobj.errortext } )
+                                   'finished': queueobj.finished.isoformat(),
+                                   'error': queueobj.errortext } )
                 if queueobj.started is not None:
                     response['started'] = queueobj.started.isoformat()
 
-            if queueobj.finished is not None:
+            elif queueobj.finished is not None:
                 response.update( { 'status': 'finished',
                                    'started': queueobj.started.isoformat(),
                                    'finished': queueobj.finished.isoformat() } )

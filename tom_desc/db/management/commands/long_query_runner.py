@@ -28,6 +28,7 @@ class Command(BaseCommand):
         self.logger.addHandler( _logout )
         _formatter = logging.Formatter( f'[%(asctime)s - %(levelname)s] - %(message)s', datefmt='%Y-%m-%d %H:%M:%S' )
         _logout.setFormatter( _formatter )
+        self.logger.propagate = False
         self.logger.setLevel( logging.INFO )
 
 
@@ -81,6 +82,7 @@ class Command(BaseCommand):
 
     def run_query( self, queryinfo ):
         conn = None
+        qentry = None
         try:
             qentry = QueryQueue.objects.filter( queryid=queryinfo['queryid'] )
             if len(qentry) == 0:
@@ -92,7 +94,7 @@ class Command(BaseCommand):
             # Make a separate connection to the database to run
             # these queries.  We need a psycopg2 connection anyway,
             # which django yields only grudgingly, but more
-            # importantly, we want to connet with the postgres_ro
+            # importantly, we want to connect with the postgres_ro
             # user, which is not what django uses.
 
             with open( "/secrets/postgres_ro_password" ) as ifp:
@@ -125,9 +127,11 @@ class Command(BaseCommand):
                     qentry.save()
                     return False
 
+            self.logger.info( "Done running queries, fetching" )
             columns = [ d.name for d in cursor.description ]
             rows = cursor.fetchall()
 
+            self.logger.info( "Done fetching, saving" )
             if ( queryinfo['format'] == 'csv' ) or ( queryinfo['format'] == 'pandas' ):
                 df = pandas.DataFrame( rows, columns=columns )
                 if queryinfo['format'] == 'pandas':
@@ -138,11 +142,12 @@ class Command(BaseCommand):
             elif ( queryinfo['format'] == 'numpy' ):
                 raise NotImplementedError( "numpy return format isn't implemented yet" )
 
-            conn.commit()
+            self.logger.info( "Done saving, marking finished" )
             conn = None
             qentry.finished = datetime.datetime.now( tz=datetime.timezone.utc )
             qentry.save()
 
+            self.logger.info( "All done." )
             return True
 
         except Exception as ex:
@@ -150,12 +155,12 @@ class Command(BaseCommand):
             if conn is not None:
                 conn.rollback()
                 cursor = conn.cursor()
-                cursor.execute( "UPDATE db_queryqueue SET error=TRUE, finished=%(t)s, errortext=%(err)s "
-                                "WHERE queryid=%(id)s",
-                                { 't': datetime.datetime.now( tz=datetime.timezone.utc),
-                                  'err': str(ex), 'id': queryinfo['queryid'] } )
-                conn.commit()
-            conn = None
+                conn = None
+                if qentry is not None:
+                    qentry.finished = datetime.datetime.now( tz=datetime.timezone.utc )
+                    qentry.error = True
+                    qentry.errortext = str(ex)
+                    qentry.save()
             return False
 
         finally:
