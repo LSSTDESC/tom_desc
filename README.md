@@ -86,46 +86,34 @@ best solution to not having to type things all the time.)
 
 ### Via SQL
 
+#### The fast query interface
+
 You can use the TomClient to hit the url `db/runsqlquery` on the TOM.
 
-For an example of this in action, see `sql_query_tom_db.ipynb` or `sql_query_tom_db.py`.
+For documentation and an example of this in action, see `sql_query_tom_db.ipynb`.
 
-Pass it a json-encoded dictionary as POST data.  The dictionary should have one of two sets of two keys; the first possibility:
+Pass it a json-encoded dictionary as POST data.  The dictionary should have one or two keys:
 
-* `query : str` — The query to send to the database.  This will be run through `psycopg2`'s `cursor.execute()`.  Any parameters that you calculate at runtime should in general *not* be interpolated into the string directly (using f-strings or `.format` or similar); rather, use standard `psycopg2` substitution with things like `%(varname)s`.
-* `subdict : dict` — A dictionary of substitutions in `query`, e.g. `{ 'varname': 'Bobby Tables' }`.  You can omit this if you don't have any substitutions to make.
+* `query : str` — The query to send to the database, or a list of queries.  These will be run through `psycopg2`'s `cursor.execute()` in order.  Any parameters that you calculate at runtime should in general *not* be interpolated into the string directly (using f-strings or `.format` or similar); rather, use standard `psycopg2` substitution with things like `%(varname)s`.
+* `subdict : dict` — A dictionary of substitutions in `query`, e.g. `{ 'varname': 'Bobby Tables' }`, or a list of dictionaries if `query` was a list of queries.  You can omit this if you don't have any substitutions to make.
 
 A call would look something like:
 ```
-  res = tomclient.post( 'db/runsqlquery',
+  res = tomclient.post( 'db/runsqlquery/',
                         json={ 'query': 'SELECT * FROM nonexistent_table WHERE name=%(name)s',
                                'subdict': { 'name': 'Bobby Tables' } } )
 ```
 
-The response returned by `TomClient.post()` is a standard python Requests response.  If all is well, `res.status_code` will be 200; if it's not, something opaque went wrong that you probably can't do anything about.  (The most common failure will probably be timeouts, if you send a query that takes more than 5 minutes.  The postgres server can do this, but the web proxy will time out.)
+The response returned by `TomClient.post()` is a standard python `requests.Response` object.  If all is well, `res.status_code` will be 200; if it's not, something opaque went wrong that you probably can't do anything about.  (The most common failure will probably be timeouts, if you send a query that takes more than 5 minutes.  The postgres server can do this, but the web proxy will time out.)  If you look at `res.text`, you might get a hint, but you might also get a gigantic wadge of HTML.  (One particular gotcha: make sure that the URL you send to `tomclient.post` ends in a slash.  Django is very particular about that for some reason or another.)
 
 Look at `res.json()`; that has a dictionary with key `status`.  If `status` is `"error"`, then something went wrong that the server code was able to catch; look at `res.json()['error']` for the error message.  (This is where SQL errors will show up.)
 
-If `status` is `"ok"`, then `res.json()['rows']` will be a list of the rows returned by `cursor.fetchall()` after the the `cursor.execute()` call on the server.  (The server uses `cursor_factory=psycopg2.extras.RealDictCursor`, so each row is a dictionary of `{ column: value }`.)
+If `status` is `"ok"`, then `res.json()['rows']` will be a list of the rows returned by `cursor.fetchall()` after the the last `cursor.execute()` call on the server.  (The server uses `cursor_factory=psycopg2.extras.RealDictCursor`, so each row is a dictionary of `{ column: value }`.)
 
-If you want to send a sequence of multiple queries to be issued as part of the same transaction (e.g. if you need to create temporary tables), then instead off `query` and `subdict`, the json-encoded dictionary in the POST data should have keys:
+#### The slow query interface
 
-* `queries : list of str` — The queries, in order, to send to the database.
-* `subdicts : list of dict` — The substitution dictionaries for each of the queries.  The length of `subdict` must match the length of `query`.
+Any request to the TOM's web API will time out if the requests takes more than 5 minutes to process.  (It's a proxy server that actually times out.)  As such, the interface above won't work for longer SQL queries.  There's another interface where you can submit a series of queries to run.  That series of queries is added to a queue of long queries that people have submitted.  A background process server-side works through that queue, saving the results either as a CSV file or a pickled Pandas data frame.  You make another web API call to check the status of your query; once it's done, a third web API call gets the data back.  All of this is documented, with an example, in `sql_query_tom_db.ipynb`.
 
-A call would look something like (using a very stupid SQL example):
-
-```
-   queries = [ 'CREATE TEMP TABLE tmptab( name text )',
-               'INSERT INTO tmptab SELECT name FROM nonexistent_table WHERE name=%(bobby)s',
-               'SELECT * FROM tmptab' ]
-   subdicts = [ {},
-                { 'bobby': 'Bobby Tables' },
-                {} ]
-   res = tomclient.post( 'db/runsqlquery', json={ 'queries': queries, 'subdicts': subdicts } )
-```
-
-As before, if `res.status_code` is not 200, something mysterious went wrong (perhaps a web proxy timeout).  If `res.status_code` is 200, then `res.json()` holds a dictionary response with keyword `status`.  If `status` is `"error"`, there will also be a keyword `error` with hopefully helpful text (likely the text of the exception raised by `psycopg2`, which should give you a hint about SQL errors).  If `status` is `"ok"`, then `res.json()['rows']` holds the results of a `cursor.fetchall()` after the *last* `cursor.execute()` call (i.e. the return from the last query).
 
 #### Getting SQL schema
 
@@ -234,7 +222,7 @@ There are two database tables to help matching broker classifications to truth, 
 
 The production location for this is https://desc-tom.lbl.gov/elasticc2/
 
-
+TODO: flesh out
 
 ## <a name="elasticc2spec"></a>Getting and pushing spectrum information
 
@@ -674,11 +662,12 @@ if you also want to delete the created volumes (which you should if you're runni
 
 ### <a name="elasticctestauto"></a> Automatically running all the tests
 
-In the `tests` directory (on your machine, _not_ inside a container), after having built the framework, do:
+__This may not work right now.  I haven't done it in a long time, I've just manually run individual tests with pytest commands in a shellhost as described above.__
+
+In the `tests` directory (on your machine, _not_ inside a container), after having built the framework and (if necessary) unpacked `elasticc2_alert_test_data.tar.bz`, do:
 ```
-ELASTICC2_TEST_DATA=<dir> docker compose run runtests
+docker compose run runtests
 ```
-where `<dir>` is a directory with the 1% ELAsTiCC2 test set (just as with running a shell host, above).
 
 After the tests complete (which could take a long time), do
 ```
