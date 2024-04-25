@@ -3,6 +3,7 @@ import os
 import json
 import uuid
 import datetime
+import logging
 import psycopg2
 import psycopg2.extras
 from django.http import HttpResponse, JsonResponse
@@ -23,72 +24,95 @@ from db.models import QueryQueue
 # sure the postgres user postgres_ro is a readonly user.  Still scary,
 # but not Cthulhuesque.
 
+_logger = logging.getLogger( "db_views" )
+if not _logger.hasHandlers():
+    _logout = logging.StreamHandler( sys.stderr )
+    _logger.addHandler( _logout )
+    _formatter = logging.Formatter( f'[%(asctime)s - %(levelname)s] - %(message)s',
+                                    datefmt='%Y-%m-%d %H:%M:%S' )
+    _logout.setFormatter( _formatter )
+    # _logger.setLevel( logging.INFO )
+    _logger.setLevel( logging.DEBUG )
+
+
+def _extract_queries( request ):
+    data = json.loads( request.body )
+
+    if not 'query' in data:
+        raise ValueError( "POST data must include 'query'" )
+
+    if isinstance( data['query'], list ):
+        queries = data['query']
+    elif not isinstance( data['query'], str ):
+        raise TypeError( "query must be either a list of strings or a string" )
+    else:
+        queries = [ data['query'] ]
+    if not all( [ isinstance(q, str) for q in queries  ] ):
+        raise TypeError( "queries must all be strings" )
+
+    if not 'subdict' in data:
+        subdicts = [ {} for i in range(len(queries)) ]
+    else:
+        if isinstance( data['subdict'], list ):
+            subdicts = data['subdict']
+        elif not isinstance( data['subdict'], dict ):
+            raise TypeError( "query must be either a list of dicts or a dict" )
+        else:
+            subdicts = [ data['subdict'] ]
+        if len(subdicts) != len(queries):
+            raise ValueError( "number of queries and subdicts must match" )
+        if not all( [ isinstance(s, dict) for s in subdicts ] ):
+            raise TypeError( "subdicts must all be dicts" )
+
+    # Have to convert lists to tuples in the substitution dictionaries
+    for subdict in subdicts:
+        for key in subdict.keys():
+            if isinstance( subdict[key], list ):
+                subdict[key] = tuple( subdict[key] )
+
+    return queries, subdicts, data
+    
+
 class RunSQLQuery(LoginRequiredMixin, django.views.View):
     raise_exception = True
 
     def post( self, request, *args, **kwargs ):
-        dbuser = "postgres_ro"
-        pwfile = "/secrets/postgres_ro_password"
-        # dbuser = "postgres_elasticc_admin_ro"
-        # pwfile = "/secrets/postgres_elasticc_admin_ro_password"
-        # if self.request.user.has_perm( "elasticc.elasticc_admin" ):
-        #     dbuser = "postgres_elasticc_admin_ro"
-        #     pwfile = "/secrets/postgres_elasticc_admin_ro_password"
-        # else:
-        #     dbuser = "postgres_elasticc_ro"
-        #     pwfile = "/secrets/postgres_ro_password"
-        with open( pwfile ) as ifp:
-            password = ifp.readline().strip()
-
-        data = json.loads( request.body )
-        dbconn = psycopg2.connect( dbname=os.getenv('DB_NAME'), host=os.getenv('DB_HOST'),
-                                   user=dbuser, password=password,
-                                   cursor_factory=psycopg2.extras.RealDictCursor )
+        dbconn = None
         try:
-            if 'queries' in data:
-                if not isinstance( data['queries'], list ):
-                    raise TypeError( f"queries must be a list, you passed a {type(data['queries'])}" )
-                queries = data['queries']
-                if 'subdicts' in data:
-                    if not isinstance( data['subdicts'], list ):
-                        raise TypeError( f"subdicts must be a list, you passed a {type(data['subdicts'])}" )
-                    if len( data['subdicts'] ) != len( queries ):
-                        raise ValueError( f"Passed {len(queries)} queries but {len(data['subdicts'])} subdicts" )
-                    subdicts = data['subdicts']
-                else:
-                    subdicts = [ {} for i in range(len(queries)) ]
+            dbuser = "postgres_ro"
+            pwfile = "/secrets/postgres_ro_password"
+            with open( pwfile ) as ifp:
+                password = ifp.readline().strip()
 
-            elif 'query' in data:
-                queries = [ data['query'] ]
-                if 'subdict' in data:
-                    if not isinstance( data['subdict'], dict ):
-                        raise TypeError( f"subdict must be a dictionary, you passed a {type(data['subdict'])}" )
-                    subdicts = [ data['subdict'] ]
+            queries, subdicts, data = _extract_queries( request )
 
-            else:
-                raise ValueError( "Must pass either queries or query" )
-
-            # Have to convert lists to tuples in the substitution dictionaries
-            for subdict in subdicts:
-                for key in subdict.keys():
-                    if isinstance( subdict[key], list ):
-                        subdict[key] = tuple( subdict[key] )
-
+            dbconn = psycopg2.connect( dbname=os.getenv('DB_NAME'), host=os.getenv('DB_HOST'),
+                                       user=dbuser, password=password,
+                                       cursor_factory=psycopg2.extras.RealDictCursor )
             cursor = dbconn.cursor()
-            sys.stderr.write( "Starting query sequence\n" )
+
+            _logger.debug( "Starting query sequence" )
+            _logger.debug( "queries={queries}" )
+            _logger.debug( "subdicts={subdicts}" )
             for query, subdict in zip( queries, subdicts ):
-                sys.stderr.write( f'Query is {query}, subdict is {subdict}, dbuser is {dbuser}\n' )
+                _logger.debug( f'Query is {query}, subdict is {subdict}, dbuser is {dbuser}' )
                 cursor.execute( query, subdict )
-                sys.stderr.write( 'Query done\n' )
-            sys.stderr.write( "Fetching\n" )
+                _logger.debug( 'Query done' )
+            _logger.debug( "Fetching" )
             rows = cursor.fetchall()
-            sys.stderr.write( f"Returning {len(rows)} rows from query sequence.\n" )
+
+            _logger.debug( f"Returning {len(rows)} rows from query sequence." )
+            return JsonResponse( { 'status': 'ok', 'rows': rows } )
+
         except Exception as ex:
+            _logger.exception( ex )
             return JsonResponse( { 'status': 'error', 'error': str(ex) } )
+
         finally:
-            dbconn.rollback()
-            dbconn.close()
-        return JsonResponse( { 'status': 'ok', 'rows': rows } )
+            if dbconn is not None:
+                dbconn.rollback()
+                dbconn.close()
+
 
 
 # ======================================================================
@@ -98,33 +122,8 @@ class SubmitLongSQLQuery(LoginRequiredMixin, django.views.View):
 
     def post( self, request, *args, **kwargs ):
 
-        data = json.loads( request.body )
-
         try:
-            if 'queries' in data:
-                if not isinstance( data['queries'], list ):
-                    raise TypeError( f"queries must be a list, you passed a {type(data['queries'])}" )
-                queries = data['queries']
-                if 'subdicts' in data:
-                    if not isinstance( data['subdicts'], list ):
-                        raise TypeError( f"subdicts must be a list, you passed a {type(data['subdicts'])}" )
-                    if len( data['subdicts'] ) != len( queries ):
-                        raise ValueError( f"Passed {len(queries)} queries but {len(data['subdicts'])} subdicts" )
-                    subdicts = data['subdicts']
-                else:
-                    subdicts = [ {} for i in range(len(queries)) ]
-
-            elif 'query' in data:
-                queries = [ data['query'] ]
-                if 'subdict' in data:
-                    if not isinstance( data['subdict'], dict ):
-                        raise TypeError( f"subdict must be a dictionary, you passed a {type(data['subdict'])}" )
-                    subdicts = [ data['subdict'] ]
-                else:
-                    subdicts = [ {} ]
-
-            else:
-                raise ValueError( "Must pass either queries or query" )
+            queries, subdicts, data = _extract_queries( request )
 
             format = 'csv'
             if 'format' in data:
@@ -139,6 +138,7 @@ class SubmitLongSQLQuery(LoginRequiredMixin, django.views.View):
             return JsonResponse( { 'status': 'ok', 'queryid': str(queryid) } )
 
         except Exception as ex:
+            _logger.exception( ex )
             return JsonResponse( { 'status': 'error', 'error': str(ex) } )
 
 # ======================================================================
@@ -181,6 +181,7 @@ class CheckLongSQLQuery(LoginRequiredMixin, django.views.View):
             return JsonResponse( response )
 
         except Exception as ex:
+            _logger.exception( ex )
             return JsonResponse( { 'status': 'error', 'error': str(ex) } )
 
 # ======================================================================
@@ -215,7 +216,7 @@ class GetLongSQLQueryResults(LoginRequiredMixin, django.views.View):
 
             if ( queueobj.format == "numpy" ) or ( queueobj.format == "pandas" ):
                 with open( f"/query_results/{str(queueobj.queryid)}", "rb" ) as ifp:
-                    return HttpResponse( ifp.read(), content_type='applciation/octet-stream' )
+                    return HttpResponse( ifp.read(), content_type='application/octet-stream' )
             elif ( queueobj.format == "csv" ):
                 with open( f"/query_results/{str(queueobj.queryid)}", "r" ) as ifp:
                     return HttpResponse( ifp.read(), content_type='text/csv; charset=utf-8' )
@@ -224,4 +225,5 @@ class GetLongSQLQueryResults(LoginRequiredMixin, django.views.View):
                                      f"{queueobj.format}", content_type="text/plain; charset=utf-8",
                                      status=500 )
         except Exception as ex:
+            _logger.exception( ex )
             return HttpResponse( str(ex), content_type="text/plain; charset=utf-8", status=500 )

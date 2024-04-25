@@ -1,8 +1,10 @@
-# IMPORTANT -- running any tests that use fixtures in this file requires
-# a completely fresh environment.  After any run of "pytest ...", you
-# have to tear down and rebuild the docker compose environment.  This is
-# because, as noted below, we can't easily clean up the kafka server's
-# state, so on a rerun, the server state will be wrong.
+# IMPORTANT -- running any tests that depend on fixtures in this file
+# OTHER than alert_cycle_complete requires a completely fresh
+# environment.  After any run of "pytest ...", if you want to run tests
+# (e.g. in test_alert_cycle.py) that use these fixtures, kyou have to
+# completely tear down and rebuild the docker compose environment.  This
+# is because, as noted below, we can't easily clean up the kafka
+# server's state, so on a rerun, the server state will be wrong.
 
 import sys
 import os
@@ -40,22 +42,22 @@ from msgconsumer import MsgConsumer
 # tests.
 
 # Because of this, lots of fixtures don't bother cleaning up, even if
-# they could.
+# they could.  In fact, they deliberately choose not to clean up,
+# so that the database will be in the state it is at the end of the
+# full alert cycle; the alert_cycle_complete fixture then detects that
+# and runs the slow fixtures or not as necessary.
 
 # Any tests that use these fixtures and are going to test actual numbers
-# in the database should only depend on fixtures
-# update_diasource_100daysmore, and also maybe
-# api_classify_existing_alerts.  Once all these fixtures have run
-# (perhaps from an earlier test), the numbers that come out of earlier
-# fixtures will no longer be right.
+# in the database should only depend on alert_cycle_complete.  Once all
+# these fixtures have run (perhaps from an earlier test), the numbers
+# that come out of earlier fixtures will no longer be right.  If any
+# fixture other than alert_cycle_complete is run when the other fixtures
+# have already been run once in a given docker compose environment, the
+# database will be changed, and the fixtures will fail.
 
 # The numbers in these tests are based on the SNANA files in the
-# directory /data/raknop/elasticc_subset_tom_test on my desktop.
-# that needs to be in the ELASTICC2_TEST_DATA env var when running
-# docker compose.
-
-# HARDCORE TODO: get the test data set integrated into the archive
-# somehow!  Or, at the very least, somewhere it can be downloaded.
+# directory elasticc2_alert_test_data under tests, which should
+# be unpacked from elasticc2_alert_test_data.tar.bz2.
 
 class AlertCounter:
     def __init__( self ):
@@ -64,29 +66,6 @@ class AlertCounter:
     def handle_test_alerts_exist( self, msgs ):
         self._test_alerts_exist_count += len(msgs)
 
-
-# DOESN'T WORK -- fakebroker is listening to specific topics
-# # This is a hack so that each time I run the tests,
-# #   it will write to a different kafka topic.
-# # Ideally, fixtures clean up after themselves, but
-# #   that would mean running something *on* the kafka
-# #   server to delete the topic, and that's hard.
-# #   This will hopefully give the same effect of having
-# #   empty topics.
-# @pytest.fixture( scope="session" )
-# def topictag():
-#     f = pathlib.Path( "/tests/topictag" )
-#     if not f.exists():
-#         with open(f, "w") as ofp:
-#             ofp.write( "1" )
-#         return "1"
-#     else:
-#         with open(f) as ifp:
-#             topictag = int( ifp.readline() )
-#         topictag = str( topictag + 1 )
-#         with open(f, "w") as ofp:
-#             ofp.write( topictag )
-#         return topictag
 
 @pytest.fixture( scope="session" )
 def alerts_300days( elasticc2_ppdb ):
@@ -339,6 +318,18 @@ def random_broker_classifications():
     yield msgs
 
 
+@pytest.fixture( scope="session" )
+def alert_cycle_complete( request, tomclient ):
+    res = tomclient.post( 'db/runsqlquery/',
+                          json={ 'query': 'SELECT COUNT(*) AS count FROM elasticc2_brokermessage' } )
+    rows = res.json()[ 'rows' ]
+    if rows[0]['count'] == 0:
+        request.getfixturevalue( "update_diasource_100daysmore" )
+        request.getfixturevalue( "api_classify_existing_alerts" )
+
+    yield True
+    
+    
 __all__ = [ 'alerts_300days',
             'classifications_300days_exist',
             'classifications_300days_ingested',
@@ -346,4 +337,5 @@ __all__ = [ 'alerts_300days',
             'alerts_100daysmore',
             'classifications_100daysmore_ingested',
             'update_diasource_100daysmore',
-            'api_classify_existing_alerts' ]        
+            'api_classify_existing_alerts',
+            'alert_cycle_complete' ]

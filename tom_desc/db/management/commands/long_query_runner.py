@@ -35,7 +35,7 @@ class Command(BaseCommand):
         "Delete query results that are more than days old."
 
         since = datetime.datetime.now( tz=datetime.timezone.utc ) - datetime.timedelta( days=days )
-        qs = QueryQueue.objects.filter( finished__gt=since )
+        qs = QueryQueue.objects.filter( finished__lt=since )
         for q in qs:
             self.logger.info( "Pruning query {q.queryid}" )
             outf = self.outdir / str(q.queryid)
@@ -57,7 +57,7 @@ class Command(BaseCommand):
 
             cursor = conn.cursor( cursor_factory=psycopg2.extras.RealDictCursor )
             cursor.execute( "LOCK TABLE db_queryqueue" )
-            cursor.execute( "SELECT * FROM db_queryqueue WHERE started IS NULL" )
+            cursor.execute( "SELECT * FROM db_queryqueue WHERE started IS NULL ORDER BY submitted" )
             rows = cursor.fetchall()
             if len(rows) == 0:
                 return None
