@@ -662,11 +662,12 @@ if you also want to delete the created volumes (which you should if you're runni
 
 ### <a name="elasticctestauto"></a> Automatically running all the tests
 
-In the `tests` directory (on your machine, _not_ inside a container), after having built the framework, do:
+__This may not work right now.  I haven't done it in a long time, I've just manually run individual tests with pytest commands in a shellhost as described above.__
+
+In the `tests` directory (on your machine, _not_ inside a container), after having built the framework and (if necessary) unpacked `elasticc2_alert_test_data.tar.bz`, do:
 ```
-ELASTICC2_TEST_DATA=<dir> docker compose run runtests
+docker compose run runtests
 ```
-where `<dir>` is a directory with the 1% ELAsTiCC2 test set (just as with running a shell host, above).
 
 After the tests complete (which could take a long time), do
 ```
