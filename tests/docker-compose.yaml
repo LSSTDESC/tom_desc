@@ -62,7 +62,7 @@ services:
         condition: service_healthy
       # cassandra:
       #   condition: service_healthy
-    image: registry.nersc.gov/m1727/raknop/tom_desc_bindmount:deadalus
+    image: registry.nersc.gov/m1727/raknop/tom_desc_bindmount:daedalus
     build:
       context: ../
       dockerfile: docker_server/Dockerfile
