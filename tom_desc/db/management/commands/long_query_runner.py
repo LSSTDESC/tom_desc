@@ -38,7 +38,7 @@ class Command(BaseCommand):
         since = datetime.datetime.now( tz=datetime.timezone.utc ) - datetime.timedelta( days=days )
         qs = QueryQueue.objects.filter( finished__lt=since )
         for q in qs:
-            self.logger.info( "Pruning query {q.queryid}" )
+            self.logger.info( f"Pruning query {q.queryid}" )
             outf = self.outdir / str(q.queryid)
             if outf.is_file():
                 outf.unlink()
@@ -193,8 +193,8 @@ class Command(BaseCommand):
             return
 
         if options['loop']:
+            self.logger.info( f"Starting infinite loop to look for and run queries." )
             while True:
-                self.logger.info( f"Starting infinite loop to look for and run queries." )
                 queryinfo = self.get_queued_query()
                 if queryinfo is None:
                     time.sleep( self.sleeptime )
