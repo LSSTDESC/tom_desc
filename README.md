@@ -232,7 +232,9 @@ There are two database tables to help matching broker classifications to truth, 
 
 # <a name="elasticc2"></a>The ELAsTiCC2 application
 
-TODO
+The production location for this is https://desc-tom.lbl.gov/elasticc2/
+
+
 
 ## <a name="elasticc2spec"></a>Getting and pushing spectrum information
 
