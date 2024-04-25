@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: tom-rknop-dev-query-pruner
+  name: tom-query-pruner
   namespace: desc-tom
 spec:
   concurrencyPolicy: Forbid
@@ -14,7 +14,7 @@ spec:
             field.cattle.io/ports: '[[]]'
             nersc.gov/collab_uids: "70268"
             nersc.gov/gid: "95089"
-            nersc.gov/gids: 95089,60152,57177
+            nersc.gov/gids: 95089,60152,57177,96414
             nersc.gov/roles: user
             nersc.gov/uid: "95089"
             nersc.gov/username: raknop
@@ -22,10 +22,10 @@ spec:
         spec:
           containers:
           - command: ['python']
-            args: ['manage.py', 'long_query_runner', '-p', '1']
+            args: ['manage.py', 'long_query_runner', '-p', '4']
             env:
             - name: DB_HOST
-              value: tom-rknop-dev-postgres
+              value: tom-postgres
             - name: DB_NAME
               value: tom_desc
             - name: DB_PASS
@@ -34,7 +34,7 @@ spec:
               value: postgres
             image: registry.nersc.gov/m1727/raknop/tom_desc_bindmount:daedalus
             imagePullPolicy: Always
-            name: tom-rknop-dev-query-pruner
+            name: tom-query-pruner
             resources: {}
             securityContext:
               allowPrivilegeEscalation: false
@@ -53,11 +53,11 @@ spec:
             tty: true
             volumeMounts:
             - mountPath: /secrets
-              name: tom-rknop-dev-secrets
+              name: tom-secrets
             - mountPath: /tom_desc
-              name: tom-rknop-dev-deployment
+              name: tom-deployment
             - mountPath: /query_results
-              name: tom-rknop-dev-query-results
+              name: tom-query-results
             workingDir: /tom_desc
           dnsPolicy: ClusterFirst
           restartPolicy: Never
@@ -68,19 +68,19 @@ spec:
           imagePullSecrets:
             - name: registry-nersc
           volumes:
-          - name: tom-rknop-dev-secrets
+          - name: tom-secrets
             secret:
               defaultMode: 256
               optional: false
-              secretName: tom-rknop-dev-secrets
+              secretName: tom-secrets
           - hostPath:
-              path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/dev/tom_desc/tom_desc
+              path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/production/tom_desc/tom_desc
               type: Directory
-            name: tom-rknop-dev-deployment
+            name: tom-deployment
           - hostPath:
-              path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/dev/query_results
+              path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/production/query_results
               type: Directory
-            name: tom-rknop-dev-query-results
-  schedule: 15 8 * * *
+            name: tom-query-results
+  schedule: 20 8 * * *
   successfulJobsHistoryLimit: 3
   suspend: false
