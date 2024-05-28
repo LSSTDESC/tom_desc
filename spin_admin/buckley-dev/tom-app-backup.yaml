@@ -1,0 +1,238 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tom-app
+  namespace: desc-tom-buckley-dev
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      workload.user.cattle.io/workloadselector: deployment-desc-tom-buckley-dev-tom-app
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+        cattle.io/timestamp: "2023-02-27T21:51:32Z"
+        field.cattle.io/ports: '[[]]'
+        nersc.gov/collab_uids: 70268
+        nersc.gov/gid: "95089"
+        nersc.gov/gids: 45703,60152,57177,58102,59318,60070,63477,64483,79186,70268,92576,95089,96414
+        nersc.gov/roles: user
+        nersc.gov/uid: "56805"
+        nersc.gov/username: buckley
+      creationTimestamp: null
+      labels:
+        workload.user.cattle.io/workloadselector: deployment-desc-tom-buckley-dev-tom-app
+    spec:
+      affinity: {}
+      containers:
+      - env:
+        - name: DB_HOST
+          value: tom-postgres
+        - name: DB_NAME
+          value: tom_desc
+        - name: DB_PASS
+          value: fragile
+        - name: DB_USER
+          value: postgres
+        - name: CASSANDRA_HOST
+          value: tom-cassandra
+        - name: CASSANDRA_DB
+          value: tom_desc
+        - name: CASSANDRA_USER
+          value: cassandra
+        - name: CASSANDRA_PASSWORD
+          value: cassandra
+        - name: ALERCE_KAFKA_SERVER
+          value: b-3-public.publicproduction.o8ncxm.c18.kafka.us-east-1.amazonaws.com:9196,b-2-public.publicproduction.o8ncxm.c18.kafka.us-east-1.amazonaws.com:9196,b-1-public.publicproduction.o8ncxm.c18.kafka.us-east-1.amazonaws.com:9196
+        - name: FINK_GROUP_ID
+          value: lsstfr-johann
+        - name: FINK_SERVER
+          value: 134.158.74.95:24499,
+        - name: FINK_TOPIC
+          value: fink_early_sn_candidates_ztf
+        - name: FINK_USERNAME
+          value: johann
+        - name: GOOGLE_APPLICATION_CREDENTIALS
+          value: /secrets/pitt_google_auth_key.json
+        - name: GOOGLE_CLOUD_PROJECT
+          value: elasticc-challenge
+        - name: MONGODB_ADMIN
+          valueFrom:
+            secretKeyRef:
+              name: tom-secrets
+              key: mongodb_admin
+        - name: MONGODB_ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: tom-secrets
+              key: mongodb_admin_password
+        - name: MONGODB_ALERT_WRITER
+          valueFrom:
+            secretKeyRef:
+              name: tom-secrets
+              key: mongodb_alert_writer
+        - name: MONGODB_ALERT_WRITER_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: tom-secrets
+              key: mongodb_alert_writer_password
+        - name: MONGODB_ALERT_READER
+          valueFrom:
+            secretKeyRef:
+              name: tom-secrets
+              key: mongodb_alert_reader
+        - name: MONGODB_ALERT_READER_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: tom-secrets
+              key: mongodb_alert_reader_password
+        image: registry.nersc.gov/m1727/raknop/tom_desc_extcode:chimaera
+        imagePullPolicy: Always
+        name: tom-app
+        resources: {}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            add:
+            - NET_BIND_SERVICE
+            drop:
+            - ALL
+          privileged: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          runAsUser: 95089
+        stdin: true
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        tty: true
+        volumeMounts:
+        - mountPath: /secrets
+          name: tom-secrets
+        - mountPath: /tom_desc
+          name: tom-deployment
+        - mountPath: /sample
+          name: tom-sample
+      dnsConfig: {}
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext:
+        fsGroup: 57177
+      terminationGracePeriodSeconds: 30
+      imagePullSecrets:
+        - name: registry-nersc
+      volumes:
+      - name: tom-secrets
+        secret:
+          defaultMode: 256
+          optional: false
+          secretName: tom-secrets
+      - hostPath:
+          path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/production/tom_desc/tom_desc_fastdb_dev
+          type: Directory
+        name: tom-deployment
+      - hostPath:
+          path: /global/cfs/cdirs/desc-td/ELASTICC2
+          type: Directory
+        name: tom-sample
+---
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    field.cattle.io/targetWorkloadIds: '["deployment:desc-tom-buckley-dev:tom-app"]'
+  name: tom-app
+  namespace: desc-tom-buckley-dev
+#  ownerReferences:
+#  - apiVersion: apps/v1beta2
+#    controller: true
+#    kind: deployment
+#    name: tom-app
+spec:
+  clusterIP: None
+  clusterIPs:
+    - None
+  ports:
+  - name: default
+    port: 42
+    protocol: TCP
+    targetPort: 42
+  selector:
+    workload.user.cattle.io/workloadselector: deployment-desc-tom-buckley-dev-tom-app
+  sessionAffinity: None
+  type: ClusterIP
+status:
+  loadBalancer: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    field.cattle.io/targetWorkloadIds: '["deployment:desc-tom-buckley-dev:tom-app"]'
+  name: tom-ingress-service
+  namespace: desc-tom-buckley-dev
+#  ownerReferences:
+#  - apiVersion: v1beta1/extensions
+#    controller: true
+#    kind: Ingress
+#    name: tom-app
+spec:
+  ports:
+  - port: 8080
+    protocol: TCP
+    targetPort: 8080
+  selector:
+    workload.user.cattle.io/workloadselector: deployment-desc-tom-buckley-dev-tom-app
+  sessionAffinity: None
+  type: ClusterIP
+status:
+  loadBalancer: {}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    nersc.gov/clustername: production
+    nginx.ingress.kubernetes.io/preserve-trailing-slash: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: 500m
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+  generation: 1
+  labels:
+    cattle.io/creator: norman
+  name: tom-desc-app
+  namespace: desc-tom-buckley-dev
+  selfLink: /apis/networking.k8s.io/v1/namespaces/desc-tom-buckley-dev/ingresses/tom-app
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: tom-desc-app.desc-tom-buckley-dev.production.svc.spin.nersc.org
+    http:
+      paths:
+      - backend:
+          service:
+            name: tom-ingress-service
+            port:
+              number: 8080
+        pathType: ImplementationSpecific
+#  - host: desc-tom-buckley-dev.lbl.gov
+#    http:
+#      paths:
+#      - backend:
+#          service:
+#            name: tom-ingress-service
+#            port:
+#              number: 8080
+#        pathType: ImplementationSpecific
+#  tls:
+#  - hosts:
+#    - desc-tom-buckley-dev.lbl.gov
+#    secretName: tom-cert
+---

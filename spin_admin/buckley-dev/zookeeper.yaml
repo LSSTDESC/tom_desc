@@ -1,0 +1,95 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-zookeeper
+  namespace: desc-tom-buckley-dev
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      workload.user.cattle.io/workloadselector: deployment-desc-tom-buckley-dev-kafka-zookeeper
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+        field.cattle.io/ports: '[[]]'
+        nersc.gov/collab_uids: 70268,99896
+        nersc.gov/gid: "95089"
+        nersc.gov/gids: 95089,57177,60152,96414
+        nersc.gov/roles: user
+        nersc.gov/uid: "56085"
+        nersc.gov/username: buckley
+      creationTimestamp: null
+      labels:
+        workload.user.cattle.io/workloadselector: deployment-desc-tom-buckley-dev-kafka-zookeeper
+    spec:
+      containers:
+      - env:
+        - name: LOG_DIR
+          value: /kafka-data/zookeeper-logs
+        image: registry.nersc.gov/m1727/raknop/kafka
+        command: [ 'bin/zookeeper-server-start.sh' ]
+        args: [ 'config/zookeeper.properties' ]
+        imagePullPolicy: Always
+        name: kafka-zookeeper
+        resources: {}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            add:
+            - NET_BIND_SERVICE
+            drop:
+            - ALL
+          privileged: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          runAsUser: 95089
+        stdin: true
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        tty: true
+        volumeMounts:
+        - mountPath: /kafka-data
+          name: zookeeper-data-pvc
+      dnsConfig: {}
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext:
+        fsGroup: 57177
+      terminationGracePeriodSeconds: 30
+      imagePullSecrets:
+        - name: registry-nersc
+      volumes:
+      - name:  zookeeper-data-pvc
+        persistentVolumeClaim:
+          claimName: desc-tom-zookeeper-data-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-zookeeper
+  namespace: desc-tom-buckley-dev
+spec:
+  clusterIP: None
+  clusterIPs:
+  - None
+  ports:
+  - name: default
+    port: 42
+    protocol: TCP
+    targetPort: 42
+  selector:
+    workload.user.cattle.io/workloadselector: deployment-desc-tom-buckley-dev-kafka-zookeeper
+  sessionAffinity: None
+  type: ClusterIP
+status:
+  loadBalancer: {}
+---

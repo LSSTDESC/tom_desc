@@ -1,0 +1,62 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: tom-pgdump
+  namespace: desc-tom
+spec:
+  concurrencyPolicy: Allow
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    metadata:
+      creationTimestamp: null
+    spec:
+      template:
+        spec:
+          containers:
+          - command:
+            - /bin/bash
+            - /home/pgdump/run_pgdump.sh
+            env:
+            - name: PGDB
+              value: tom_desc
+            - name: PGHOST
+              value: tom-postgres
+            - name: PGPASSWORD
+              value: fragile
+            image: registry.nersc.gov/m1727/raknop/tom-pgdump:daedalus
+            imagePullPolicy: Always
+            name: tom-pgdump
+            resources: {}
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities:
+                add:
+                - NET_BIND_SERVICE
+                drop:
+                - ALL
+              privileged: false
+              readOnlyRootFilesystem: false
+              runAsNonRoot: true
+              runAsUser: 95089
+            stdin: true
+            terminationMessagePath: /dev/termination-log
+            terminationMessagePolicy: File
+            tty: true
+            volumeMounts:
+            - mountPath: /pgdump
+              name: pgdump
+            workingDir: /pgdump
+          dnsPolicy: ClusterFirst
+          restartPolicy: Never
+          schedulerName: default-scheduler
+          securityContext:
+            fsGroup: 57177
+          terminationGracePeriodSeconds: 30
+          volumes:
+          - hostPath:
+              path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/pg_dump
+              type: Directory
+            name: pgdump
+  schedule: 0 5 * * 0
+  successfulJobsHistoryLimit: 3
+  suspend: false

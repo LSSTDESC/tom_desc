@@ -1,8 +1,9 @@
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: fastdbdev-mongodb
-  namespace: desc-tom
+  namespace: desc-tom-buckley-dev
 spec:
   progressDeadlineSeconds: 600
   replicas: 1
@@ -18,7 +19,6 @@ spec:
   template:
     metadata:
       annotations:
-        cattle.io/timestamp: "2022-10-06T17:57:50Z"
         field.cattle.io/ports: '[[]]'
         nersc.gov/collab_uids: "70268"
         nersc.gov/gid: "95089"
@@ -28,49 +28,48 @@ spec:
         nersc.gov/username: buckley
       creationTimestamp: null
       labels:
-        workload.user.cattle.io/workloadselector: deployment-desc-tom-fastdbdev=mongodb
+        workload.user.cattle.io/workloadselector: deployment-desc-tom-fastdbdev-mongodb
     spec:
       containers:
       - env:
-       - name: MONGODB_EXTRA_USERNAMES
-          value: alert_writer
+        - name: MONGODB_EXTRA_USERNAMES
+          value: mongodb_alert_writer
         - name: MONGODB_EXTRA_DATABASES
           value: alerts
         - name: MONGODB_EXTRA_PASSWORDS
           valueFrom:
             secretKeyRef:
-              name: mongodb-secrets
+              name: tom-secrets
               key: mongodb-passwords
         - name: MONGO_INITDB_ROOT_USERNAME
           valueFrom:
             secretKeyRef:
-              name: mongodb-secrets
+              name: tom-secrets
               key: mongodb_admin
         - name: MONGO_INITDB_ROOT_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: mongodb-secrets
-              key: mongodb_admin_password
-     securityContext:
-        capabilities:
-          drop:
+              name: tom-secrets
+              key: mongodb_admin_passwd
+        securityContext:
+          capabilities:
+            drop:
             - KILL
             - MKNOD
             - SETGID
             - SETUID
         runAsUser: 56805
-      ports:
+        ports:
         - name: mongodb
           containerPort: 27017
           protocol: TCP
-      imagePullPolicy: IfNotPresent
-      volumeMounts:
-        - name: mongodb-datadir
-          mountPath: /mongodb-data
-       terminationMessagePolicy: File
-      image:registry.nersc.gov/m1727/buckley/tom-mongodb:latest
-     serviceAccount: fastdb-mongodb
-       volumes:
-      - name: "mongo-data-dir"
+        imagePullPolicy: IfNotPresent
+        volumeMounts:
+        - mountPath: /mongodb-data
+          name: mongodb-datadir
+        terminationMessagePolicy: File
+        image:registry.nersc.gov/m1727/buckley/tom-mongodb:latest
+      volumes:
+      - name: mongodb-datadir
         persistentVolumeClaim:
-          claimName: "fastdbdev-mongodb-pvc"
+          claimName: fastdbdev-mongodb-pvc

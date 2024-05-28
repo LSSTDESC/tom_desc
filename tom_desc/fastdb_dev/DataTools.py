@@ -4,11 +4,11 @@ import os
 import psycopg2
 from time import sleep
 
-from alerts.models import LastUpdateTime, ProcessingVersions, HostGalaxy, Snapshots, DiaObject, DiaSource, DiaForcedSource,SnapshotTags
-from alerts.models import DStoPVtoSS, DFStoPVtoSS, BrokerClassifier, BrokerClassification
+from fastdb_dev.models import LastUpdateTime, ProcessingVersions, HostGalaxy, Snapshots, DiaObject, DiaSource, DiaForcedSource,SnapshotTags
+from fastdb_dev.models import DStoPVtoSS, DFStoPVtoSS, BrokerClassifier, BrokerClassification
 
-from alerts.serializers import DiaSourceSerializer
-from alerts.serializers import DiaObjectSerializer
+from fastdb_dev.serializers import DiaSourceSerializer
+from fastdb_dev.serializers import DiaObjectSerializer
 from rest_framework.renderers import JSONRenderer
 from rest_framework.parsers import JSONParser
 from rest_framework.decorators import api_view

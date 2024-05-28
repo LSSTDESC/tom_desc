@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: desc-tom-kafka-data-pvc
+  namespace: desc-tom-buckley-dev
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 200Gi
+  storageClassName: nfs-client
+  volumeMode: Filesystem

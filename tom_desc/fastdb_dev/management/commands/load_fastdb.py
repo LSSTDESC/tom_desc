@@ -50,26 +50,27 @@ class Command(BaseCommand):
         parser.add_argument( '--tag', help="Snapshot Tag" )
 
     def handle( self, *args, **options ):
+
+        mongodb_collections = {'alerce':'alerce','antares':'antares','fink':'fink','ztf':'ztf'}
         self.logger.info( "********fastdb starting ***********" )
 
         season = options['season']
         snapshot = options['snapshot']
         processing_version = options['pv']
         
-        username = urllib.parse.quote_plus('alert_writer')
+        username = urllib.parse.quote_plus('mongodb_alert_writer')
         password = urllib.parse.quote_plus(os.environ['MONGODB_PASSWORD'])
 
-        client = MongoClient("mongodb://%s:%s@fastdb-mongodb:27017/alerts" % (username,password))
+        client = MongoClient("mongodb://%s:%s@fastdbdev-mongodb:27017/alerts" % (username,password))
         db = client.alerts
-        collection = db.messages
 
 
         # Connect to the PPDB
             
         # Get password
 
-        secret = os.environ['PPDB_READER_PASSWORD']
-        conn_string = "host='fastdb-ppdb-psql' dbname='ppdb' user='ppdb_reader' password='%s'" % secret.strip()
+        secret = os.environ['DB_PASS']
+        conn_string = "host='tom-postgres' dbname='tom_desc' user='postgres' password='%s'" % secret.strip()
         conn = psycopg2.connect(conn_string)
         
         cursor = conn.cursor()
@@ -112,6 +113,7 @@ class Command(BaseCommand):
         list_diaSourceId = []
         
         for name in brokerstodo:
+            collection = db[mongodb_collections[name]]
             results = collection.find({"$and":[{"msg.brokerName":name},{"timestamp":{'$gte':last_update_time, '$lt':current_datetime}},{"msg.classifications":{'$elemMatch':{'$and':[{"classId":{'$in':[2221,2222,2223,2224,2225,2226]}},{"probability":{'$gte':0.7}}]}}}]})
  
             for r in results:
@@ -145,7 +147,7 @@ class Command(BaseCommand):
         for d in uniqueSourceId:
 
             self.logger.info("Source Id %d" % d)
-            query = sql.SQL( "SELECT * FROM {}  where {} = %s").format(sql.Identifier('DiaSource'),sql.Identifier('diaSourceId'))
+            query = sql.SQL( "SELECT * FROM {}  where {} = %s").format(sql.Identifier('PPDBDiaSource'),sql.Identifier('diasource_id'))
             self.logger.info(query.as_string(conn))
                             
             cursor.execute(query,(d,))
@@ -188,7 +190,7 @@ class Command(BaseCommand):
                     
                     # Fetch the DiaObject from the PPDB
                     
-                    query = sql.SQL("SELECT * from {} where {} = %s").format(sql.Identifier('DiaObject'),sql.Identifier('diaObjectId'))
+                    query = sql.SQL("SELECT * from {} where {} = %s").format(sql.Identifier('PPDBDiaObject'),sql.Identifier('diaobject_id'))
                     
                     cursor.execute(query,(diaObjectId,))
                     if cursor.rowcount != 0:
@@ -237,7 +239,7 @@ class Command(BaseCommand):
                 if len(dfs) == 0:    
 
                      # diaForcedSourceId,diaObjectId,psFlux,psFluxSigma,filterName,observeDate
-                    query = sql.SQL("SELECT * from {} where {} = %s").format(sql.Identifier('DiaForcedSource'),sql.Identifier('diaObjectId'))
+                    query = sql.SQL("SELECT * from {} where {} = %s").format(sql.Identifier('PPDBDiaForcedSource'),sql.Identifier('diaobject_id'))
                     cursor.execute(query,(diaObjectId,))
                     if cursor.rowcount != 0:
                         results = cursor.fetchall()

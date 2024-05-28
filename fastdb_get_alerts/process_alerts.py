@@ -263,7 +263,7 @@ class MsgConsumer(object):
 
 class BrokerConsumer:
     def __init__( self, server, groupid, topics=None, updatetopics=False,
-                  schemaless=True, reset=False, extraconfig={},
+                  schemaless=True, reset=False, extraconfig={}, collection=None, 
                   schemafile=None, pipe=None, loggername="BROKER", username=None, password=None, **kwargs ):
 
         self.logger = logging.getLogger( loggername )
@@ -309,9 +309,9 @@ class BrokerConsumer:
         self.nmessagesconsumed = 0
         
         self.countlogger.info( f"************ Connecting to MongoDB {loggername} ****************" )
-        client = MongoClient("mongodb://fastdb-mongodb:27017/")    
+        client = MongoClient("mongodb://fastdbdev-mongodb:27017/")    
         self.db = client.alerts
-        self.collection = self.db.messages
+        self.collection = self.db[collection]
         self.countlogger.info(self.db)
         self.countlogger.info(self.collection)
     
@@ -465,8 +465,9 @@ class AlerceConsumer(BrokerConsumer):
         self.username = username
         self.password = password
         extraconfig = {}
+        collection = 'alerce'
 
-        super().__init__( server, groupid, topics=topics, updatetopics=updatetopics, extraconfig=extraconfig, loggername=loggername, username=username, password=password, **kwargs )
+        super().__init__( server, groupid, topics=topics, updatetopics=updatetopics, extraconfig=extraconfig, colection=collection, loggername=loggername, username=username, password=password, **kwargs )
         self.logger.info( f"ALERCE group id is {groupid}" )
 
         self.badtopics = [ 'lc_classifier_balto_20230807' ]

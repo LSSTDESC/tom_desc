@@ -67,7 +67,7 @@ def create_new_processing_version(request):
 
             # Get the most recent migration from the database
 
-            lm = MigrationRecorder.Migration.objects.filter(app='alerts').last()
+            lm = MigrationRecorder.Migration.objects.filter(app='fastdb_dev').last()
             nm = lm.name
             parts = nm.split('_')
             mig_num = str(int(parts[0])+1)
@@ -77,11 +77,11 @@ def create_new_processing_version(request):
             
             mig_name = "%s_partitioning_%s.py" % (mig_num,version)
             base_dir = settings.BASE_DIR
-            mig_file = "%s/alerts/migrations/%s" % (base_dir,mig_name)
+            mig_file = "%s/fastdb_dev/migrations/%s" % (base_dir,mig_name)
 
             # Fill template
             
-            mig_template =  "%s/alerts/templates/migration_template.txt" % (base_dir)
+            mig_template =  "%s/fastdb_dev/templates/migration_template.txt" % (base_dir)
             mig_dict = {}
             mig_dict['depend'] = nm
             mig_dict['name'] = "pv_%s" % version
@@ -120,7 +120,7 @@ def edit_processing_version(request):
         pv.save()
         
         # redirect to a new URL:
-        return render(request, "alerts/snapshots_index.html")
+        return render(request, "fastdb_dev/snapshots_index.html")
 
     else:
 

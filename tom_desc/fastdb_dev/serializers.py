@@ -1,6 +1,6 @@
 from rest_framework import serializers
-from alerts.models import LastUpdateTime, ProcessingVersions, HostGalaxy, Snapshots, DiaObject, DiaSource, DiaForcedSource, SnapshotTags
-from alerts.models import DStoPVtoSS, DFStoPVtoSS, BrokerClassifier, BrokerClassification
+from fastdb_dev.models import LastUpdateTime, ProcessingVersions, HostGalaxy, Snapshots, DiaObject, DiaSource, DiaForcedSource, SnapshotTags
+from fastdb_dev.models import DStoPVtoSS, DFStoPVtoSS, BrokerClassifier, BrokerClassification
 
 class DiaObjectSerializer(serializers.ModelSerializer):
 

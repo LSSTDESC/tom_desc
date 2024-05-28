@@ -4,7 +4,7 @@ from psqlextra.backend.migrations.operations import PostgresAddListPartition
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('alerts', '{{depend}}'),
+        ('fastdb_dev', '{{depend}}'),
     ]
 
     operations = [

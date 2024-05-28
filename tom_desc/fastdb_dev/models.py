@@ -1,4 +1,4 @@
-django.db import models
+from django.db import models
 from django.contrib.postgres.fields import ArrayField
 import django.contrib.postgres.indexes as indexes
 from django.utils import timezone

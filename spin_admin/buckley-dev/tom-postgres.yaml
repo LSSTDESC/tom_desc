@@ -79,7 +79,7 @@ spec:
       volumes:
       - name: tom-postgres
         persistentVolumeClaim:
-          claimName: tom-postgres-pvc-20231106
+          claimName: tom-postgres-pvc
       - emptyDir:
           medium: Memory
           sizeLimit: 128Gi
