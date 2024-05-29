@@ -44,6 +44,7 @@ urlpatterns = [
     path('planspectrum', views.PlanToDoSpectrum.as_view(), name='planspectrum' ),
     path('removespectrumplan', views.RemoveSpectrumPlan.as_view(), name='removespectrumplan' ),
     path('reportspectruminfo', views.ReportSpectrumInfo.as_view(), name='reportspectruminfo' ),
+    path('getknownspectruminfo', views.GetSpectrumInfo.as_view(), name='getknownspectruminfo' ),
     
     path( '', include( ( router.urls, 'elasticc2' ), namespace=app_name ) )
 ]

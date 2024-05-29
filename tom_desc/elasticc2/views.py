@@ -1277,3 +1277,57 @@ class ReportSpectrumInfo(PermissionRequiredMixin, django.views.View):
             traceback.print_exc( file=sys.stderr )
             return HttpResponse( f"Exception in ReportSpectrumInfo: {ex}",
                                  status=500, content_type='text/plain; charset=utf-8' )
+
+# ======================================================================
+
+class GetSpectrumInfo(PermissionRequiredMixin, django.views.View):
+    raise_exception = True
+
+    def has_permission( self ):
+        return bool( self.request.user.is_authenticated )
+
+    def post( self, request ):
+        try:
+            data = json.loads( request.body )
+
+            q = SpectrumInfo.objects
+
+            if 'objectid' in data.keys():
+                if isinstance( data['objectid'], list ):
+                    q = q.filter( diaobject_id__in=data['objectid'] )
+                else:
+                    q = q.filter( diaobject_id=int(data['objectid']) )
+            if 'facility' in data.keys():
+                q = q.filter( facillity=data['facility'] )
+            if 'mjd_min' in data.keys():
+                q = q.filter( mjd__gte=float(data['mjd']) )
+            if 'mjd_max' in data.keys():
+                q = q.filter( mjd__lte=float(data['mjd']) )
+            if 'classid' in data.keys():
+                q = q.filter( classid=int(data['classid']) )
+            if 'z_min' in data.keys():
+                q = q.filter( z__gte=float(data['z_min']) )
+            if 'z_max' in data.keys():
+                q = q.filter( z__lte=float(data['z_max']) )
+            if 'since' in data.keys():
+                q = q.filter( inserted_at__gte=dateutil.parser.parse( data['since'] ) )
+
+            q = q.order_by( 'mjd' )
+
+            resp = { 'status': 'ok',
+                     'spectra': [] }
+            for spec in q:
+                resp['spectra'].append( { 'objectid': spec.diaobject_id,
+                                          'facility': spec.facility,
+                                          'mjd': spec.mjd,
+                                          'z': spec.z,
+                                          'classid': spec.classid,
+                                          'report_time': spec.inserted_at } )
+            return JsonResponse( resp )
+
+        except Exception as ex:
+            sys.stderr.write( "Exception in GetKnownSpectrumInfo" )
+            traceback.print_exc( file=sys.stderr )
+            return HttpResponse( f"Exception in GetKnownSpectrumInfo: {ex}",
+                                 status=500, content_type='text/plain; charset=utf-8' )
+

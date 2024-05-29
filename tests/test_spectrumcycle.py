@@ -242,3 +242,16 @@ class TestSpectrumCycle:
         wanted = elasticc2.models.WantedSpectra.objects.all()
         assert len(wanted) == 24
         assert oid not in [ o.diaobject_id for o in wanted ]
+
+    def test_get_spectrum_info( self, ask_for_spectra, tomclient ):
+        # Get everything
+
+        res = tomclient.post( 'elasticc2/getknownspectruminfo', json={} )
+        assert res.status_code == 200
+        data = res.json()
+        assert data['status'] == 'ok'
+        assert len( data['spectra'] ) == 1
+        assert data['spectra'][0]['objectid'] == 114982
+        assert data['spectra'][0]['mjd'] == pytest.approx( 65536., abs=0.01 )
+        assert data['spectra'][0]['z'] == pytest.approx( 0.25, abs=0.01 )
+        assert data['spectra'][0]['classid'] == 2222

@@ -19,6 +19,7 @@ Based on the [Tom Toolkit](https://lco.global/tomtoolkit/)
     * [Declaring intent to take a spectrum](#elasticc2planspec)
     * [Removing declared intent to take a spectrum](#elasticc2removespecplan)
     * [Reporting spectrum information](#elasticc2reportspec)
+    * [Getting information about reported spectra](#elasticc2getknownspec)
 
 * [Internal Documentation](#internal-documentation)
   * [Branch Management](#branch-management)
@@ -364,6 +365,29 @@ Post to URL `elasticc2/reportspectruminfo`.  The POST body should be a json-enco
 If the type is totally indeterminate from the specrum, use type 300 ("NotClassified").  Otherwise, use the most specific type that can be confidently identified from the spectrum.
 
 (TODO: think about allowing mulitiple types and probabilities.)
+
+### <a name="elasticc2getknownspec"></a> Getting information about reported spectra
+
+This is to get what spectrum information has been reported.  Post to URL `elasticc2/getknownspectruminfo`.  The POST body should be a json-encoded dict with keys:
+
+* `objectid : int or list of int` — optional.  If included, only get spectrum information for this object.  (Query multiple objects by passing a list rather than a single int.)
+* `facility : str` — optional.  If included, only get spectrum information from this facility.
+* `mjd_min : float` — optional.  If included, only get information about spectra taken at this mjd or later.
+* `mjd_max : float` — optional.  If included, only get information about spectra taken at this mjd or earlier.
+* `classid : int` — optional.  If included, only get information about spectra tagged with this class id.
+* `z_min : float` — optional.  If included, only get information about spectra with this redshift or higher.
+* `z_max : float` — optional.  If included, only get information about spectra with this redshift or lower.
+* `since : str` — optional.  Format "YYYY-MM-DDThh:mm:ss" (where "Thh:mm:ss" may be omitted).  Only get spectra that were reported to the TOM on this date/time (UTC) or later.
+
+If you include no keys, you'll get information about all spectra that the database knows about, which may be overwhelming.  (The API may also time out.)
+
+The response you get back is a json-encoded dictionary, call it `resp`.  `resp['status']` should be `ok`; if it's `error`, then `resp['error']` may have an error message.  (However, if there's an error, you're more likely to get an HTTP 500 response, in which case, look at the body of the response as plain text to see if there's an error message.)  `resp['spectra']` is an array of dictionaries, one for each known spectrum that matched your criteria, ordered by mjd.  Each dictionary in this array has keys:
+
+* `objectid` — The same objectid that you've been using all along
+* `facility` — The facility that was reported with the spectrum
+* `mjd` — The MJD that the spectrum was reported to be taken at
+* `z` — The reported redshift
+* `classid` — The reported class id.
 
 ---
 
