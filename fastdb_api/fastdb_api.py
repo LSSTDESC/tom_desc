@@ -5,7 +5,7 @@ import os
 import os.path
 import configparser
 
-URL =  'https://desc-tom.lbl.gov/fastdb_dev/'
+URL = 'http://tom-app.desc-tom-buckley-dev.production.svc.spin.nersc.org/fastdb_dev/'
 LOGIN_URL = URL + 'acquire_token'
 TOKEN_URL = URL + 'api-token-auth/'
 RAW_QUERY_LONG_URL = URL + 'raw_query_long'
@@ -30,7 +30,6 @@ class FASTDBDataAccess(object):
             password = config['fastdb']['passwd']
             req = session.get(LOGIN_URL)
             self.csrf_token = req.cookies['csrftoken']
-            print(self.csrf_token)
 
             login_data = {'username':username, 'password':password, 'csrfmiddlewaretoken': self.csrf_token}
             req = session.post(TOKEN_URL, data=login_data)
@@ -39,7 +38,6 @@ class FASTDBDataAccess(object):
             if token:
                 token = f"Token {token}"
                 self.headers = {"Authorization": token}
-                print(self.headers)
         else:
             print('Cannot find %s. Failed to authenticate' % fastdbservices)
             
@@ -57,7 +55,6 @@ class FASTDBDataAccess(object):
 
         query = json.dumps([{'csrfmiddlewaretoken': self.csrf_token},{'query':q},])
         r = requests.post(RAW_QUERY_SHORT_URL, json=query, headers=self.headers)
-        print(r.status_code)
         if r.status_code == requests.codes.ok:
             return r.json()
         else:
@@ -71,7 +68,6 @@ class FASTDBDataStore(object):
 
         session = Session()
         fastdbservices = os.environ['HOME'] + '/.fastdbservices.ini'
-        print(fastdbservices)
         if os.path.exists(fastdbservices):
             config = configparser.ConfigParser()
             config.read(fastdbservices)
@@ -93,11 +89,9 @@ class FASTDBDataStore(object):
 
     def data_insert(self,table,data):
 
-        print(data)
         query = json.dumps([{'csrfmiddlewaretoken': self.csrf_token},
                         {'query':data},
         ])
-        print(query)
         if table == 'dia_source':
             r = requests.post(DIA_SOURCE_URL, json=query, headers=self.headers)
         if table == 'ds_to_pv_to_ss':
@@ -107,11 +101,9 @@ class FASTDBDataStore(object):
 
     def data_update(self,table,data):
 
-        print(data)
         query = json.dumps([{'csrfmiddlewaretoken': self.csrf_token},
                         {'query':data},
         ])
-        print(query)
         if table == 'dia_source':
             r = requests.post(UPDATE_DIA_SOURCE_URL, json=query, headers=self.headers)
         if table == 'ds_to_pv_to_ss':

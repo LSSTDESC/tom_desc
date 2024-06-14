@@ -245,6 +245,7 @@ def store_dia_source_data(request):
         ds.ps_flux_err = data['ps_flux_err']
         ds.snr = data['snr']
         ds.mid_point_tai = data['mid_point_tai']
+        ds.valid_flag = data['valid_flag']
 
         do = DiaObject.objects.get(dia_object=data['dia_object'])
         ds.dia_object = do

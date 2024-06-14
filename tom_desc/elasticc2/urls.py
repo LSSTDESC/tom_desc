@@ -8,8 +8,8 @@ router = DefaultRouter()
 router.register( f'ppdbdiaobject', views.PPDBDiaObjectViewSet )
 router.register( f'ppdbdiasource', views.PPDBDiaSourceViewSet )
 router.register( f'ppdbdiaforcedsource', views.PPDBDiaForcedSourceViewSet )
-router.register( f'ppdbdiaobjectwithsources', views.PPDBDiaObjectSourcesViewSet )
-router.register( f'ppdbdiaobjectofsource', views.PPDBDiaObjectAndPrevSourcesForSourceViewSet )
+router.register( f'ppdbdiaobjectwithsources', views.PPDBDiaObjectSourcesViewSet ,basename='ppdbdiaobjectwithsources' )
+router.register( f'ppdbdiaobjectofsource', views.PPDBDiaObjectAndPrevSourcesForSourceViewSet, basename='ppdbdiaobjectofsource' )
 
 urlpatterns = [
     path( '', views.Elasticc2MainView.as_view(), name='elasticc2' ),

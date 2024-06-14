@@ -15,14 +15,16 @@ import traceback
 import datetime
 import collections
 import atexit
-from optparse import OptionParser
+import argparse
+import urllib
 
 _rundir = pathlib.Path(__file__).parent
+_logdir = pathlib.Path(__file__).parent.parent
 print(_rundir)
 
 _logger = logging.getLogger(__name__)
 if not _logger.hasHandlers():
-    _logout = logging.FileHandler( _rundir / f"logs/broker.log" )
+    _logout = logging.FileHandler( _logdir / f"logs/broker.log" )
     _logger.addHandler( _logout )
     _formatter = logging.Formatter( f'[msgconsumer - %(asctime)s - %(levelname)s] - %(message)s', datefmt='%Y-%m-%d %H:%M:%S' )
     _logout.setFormatter( _formatter )
@@ -65,10 +67,6 @@ class MsgConsumer(object):
         consumerconfig = { "bootstrap.servers": server,
                            "auto.offset.reset": "earliest",
                            "group.id": groupid,
-                           "sasl.username": self.username,
-                           "sasl.password": self.password,
-                           "sasl.mechanism": "SCRAM-SHA-512",
-                           "security.protocol":"SASL_SSL"
         }
 
         if extraconsumerconfig is not None:
@@ -268,7 +266,7 @@ class BrokerConsumer:
 
         self.logger = logging.getLogger( loggername )
         self.logger.propagate = False
-        logout = logging.FileHandler( _rundir / f"logs/broker.log"  )
+        logout = logging.FileHandler( _logdir / f"logs/broker.log"  )
         self.logger.addHandler( logout )
         formatter = logging.Formatter( f'[%(asctime)s - {loggername} - %(levelname)s] - %(message)s',
                                        datefmt='%Y-%m-%d %H:%M:%S' )
@@ -280,7 +278,7 @@ class BrokerConsumer:
  
         self.countlogger = logging.getLogger( f"countlogger_{loggername}" )
         self.countlogger.propagate = False
-        _countlogout = logging.FileHandler( _rundir / f"logs/brokerpoll_counts_{loggername}.log" )
+        _countlogout = logging.FileHandler( _logdir / f"logs/brokerpoll_counts_{loggername}.log" )
         _countformatter = logging.Formatter( f'[%(asctime)s - %(levelname)s] - %(message)s',
                                              datefmt='%Y-%m-%d %H:%M:%S' )
         _countlogout.setFormatter( _countformatter )
@@ -309,7 +307,10 @@ class BrokerConsumer:
         self.nmessagesconsumed = 0
         
         self.countlogger.info( f"************ Connecting to MongoDB {loggername} ****************" )
-        client = MongoClient("mongodb://fastdbdev-mongodb:27017/")    
+        mongo_username = urllib.parse.quote_plus(os.environ['MONGODB_ALERT_WRITER'])
+        mongo_password = urllib.parse.quote_plus(os.environ['MONGODB_ALERT_WRITER_PASSWORD'])
+
+        client = MongoClient("mongodb://%s:%s@fastdbdev-mongodb:27017/?authSource=alerts" %(mongo_username,mongo_password) )    
         self.db = client.alerts
         self.collection = self.db[collection]
         self.countlogger.info(self.db)
@@ -448,23 +449,29 @@ class BrokerConsumer:
 
 
 class AlerceConsumer(BrokerConsumer):
-
-    def __init__( self, loggername="ALERCE", early_offset=os.getenv( "ALERCE_TOPIC_RELDATEOFFSET", -4 ), **kwargs ):
-
-
-        username = os.environ['ALERCE_USERNAME']
-        password = os.environ['ALERCE_PASSWORD']
-
-
-        server = "b-2-public.publicproduction.o8ncxm.c18.kafka.us-east-1.amazonaws.com:9196,b-3-public.publicproduction.o8ncxm.c18.kafka.us-east-1.amazonaws.com:9196,b-1-public.publicproduction.o8ncxm.c18.kafka.us-east-1.amazonaws.com:9196"
-        #server = 'b-2-public.publicproduction.o8ncxm.c18.kafka.us-east-1.amazonaws.com:9196'
-        groupid = "external_elasticc-4"
+    def __init__( self,
+                  grouptag=None,
+                  usernamefile='/secrets/alerce_username',
+                  passwdfile='/secrets/alerce_passwd',
+                  loggername="ALERCE",
+                  early_offset=os.getenv( "ALERCE_TOPIC_RELDATEOFFSET", -4 ),
+                  alerce_topic_pattern='^lc_classifier_.*_(\d{4}\d{2}\d{2})$',
+                  **kwargs ):
+        server = os.getenv( "ALERCE_KAFKA_SERVER", "kafka.alerce.science:9093" )
+        groupid = "elasticc-lbnl" + ( "" if grouptag is None else "-" + grouptag )
         self.early_offset = int( early_offset )
+        self.alerce_topic_pattern = alerce_topic_pattern
         topics = None
         updatetopics = True
-        self.username = username
-        self.password = password
-        extraconfig = {}
+        with open( usernamefile ) as ifp:
+            username = ifp.readline().strip()
+        with open( passwdfile ) as ifp:
+            passwd = ifp.readline().strip()
+        extraconfig = {  "security.protocol": "SASL_SSL",
+                         "sasl.mechanism": "SCRAM-SHA-512",
+                         "sasl.username": username,
+                         "sasl.password": passwd }
+
         collection = 'alerce'
 
         super().__init__( server, groupid, topics=topics, updatetopics=updatetopics, extraconfig=extraconfig, colection=collection, loggername=loggername, username=username, password=password, **kwargs )
@@ -486,21 +493,36 @@ class AlerceConsumer(BrokerConsumer):
                 tosub.append( topic )
         self.topics = tosub
         self.consumer.subscribe( self.topics )
+
+class TestConsumer(BrokerConsumer):
+    def __init__( self, grouptag=None, test_topic=None, loggername="TEST", **kwargs ):
+        
+        collection = 'test'
+        
+        if test_topic is None:
+            raise RuntimeError( "Must specify test topic" )
+        server = "kafka-server:9092"
+        groupid = "testing" + ("" if grouptag is None else "-" + grouptag )
+        topics = [ test_topic ]
+        super().__init__( server, groupid, topics=topics, loggername=loggername, collection=collection,
+ **kwargs )
+        self.logger.info( f"Test group id is {groupid}, topic is {test_topic}" )
         
 class Broker(object):
 
-    def __init__( self, reset=False, broker_list=None, username=None, password=None, *args, **kwargs ):
+    def __init__( self, username=None, password=None, *args, **options ):
 
         self.logger = logging.getLogger( "brokerpoll_baselogger" )
         self.logger.propagate = False
-        logout = logging.FileHandler( _rundir / f"logs/brokerpoll.log" )
+        logout = logging.FileHandler( _logdir / f"logs/brokerpoll.log" )
         self.logger.addHandler( logout )
         formatter = logging.Formatter( f'[%(asctime)s - brokerpoll - %(levelname)s] - %(message)s',
                                        datefmt='%Y-%m-%d %H:%M:%S' )
         logout.setFormatter( formatter )
         self.logger.setLevel( logging.DEBUG )
-        self.reset = reset
-        self.broker_list = broker_list
+        if options['reset']:
+            self.reset = options['reset']
+
         self.username = username
         self.password = password
 
@@ -514,35 +536,45 @@ class Broker(object):
                        lambda sig, stack: self.logger.warning( f"{brokerclass.__name__} ignoring SIGINT" ) )
         signal.signal( signal.SIGTERM,
                        lambda sig, stack: self.logger.warning( f"{brokerclass.__name__} ignoring SIGTERM" ) )
-        consumer = brokerclass( pipe=pipe )
+        consumer = brokerclass( pipe=pipe, **options )
         consumer.poll()
 
-    def broker_poll( self, *args, **options ):
+    def broker_poll( self, *args, **options):
         self.logger.info( "******** brokerpoll starting ***********" )
 
         self.mustdie = False
         signal.signal( signal.SIGTERM, lambda sig, stack: self.sigterm( "TERM" ) )
         signal.signal( signal.SIGINT, lambda sig, stack: self.sigterm( "INT" ) )
 
-        #brokerstodo = { 'antares': AntaresConsumer,
-        #                 'fink': FinkConsumer,
-        #                 'alerce': AlerceConsumer,
-        #                'ztf': PublicZTFConsumer }
-        brokerstodo = { 'alerce': AlerceConsumer }
+
+        brokerstodo = {}
+        if options['do_alerce']:
+            brokerstodo['alerce'] = AlerceConsumer
+        if options['do_antares']:
+            brokerstodo['antares'] = AntaresConsumer
+        if options['do_fink']:
+            brokerstodo['fink'] = FinkConsumer
+        if options['do_pitt']:
+            brokerstodo['pitt'] = PittGoogleBroker
+        if options['do_brahms']:
+            brokerstodo['brahms'] = BrahmsConsumer
+        if options['do_test']:
+            brokerstodo['test'] = TestConsumer
+        if len( brokerstodo ) == 0:
+            print( "Must give at least one broker to listen to." )
 
         brokers = {}
 
         # Launch a process for each broker that will poll that broker indefinitely
 
         for name,brokerclass in brokerstodo.items():
-            if name in self.broker_list:
-                self.logger.info( f"Launching thread for {name}" )
-                parentconn, childconn = multiprocessing.Pipe()
-                proc = multiprocessing.Process( target=self.launch_broker(brokerclass, childconn, **options) )
-                proc.start()
-                brokers[name] = { "process": proc,
-                                  "pipe": parentconn,
-                                  "lastheartbeat": time.monotonic() }
+            self.logger.info( f"Launching thread for {name}" )
+            parentconn, childconn = multiprocessing.Pipe()
+            proc = multiprocessing.Process( target=self.launch_broker(brokerclass, childconn, **options) )
+            proc.start()
+            brokers[name] = { "process": proc,
+                              "pipe": parentconn,
+                              "lastheartbeat": time.monotonic() }
 
         # Listen for a heartbeat from all processes.
         # If we don't get a heartbeat for 5min,
@@ -606,19 +638,38 @@ if __name__ == '__main__':
     
     logger = logging.getLogger( "brokerpoll_baselogger" )
     logger.propagate = False
-    logout = logging.FileHandler( _rundir / f"logs/brokerpoll.log" )
+    logout = logging.FileHandler( _logdir / f"logs/brokerpoll.log" )
     logger.addHandler( logout )
     formatter = logging.Formatter( f'[%(asctime)s - brokerpoll - %(levelname)s] - %(message)s',datefmt='%Y-%m-%d %H:%M:%S' )
     logout.setFormatter( formatter )
     logger.setLevel( logging.DEBUG )
 
 
-    parser = OptionParser()
-    parser.add_option('-r', '--reset', action='store_true', default=False, help='Reset all stream pointers')
-    parser.add_option('-b', '--broker_list', help='Set list of kafka brokers')
+    parser = argparse.ArgumentParser()
 
-    (options, args) = parser.parse_args()
+    parser.add_argument( '--do-alerce', action='store_true', default=False, help="Poll from ALeRCE" )
+    parser.add_argument( '--alerce-topic-pattern', default='^lc_classifier_.*_(\d{4}\d{2}\d{2})$',
+                         help='Regex for matching ALeRCE topics (warning: custom code, see AlerceBroker)' )
+    parser.add_argument( '--do-antares', action='store_true', default=False, help="Poll from ANTARES" )
+    parser.add_argument( '--antares-topic', default=None, help='Topic name for Antares' )
+    parser.add_argument( '--do-fink', action='store_true', default=False, help="Poll from Fink" )
+    parser.add_argument( '--fink-topic', default=None, help='Topic name for Fink' )
+    parser.add_argument( '--do-brahms', action='store_true', default=False,
+                         help="Poll from Rob's test kafka server" )
+    parser.add_argument( '--brahms-topic', default=None,
+                         help="Topic to poll on brahms (required if --do-brahms is True)" )
+    parser.add_argument( '--do-pitt', action='store_true', default=False, help="Poll from PITT-Google" )
+    parser.add_argument( '--pitt-topic', default=None, help="Topic name for PITT-Google" )
+    parser.add_argument( '--pitt-project', default=None, help="Project name for PITT-Google" )
+    parser.add_argument( '--do-test', action='store_true', default=False,
+                         help="Poll from kafka-server:9092 (for testing purposes)" )
+    parser.add_argument( '--test-topic', default='classifications',
+                         help="Topic to poll from on kafka-server:9092" )
+    parser.add_argument( '-g', '--grouptag', default=None, help="Tag to add to end of kafka group ids" )
+    parser.add_argument('-r', '--reset', action='store_true', default=False, help='Reset all stream pointers')
 
-    broker = Broker(reset=options.reset, broker_list=options.broker_list)
+    options = vars(parser.parse_args())
+
+    broker = Broker(**options)
     
-    poll = broker.broker_poll(reset=options.reset)
+    poll = broker.broker_poll(**options)

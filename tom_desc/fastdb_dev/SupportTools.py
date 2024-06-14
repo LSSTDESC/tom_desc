@@ -6,11 +6,12 @@ import psycopg2
 import os
 
 from .models import Snapshots,SnapshotTags
-from .models import ProcessingVersions, DBViews
+from .models import ProcessingVersions, DBViews, BrokerClassifier
 from .forms import SnapshotForm,ProcessingVersionsForm
 from .forms import EditProcessingVersionsForm
 from .forms import SnapshotTagsForm
 from .forms import CreateViewForm
+from .forms import AddBrokerForm
 from django.conf import settings
 
 from django.db import connection
@@ -22,10 +23,11 @@ def index(request):
     processing_versions = ProcessingVersions.objects.all().order_by("validity_start")
     snapshot_tags = SnapshotTags.objects.all().order_by("insert_time")
     db_views = DBViews.objects.all().order_by("insert_time")
+    brokers = BrokerClassifier.objects.all().order_by("insert_time")
     
-    context = {"snapshots": snapshots, "processing_versions": processing_versions, "snapshot_tags": snapshot_tags, "db_views":db_views}
+    context = {"snapshots": snapshots, "processing_versions": processing_versions, "snapshot_tags": snapshot_tags, "db_views":db_views, "brokers":brokers}
     print(context)
-    return render(request, "snapshots_index.html", context)
+    return render(request, "support_tools_index.html", context)
 
 def create_new_snapshot(request):
     
@@ -185,3 +187,29 @@ def create_new_view(request):
         form = CreateViewForm()
 
     return render(request, "create_new_view.html", {"form": form})
+
+
+def add_broker(request):
+    
+    if request.method == "POST":
+        # create a form instance and populate it with data from the request:
+        form = AddBrokerForm(request.POST)
+        # check whether it's valid:
+        if form.is_valid():
+            # process the data in form.cleaned_data as required
+            broker_name = form.cleaned_data["broker_name"]
+            broker_version = form.cleaned_data["broker_version"]
+            classifier_name = form.cleaned_data["classifier_name"]
+            classifier_params = form.cleaned_data["classifier_params"]
+            bc = BrokerClassifier(broker_name=broker_name,  broker_version=broker_version, classifier_name=classifier_name, classifier_params= classifier_params, insert_time=datetime.datetime.now(tz=datetime.timezone.utc))
+            bc.save()
+            
+            # redirect to a new URL:
+            return redirect("./index")
+ 
+        # if a GET (or any other method) we'll create a blank form
+    else:
+
+        form = AddBrokerForm()
+
+    return render(request, "add_broker.html", {"form": form})

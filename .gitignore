@@ -134,3 +134,14 @@ vue/webpack-stats.json
 
 # Pitt-Google stuff
 GCP_auth_key*
+
+# Elasticc files
+tom_desc/elasticc2/static/elasticc2/alertsendstart
+tom_desc/elasticc2/static/elasticc2/alertsendfinish
+tom_desc/elasticc2/static/elasticc2/alertsend
+
+# Log directory
+logs/
+
+# FastDB files
+tom_desc/fastdb_dev/management/commands/insert_last_time.sql

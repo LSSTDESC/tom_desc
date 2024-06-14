@@ -21,4 +21,10 @@ class SnapshotTagsForm(forms.Form):
 class CreateViewForm(forms.Form):
     view_name = forms.CharField(label="View name", max_length=50)
     tag_name = forms.CharField(label="Tag name", max_length=50)
+
+class AddBrokerForm(forms.Form):
+    broker_name =  forms.CharField(label="Broker Name", max_length=70)
+    broker_version = forms.CharField(label="Broker Version", max_length=20)
+    classifier_name = forms.CharField(label="Classifier Name", max_length=70)
+    classifier_params = forms.CharField(label="Classifier Parameters", max_length=100)
     
