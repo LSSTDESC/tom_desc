@@ -145,3 +145,5 @@ logs/
 
 # FastDB files
 tom_desc/fastdb_dev/management/commands/insert_last_time.sql
+fastdb_get_alerts/test*.py
+tom_desc/fastdb_dev/management/commands/test.py
