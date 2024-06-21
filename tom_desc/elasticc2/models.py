@@ -18,10 +18,15 @@ from django.db.models import F
 from guardian.shortcuts import assign_perm
 from django.contrib.auth.models import Group
 from django.contrib.postgres.fields import ArrayField
+import django.conf
+import django.utils
 
 from cassandra.cqlengine import columns
 import cassandra.query
 from django_cassandra_engine.models import DjangoCassandraModel
+
+import astropy.time
+
 
 # NOTE FOR ROB
 #
@@ -331,7 +336,7 @@ class BaseAlert(Createable):
             if self._forcedsourceclass._objectindex is None:
                 raise RuntimeError( f"Failed to find the diaobject_id index for {self._forcedsourceclass}" )
 
-        # Extract the source that triggered this ale0rt
+        # Extract the source that triggered this alert
 
         t0 = time.perf_counter()
         if self._sourcefields is None:
@@ -503,7 +508,7 @@ class BaseObjectTruth(Createable):
     av = Float32Field( )
     mu = Float32Field( )
     lensdmu = Float32Field( )
-    peakmjd = Float32Field( db_index=True ) 
+    peakmjd = Float32Field( db_index=True )
     mjd_detect_first = models.FloatField( db_index=True )
     mjd_detect_last = models.FloatField( db_index=True )
     dtseason_peak = Float32Field( )
@@ -1108,31 +1113,144 @@ class CassBrokerMessageBySource(DjangoCassandraModel):
                  "addedclassifications": None,
                  "firstbrokermessage_id": None }
 
-class CassBrokerMessageByTime(DjangoCassandraModel):
-    classifier_id = columns.BigInt( primary_key=True )
-    descingesttimestamp = columns.DateTime( default=datetime.datetime.utcnow, primary_key=True )
-    id = columns.UUID( primary_key=True, default=uuid.uuid4 )
 
-    topicname = columns.Text()
-    streammessage_id = columns.BigInt()
-    diasource_id = columns.BigInt()
-    alert_id = columns.BigInt()
-    msghdrtimestamp = columns.DateTime()
-    elasticcpublishtimestamp = columns.DateTime()
-    brokeringesttimestamp = columns.DateTime()
-    classid = columns.List( columns.Integer() )
-    probability = columns.List( columns.Float() )
+# ======================================================================
+# ======================================================================
+# ======================================================================
+# Summary information about objects, updated regularly
+
+class DiaObjectInfo(models.Model):
+    _id = models.BigAutoField( primary_key=True )
+    diaobject = models.ForeignKey( DiaObject, db_column='diaobject_id', on_delete=models.CASCADE, db_index=True )
+    filtername = models.TextField( db_index=True )
+
+    firstsource_id = models.BigIntegerField( db_index=True, null=True )
+    firstsourceflux = models.FloatField( null=True )
+    firstsourcefluxerr = models.FloatField( null=True )
+    firstsourcemjd = models.FloatField( db_index=True, null=True )
+
+    maxforcedsource_id = models.BigIntegerField( db_index=True, null=True )
+    maxforcedsourceflux = models.FloatField( null=True )
+    maxforcedsourcefluxerr = models.FloatField( null=True )
+    maxforcedsourcemjd = models.FloatField( db_index=True, null=True )
+
+    latestsource_id = models.BigIntegerField( db_index=True, null=True )
+    latestsourceflux = models.FloatField( null=True )
+    latestsourcefluxerr = models.FloatField( null=True )
+    latestsourcemjd = models.FloatField( db_index=True, null=True )
+
+    latestforcedsource_id = models.BigIntegerField( db_index=True, null=True )
+    latestforcedsourceflux = models.FloatField( null=True )
+    latestforcedsourcefluxerr = models.FloatField( null=True )
+    latestforcedsourcemjd = models.FloatField( db_index=True, null=True )
 
     class Meta:
-        get_pk_field = 'id'
+        constraints = [
+            models.UniqueConstraint( fields=[ 'diaobject_id', 'filtername' ], name='diaobjectinfo_unique' )
+        ]
 
-    @staticmethod
-    def load_batch( messages, logger=_logger ):
-        """Calls CassBrokerMessageBySource.load_batch"""
+class DiaObjectClassification(models.Model):
+    _id = models.BigAutoField( primary_key=True )
+    diaobject = models.ForeignKey( DiaObjectInfo, db_column='diaobject_id',
+                                   on_delete=models.CASCADE, null=False )
+    classifier = models.ForeignKey( BrokerClassifier, db_column='classifier_id',
+                                    on_delete=models.CASCADE, null=False )
 
-        CassBrokerMessageBySource.load_batch( messages, logger )
+    latestclass1id = models.SmallIntegerField( null=False )
+    latestclass2id = models.SmallIntegerField( null=True )
+    latestclass3id = models.SmallIntegerField( null=True )
+    latestclass4id = models.SmallIntegerField( null=True )
+
+    latestclass1prob = Float32Field( null=False )
+    latestclass2prob = Float32Field( null=True )
+    latestclass3prob = Float32Field( null=True )
+    latestclass4prob = Float32Field( null=True )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint( fields=[ 'diaobject_id', 'classifier_id' ],
+                                     name='diaobjectclassification_unique' )
+        ]
+
+
+# ======================================================================
+# ======================================================================
+# ======================================================================
+# Cassandra tables (not currently used)
+
+# class CassBrokerMessageByTime(DjangoCassandraModel):
+#     classifier_id = columns.BigInt( primary_key=True )
+#     descingesttimestamp = columns.DateTime( default=datetime.datetime.utcnow, primary_key=True )
+#     id = columns.UUID( primary_key=True, default=uuid.uuid4 )
+
+#     topicname = columns.Text()
+#     streammessage_id = columns.BigInt()
+#     diasource_id = columns.BigInt()
+#     alert_id = columns.BigInt()
+#     msghdrtimestamp = columns.DateTime()
+#     elasticcpublishtimestamp = columns.DateTime()
+#     brokeringesttimestamp = columns.DateTime()
+#     classid = columns.List( columns.Integer() )
+#     probability = columns.List( columns.Float() )
+
+#     class Meta:
+#         get_pk_field = 'id'
+
+#     @staticmethod
+#     def load_batch( messages, logger=_logger ):
+#         """Calls CassBrokerMessageBySource.load_batch"""
+
+#         CassBrokerMessageBySource.load_batch( messages, logger )
+
+
+
+
+
+# ======================================================================
+
+class SpectrumInfo(Createable):
+    specinfo_id = models.AutoField( primary_key=True, unique=True, db_index=True )
+    diaobject = models.ForeignKey( DiaObject, db_column='diaobject_id',
+                                   on_delete=models.CASCADE, null=False )
+    facility = models.TextField( null=True )
+    inserted_at = models.DateTimeField( null=False, default=django.utils.timezone.now )
+    mjd = Float32Field( db_index=True )
+    z = Float32Field( null=True )
+    classid = models.IntegerField( db_index=True, null=True )
+
+    _pk = 'specinfio_id'
+    _create_kws = [ 'diaobject_id', 'specsource', 'mjd', 'z', 'classid' ]
+
+class WantedSpectra(Createable):
+    wantspec_id = models.TextField( primary_key=True, unique=True, db_index=True )
+    wanttime = models.DateTimeField( null=False, db_index=True, default=django.utils.timezone.now )
+    diaobject = models.ForeignKey( DiaObject, db_column='diaobject_id',
+                                   on_delete=models.CASCADE, null=False )
+    user = models.ForeignKey( django.conf.settings.AUTH_USER_MODEL, db_column='user_id',
+                              on_delete=models.RESTRICT )
+    requester = models.TextField( null=True )
+    priority = models.IntegerField()
+
+    _pk = 'wantspec_id'
+    _create_kws = [ _pk, 'diaobject_id', 'user_id', 'requester', 'priority' ]
+
+class PlannedSpectra(Createable):
+    reqspec_id = models.AutoField( primary_key=True, unique=True, db_index=True )
+    diaobject = models.ForeignKey( DiaObject, db_column='diaobject_id',
+                                   on_delete=models.CASCADE, null=False )
+    facility = models.TextField()
+    created_at = models.DateTimeField( default=django.utils.timezone.now )
+    plantime = models.DateTimeField( null=True )
+    comment = models.TextField( default="" )
+
+    _pk = 'reqspec_id'
+    _create_kws = [ 'wantspec_id', 'sentto', 'reqtime' ]
+
+
+# ======================================================================
 
 # This is a thing I use as a "don't run twice at once" lock
 
 class ImportPPDBRunning(models.Model):
     running = models.BooleanField( default=False )
+

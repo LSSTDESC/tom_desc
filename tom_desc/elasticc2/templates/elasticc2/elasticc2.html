@@ -9,12 +9,25 @@ ELAsTiCC2
 {% block content %}
 <h2>The ELAsTiCC2 Campaign</h2>
 
-<p>This is an upcoming simulation of 3 years of LSST DIA alerts, a
-  follow on to the <a href="/elasticc">first ELAsTiCC campaign</a>.</p>
+<p>A 3 years of LSST DIA alerts, a
+  follow on to the <a href="/elasticc">first ELAsTiCC campaign</a>.
+  The simulated alerts were sent in Nov-Dec 2023.  Four brokers ingested
+  those alerts and provided classifications back here.  The ELAsTiCC2
+  data set includes:
+<ul>
+  <li> 4,119,322 diaObject (individual transients or variables)</li>
+  <li> 62,472,882 [CHECK THIS] diaSource (detections, for which an alert was sent out)</li>
+  <li> 987,156,194 [CHECK THIS] diaForcedSource (measurements; includes everything in diaSource) </li>
+  <li> 377,345,184 classification messages from 20 different broker
+       classifiers (most brokers had more than one classifier). </li>
+</ul>
 
 <p>For general information,
   see <a href="https://portal.nersc.gov/cfs/lsst/DESC_TD_PUBLIC/ELASTICC/">The
     DESC ELAsTiCC Challenge</a>.</p>
+
+<p>For information about querying the results of the ELAsTiCC2 dataset
+  and calculating metrics, see https://github.com/LSSTDESC/elasticc_metrics</p>
 
 <p>Streaming and Database Statistics:</p>
 

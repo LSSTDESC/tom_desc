@@ -12,7 +12,7 @@ RUN apt-get -y update \
 RUN mkdir /kafka
 WORKDIR /kafka
 
-ARG KAFKA_CODEVERSION=3.4.1
+ARG KAFKA_CODEVERSION=3.7.0
 ARG KAFKA_VERSION=2.13
 RUN echo "Downloading https://dlcdn.apache.org/kafka/${KAFKA_CODEVERSION}/kafka_${KAFKA_VERSION}-${KAFKA_CODEVERSION}.tgz"
 RUN curl -L https://dlcdn.apache.org/kafka/${KAFKA_CODEVERSION}/kafka_${KAFKA_VERSION}-${KAFKA_CODEVERSION}.tgz -O \

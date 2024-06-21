@@ -1,3 +1,4 @@
+import sys
 import io
 import psycopg2
 import psycopg2.extras
@@ -8,7 +9,7 @@ import django.db
 from django.db import models
 import django.contrib.postgres.indexes as indexes
 from django.utils.functional import cached_property
-
+from django.contrib.postgres.fields import ArrayField
 
 # Create your models here.
 
@@ -229,4 +230,18 @@ class Createable(models.Model):
             addedobjs = cls.objects.bulk_create( newobjs )
             curobjs.extend( addedobjs )
         return curobjs
+
+
+# A queue for tracking long SQL queries
+
+class QueryQueue(models.Model):
+    queryid = models.UUIDField( primary_key=True )
+    submitted = models.DateTimeField()
+    started = models.DateTimeField( null=True, default=None )
+    finished = models.DateTimeField( null=True, default=None )
+    error = models.BooleanField( default=False )
+    errortext = models.TextField( null=True, default=None )
+    queries = ArrayField( models.TextField(), default=list )
+    subdicts = ArrayField( models.JSONField(), default=list )
+    format = models.TextField( default='csv' )
 

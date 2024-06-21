@@ -2,7 +2,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: fakebroker
+  name: tom-2-query-runner
   namespace: desc-tom-2
 spec:
   progressDeadlineSeconds: 600
@@ -10,7 +10,7 @@ spec:
   revisionHistoryLimit: 10
   selector:
     matchLabels:
-      workload.user.cattle.io/workloadselector: deployment-desc-tom-2-fakebroker
+      workload.user.cattle.io/workloadselector: deployment-desc-tom-2-tom-2-query-runner
   strategy:
     rollingUpdate:
       maxSurge: 1
@@ -28,12 +28,21 @@ spec:
         nersc.gov/username: raknop
       creationTimestamp: null
       labels:
-        workload.user.cattle.io/workloadselector: deployment-desc-tom-2-fakebroker
+        workload.user.cattle.io/workloadselector: deployment-desc-tom-2-tom-2-query-runner
     spec:
       containers:
-      - image: registry.nersc.gov/m1727/raknop/fakebroker
+      - env:
+        - name: DB_HOST
+          value: tom-2-postgres
+        - name: DB_NAME
+          value: tom_desc
+        - name: DB_PASS
+          value: fragile
+        - name: DB_USER
+          value: postgres
+        image: registry.nersc.gov/m1727/raknop/tom_desc_bindmount:daedalus
         imagePullPolicy: Always
-        name: fakebroker
+        name: tom-2-query-runner
         resources: {}
         securityContext:
           allowPrivilegeEscalation: false
@@ -50,17 +59,15 @@ spec:
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
         tty: true
-        command: [ "python" ]
-        args: [ "/fake/fakebroker.py", 
-          "--source", "kafka-server:9092", "-t", "rsptest-1-wfd", "rsptest-1-ddf-limited",
-          "--dest", "kafka-server:9092", "-u", "classifications",
-          "-b", "/fake/schema/elasticc.v0_9_1.brokerClassification.avsc",
-          "-s", "/fake/schema/elasticc.v0_9_1.alert.avsc" ]
-        # args: [ "/fake/fakebroker.py", 
-        #   "--source", "kafka-server9092", "-t", "alerts-wfd", "alerts-ddf-full",
-        #   "--dest", "kafka-server:9092", "-u", "classifications",
-        #   "-b", "/fake/schema/elasticc.v0_9_1.brokerClassification.avsc",
-        #   "-s", "/fake/schema/elasticc.v0_9_1.alert.avsc" ]
+        volumeMounts:
+        - mountPath: /secrets
+          name: tom-2-secrets
+        - mountPath: /tom_desc
+          name: tom-2-deployment
+        - mountPath: /query_results
+          name: tom-query-results
+        command: [ 'python' ]
+        args: [ 'manage.py', 'long_query_runner', '-l' ]
       dnsConfig: {}
       dnsPolicy: ClusterFirst
       restartPolicy: Always
@@ -70,23 +77,34 @@ spec:
       terminationGracePeriodSeconds: 30
       imagePullSecrets:
         - name: registry-nersc
+      volumes:
+      - name: tom-2-secrets
+        secret:
+          defaultMode: 256
+          optional: false
+          secretName: tom-2-secrets
+      - hostPath:
+          path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/production-2/tom_desc/tom_desc
+          type: Directory
+        name: tom-2-deployment
+      - hostPath:
+          path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/production-2/query_results
+          type: Directory
+        name: tom-query-results
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: fakebroker
+  name: tom-2-query-runner
   namespace: desc-tom-2
 spec:
-  clusterIP: None
-  clusterIPs:
-  - None
   ports:
   - name: default
     port: 42
     protocol: TCP
     targetPort: 42
   selector:
-    workload.user.cattle.io/workloadselector: deployment-desc-tom-2-fakebroker
+    workload.user.cattle.io/workloadselector: deployment-desc-tom-2-tom-2-query-runner
   sessionAffinity: None
   type: ClusterIP
 status:
