@@ -821,6 +821,13 @@ class GetHotSNeView(PermissionRequiredMixin, django.views.View):
                     mjd0 = astropy.time.Time( datetime.datetime.now( datetime.timezone.utc )
                                               - datetime.timedelta( days=lastdays ) ).mjd
 
+            cheat_gentypes = None
+            if 'cheat_gentypes' in data.keys():
+                cheat_gentypes = data['cheat_gentypes']
+                if not isinstance( cheat_gentypes, list ):
+                    return HttpResponse( "Error, cheat_gentypes must be a list", status=500,
+                                         content_type='text/plain; charset=utf-8' )
+                cheat_gentypes = tuple( cheat_gentypes )
 
             # _logger.info( f"Getting SNe detected since mjd {mjd0}" )
 
@@ -832,17 +839,23 @@ class GetHotSNeView(PermissionRequiredMixin, django.views.View):
                       "       f.filtername AS band,f.midpointtai AS mjd,"
                       "       f.psflux AS flux, f.psfluxerr AS fluxerr "
                       "FROM elasticc2_diaforcedsource f "
-                      "INNER JOIN elasticc2_diaobject o ON f.diaobject_id=o.diaobject_id "
-                      "WHERE f.diaobject_id IN ("
-                      "  SELECT DISTINCT ON(diaobject_id) diaobject_id "
-                      "  FROM elasticc2_diaforcedsource "
-                      "  WHERE midpointtai>=%(t0)s AND psflux/psfluxerr >= 5." )
+                      "INNER JOIN elasticc2_diaobject o ON f.diaobject_id=o.diaobject_id " )
+                if cheat_gentypes is not None:
+                    q += "INNER JOIN elasticc2_diaobjecttruth t ON o.diaobject_id=t.diaobject_id "
+                q += ( "WHERE f.diaobject_id IN ("
+                       "  SELECT DISTINCT ON(f2.diaobject_id) f2.diaobject_id "
+                       "  FROM elasticc2_diaforcedsource f2 " )
+                q += "  WHERE f2.midpointtai>=%(t0)s AND f2.psflux/f2.psfluxerr >= 5."
                 if mjdnow is not None:
-                    q += "    AND midpointtai<=%(t1)s"
-                q += ( ") "
-                       "ORDER BY f.diaobject_id,f.midpointtai" )
+                    q += "    AND f2.midpointtai<=%(t1)s"
+                q += ") "
+                if cheat_gentypes is not None:
+                    q += " AND t.gentype IN %(gentypes)s "
+                if mjdnow is not None:
+                    q += " AND f.midpointtai<=%(t1)s "
+                q += "ORDER BY f.diaobject_id,f.midpointtai"
                 # _logger.info( f"Sending query: {cursor.mogrify(q,{'t0':mjd0,'t1':mjdnow})}" )
-                cursor.execute( q , { "t0": mjd0, "t1": mjdnow } )
+                cursor.execute( q , { "t0": mjd0, "t1": mjdnow, "gentypes": cheat_gentypes } )
                 df = pandas.DataFrame( cursor.fetchall() )
                 # _logger.info( f"GetHotSNeView: pulled dataframe of length {len(df)}" )
 
