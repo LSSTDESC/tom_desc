@@ -52,7 +52,7 @@ spec:
         tty: true
         command: [ "python" ]
         args: [ "/fake/fakebroker.py", 
-          "--source", "public.alerts.ztf.uw.edu:9092", "-t", "elasticc2-st3-wfd", "elasticc2-st3-ddf-limited",
+          "--source", "kafka-server:9092", "-t", "rsptest-1-wfd", "rsptest-1-ddf-limited",
           "--dest", "kafka-server:9092", "-u", "classifications",
           "-b", "/fake/schema/elasticc.v0_9_1.brokerClassification.avsc",
           "-s", "/fake/schema/elasticc.v0_9_1.alert.avsc" ]

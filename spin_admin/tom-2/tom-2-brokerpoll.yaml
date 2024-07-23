@@ -86,8 +86,8 @@ spec:
           name: tom-2-secrets
         - mountPath: /tom_desc
           name: tom-2-deployment
-        - mountPath: /sample
-          name: tom-2-sample
+        # - mountPath: /sample
+        #   name: tom-2-sample
         command: [ "dumb-init" ]
         args:
           - -r
@@ -95,15 +95,15 @@ spec:
           - python
           - manage.py
           - brokerpoll2
-          - --do-antares
-          - --antares-topic
-          - elasticc2-st3
-          - --do-pitt
-          - --pitt-project
-          - elasticc-challenge
-          - --pitt-topic
-          - elasticc-SuperNNova
           - --do-test
+          # - --do-antares
+          # - --antares-topic
+          # - elasticc2-st3
+          # - --do-pitt
+          # - --pitt-project
+          # - elasticc-challenge
+          # - --pitt-topic
+          # - elasticc-SuperNNova
       dnsConfig: {}
       dnsPolicy: ClusterFirst
       restartPolicy: Always
@@ -123,7 +123,7 @@ spec:
           path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/production-2/tom_desc/tom_desc
           type: Directory
         name: tom-2-deployment
-      - hostPath:
-          path: /global/cfs/cdirs/lsst/www/DESC_TD_PUBLIC/ELASTICC/ELASTICC2_TRAINING_SAMPLE
-          type: Directory
-        name: tom-2-sample
+      # - hostPath:
+      #     path: /global/cfs/cdirs/lsst/www/DESC_TD_PUBLIC/ELASTICC/ELASTICC2_TRAINING_SAMPLE
+      #     type: Directory
+      #   name: tom-2-sample
