@@ -130,6 +130,9 @@ The permissions you have to set:
   group = Group.objects.get( name='elasticc_broker' )
   group.permissions.add( perm )
 
+(These two permissions are defined somewhere in the permissions for the
+elasticc django application.)
+
 ======================================================================
 
 Adding a group permission

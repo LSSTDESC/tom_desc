@@ -6,7 +6,7 @@ metadata:
   namespace: desc-tom-2
 spec:
   progressDeadlineSeconds: 600
-  replicas: 0
+  replicas: 1
   revisionHistoryLimit: 10
   selector:
     matchLabels:
@@ -87,6 +87,8 @@ spec:
           name: tom-2-secrets
         - mountPath: /tom_desc
           name: tom-2-deployment
+        - mountPath: /query_results
+          name: tom-query-results
         # - mountPath: /sample
         #   name: tom-2-sample
       dnsConfig: {}
@@ -108,6 +110,10 @@ spec:
           path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/production-2/tom_desc/tom_desc
           type: Directory
         name: tom-2-deployment
+      - hostPath:
+          path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/production-2/query_results
+          type: Directory
+        name: tom-query-results
       # - hostPath:
       #     path: /global/cfs/cdirs/desc-td/ELASTICC2
       #     type: Directory
@@ -177,7 +183,6 @@ metadata:
   name: tom-app-2
   namespace: desc-tom-2
   selfLink: /apis/networking.k8s.io/v1/namespaces/desc-tom-2/ingresses/tom-app-2
-  uid: 941f2977-3dac-44b5-9bce-38bf4f3d6380
 spec:
   rules:
   - host: tom-app-2.desc-tom-2.production.svc.spin.nersc.org

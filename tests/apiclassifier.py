@@ -58,6 +58,8 @@ class APIClassifier:
             brokermsgs.append( brokermsg )
 
         res = self.tomclient.request( "PUT", "elasticc2/brokermessage/", json=brokermsgs )
+        if res.status_code != 201:
+            sys.stderr.write( f"Error, got status code {res.status_code} from PUT." )
 
 
 # ======================================================================

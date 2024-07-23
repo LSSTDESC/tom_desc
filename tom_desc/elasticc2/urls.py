@@ -33,5 +33,12 @@ urlpatterns = [
     path('brokermessage/<path:info>/', views.BrokerMessageView.as_view(), name='brokermessage-path'),
     path('brokermessage/', views.BrokerMessageView.as_view(), name='brokermessage-noparam'),
 
+    path('gethottransients', views.GetHotSNeView.as_view(), name='gethottransients'),
+    path('askforspectrum', views.AskForSpectrumView.as_view(), name='askforspectrum'),
+    path('spectrawanted', views.WhatSpectraAreWanted.as_view(), name='spectrawanted'),
+    path('planspectrum', views.PlanToDoSpectrum.as_view(), name='planspectrum' ),
+    path('removespectrumplan', views.RemoveSpectrumPlan.as_view(), name='removespectrumplan' ),
+    path('reportspectruminfo', views.ReportSpectrumInfo.as_view(), name='reportspectruminfo' ),
+    
     path( '', include( ( router.urls, 'elasticc2' ), namespace=app_name ) )
 ]
