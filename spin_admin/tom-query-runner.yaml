@@ -1,7 +1,8 @@
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: tom-brokerpoll
+  name: tom-query-runner
   namespace: desc-tom
 spec:
   progressDeadlineSeconds: 600
@@ -9,7 +10,7 @@ spec:
   revisionHistoryLimit: 10
   selector:
     matchLabels:
-      workload.user.cattle.io/workloadselector: deployment-desc-tom-tom-brokerpoll
+      workload.user.cattle.io/workloadselector: deployment-desc-tom-tom-query-runner
   strategy:
     rollingUpdate:
       maxSurge: 1
@@ -18,17 +19,16 @@ spec:
   template:
     metadata:
       annotations:
-        cattle.io/timestamp: "2023-02-06T16:44:40Z"
         field.cattle.io/ports: '[[]]'
         nersc.gov/collab_uids: 70268,99896
         nersc.gov/gid: "95089"
-        nersc.gov/gids: 45703,60152,57177,58102,59318,60070,63477,64483,79186,70268,92576,94721,95089,96414,99650
+        nersc.gov/gids: 95089,57177,60152,96414
         nersc.gov/roles: user
         nersc.gov/uid: "95089"
         nersc.gov/username: raknop
       creationTimestamp: null
       labels:
-        workload.user.cattle.io/workloadselector: deployment-desc-tom-tom-brokerpoll
+        workload.user.cattle.io/workloadselector: deployment-desc-tom-tom-query-runner
     spec:
       containers:
       - env:
@@ -40,33 +40,9 @@ spec:
           value: fragile
         - name: DB_USER
           value: postgres
-        - name: CASSANDRA_HOST
-          value: tom-cassandra
-        - name: CASSANDRA_DB
-          value: tom_desc
-        - name: CASSANDRA_USER
-          value: cassandra
-        - name: CASSANDRA_PASSWORD
-          value: cassandra
-        - name: ALERCE_TOPIC_RELDATEOFFSET
-          value: '-36'
-        - name: ALERCE_KAFKA_SERVER
-          value: b-3-public.publicproduction.o8ncxm.c18.kafka.us-east-1.amazonaws.com:9196,b-2-public.publicproduction.o8ncxm.c18.kafka.us-east-1.amazonaws.com:9196,b-1-public.publicproduction.o8ncxm.c18.kafka.us-east-1.amazonaws.com:9196
-        - name: FINK_GROUP_ID
-          value: lsstfr-johann
-        - name: FINK_SERVER
-          value: 134.158.74.95:24499,
-        - name: FINK_TOPIC
-          value: fink_early_sn_candidates_ztf
-        - name: FINK_USERNAME
-          value: johann
-        - name: GOOGLE_APPLICATION_CREDENTIALS
-          value: /secrets/pitt_google_auth_key.json
-        - name: GOOGLE_CLOUD_PROJECT
-          value: elasticc-challenge
-        image: registry.nersc.gov/m1727/raknop/tom_desc_bindmount:chimaera
+        image: registry.nersc.gov/m1727/raknop/tom_desc_bindmount:daedalus
         imagePullPolicy: Always
-        name: tom-brokerpoll
+        name: tom-query-runner
         resources: {}
         securityContext:
           allowPrivilegeEscalation: false
@@ -88,22 +64,10 @@ spec:
           name: tom-secrets
         - mountPath: /tom_desc
           name: tom-deployment
-        command: [ "dumb-init" ]
-        args:
-          - -r
-          - 15:10
-          - python
-          - manage.py
-          - brokerpoll2
-          - --do-antares
-          - --antares-topic
-          - elasticc2-2
-          - --do-pitt
-          - --pitt-project
-          - elasticc-challenge
-          - --pitt-topic
-          - elasticc-SuperNNova
-          - --do-alerce
+        - mountPath: /query_results
+          name: tom-query-results
+        command: [ 'python' ]
+        args: [ 'manage.py', 'long_query_runner', '-l' ]
       dnsConfig: {}
       dnsPolicy: ClusterFirst
       restartPolicy: Always
@@ -123,3 +87,26 @@ spec:
           path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/production/tom_desc/tom_desc
           type: Directory
         name: tom-deployment
+      - hostPath:
+          path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/production/query_results
+          type: Directory
+        name: tom-query-results
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tom-query-runner
+  namespace: desc-tom
+spec:
+  ports:
+  - name: default
+    port: 42
+    protocol: TCP
+    targetPort: 42
+  selector:
+    workload.user.cattle.io/workloadselector: deployment-desc-tom-tom-query-runner
+  sessionAffinity: None
+  type: ClusterIP
+status:
+  loadBalancer: {}
+---

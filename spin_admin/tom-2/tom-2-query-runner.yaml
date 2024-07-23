@@ -1,17 +1,16 @@
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: tom-2-app-shell
+  name: tom-2-query-runner
   namespace: desc-tom-2
-  labels:
-    workload.user.cattle.io/workloadselector: deployment-desc-tom-2-tom-2-app-shell
 spec:
   progressDeadlineSeconds: 600
   replicas: 1
   revisionHistoryLimit: 10
   selector:
     matchLabels:
-      workload.user.cattle.io/workloadselector: deployment-desc-tom-2-tom-2-app-shell
+      workload.user.cattle.io/workloadselector: deployment-desc-tom-2-tom-2-query-runner
   strategy:
     rollingUpdate:
       maxSurge: 1
@@ -19,8 +18,17 @@ spec:
     type: RollingUpdate
   template:
     metadata:
+      annotations:
+        field.cattle.io/ports: '[[]]'
+        nersc.gov/collab_uids: 70268,99896
+        nersc.gov/gid: "95089"
+        nersc.gov/gids: 95089,57177,60152,96414
+        nersc.gov/roles: user
+        nersc.gov/uid: "95089"
+        nersc.gov/username: raknop
+      creationTimestamp: null
       labels:
-        workload.user.cattle.io/workloadselector: deployment-desc-tom-2-tom-2-app-shell
+        workload.user.cattle.io/workloadselector: deployment-desc-tom-2-tom-2-query-runner
     spec:
       containers:
       - env:
@@ -32,29 +40,9 @@ spec:
           value: fragile
         - name: DB_USER
           value: postgres
-        - name: CASSANDRA_HOST
-          value: tom-2-cassandra
-        - name: CASSANDRA_DB
-          value: tom_desc
-        - name: CASSANDRA_USER
-          value: cassandra
-        - name: CASSANDRA_PASSWORD
-          value: cassandra
-        - name: FINK_GROUP_ID
-          value: lsstfr-johann
-        - name: FINK_SERVER
-          value: 134.158.74.95:24499,
-        - name: FINK_TOPIC
-          value: fink_early_sn_candidates_ztf
-        - name: FINK_USERNAME
-          value: johann
-        - name: GOOGLE_APPLICATION_CREDENTIALS
-          value: /secrets/pitt_google_auth_key.json
-        - name: GOOGLE_CLOUD_PROJECT
-          value: elasticc-challenge
-        image: registry.nersc.gov/m1727/raknop/tom_desc_extcode:chimaera
+        image: registry.nersc.gov/m1727/raknop/tom_desc_bindmount:daedalus
         imagePullPolicy: Always
-        name: tom-2-app-shell
+        name: tom-2-query-runner
         resources: {}
         securityContext:
           allowPrivilegeEscalation: false
@@ -76,14 +64,10 @@ spec:
           name: tom-2-secrets
         - mountPath: /tom_desc
           name: tom-2-deployment
-        - mountPath: /sample
-          name: tom-2-sample
         - mountPath: /query_results
           name: tom-query-results
-        - mountPath: /pgdump
-          name: pgdump
-        command: [ "tail" ]
-        args: [ "-f", "/etc/issue" ]
+        command: [ 'python' ]
+        args: [ 'manage.py', 'long_query_runner', '-l' ]
       dnsConfig: {}
       dnsPolicy: ClusterFirst
       restartPolicy: Always
@@ -100,18 +84,29 @@ spec:
           optional: false
           secretName: tom-2-secrets
       - hostPath:
-          path: /global/cfs/cdirs/desc-td/SOFTWARE/tom_deployment/production-2/tom_desc/tom_desc
+          path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/production-2/tom_desc/tom_desc
           type: Directory
         name: tom-2-deployment
       - hostPath:
           path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/production-2/query_results
           type: Directory
         name: tom-query-results
-      - hostPath:
-          path: /global/cfs/cdirs/desc-td/ELASTICC2/
-          type: Directory
-        name: tom-2-sample
-      - hostPath:
-          path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/pg_dump
-          type: Directory
-        name: pgdump
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tom-2-query-runner
+  namespace: desc-tom-2
+spec:
+  ports:
+  - name: default
+    port: 42
+    protocol: TCP
+    targetPort: 42
+  selector:
+    workload.user.cattle.io/workloadselector: deployment-desc-tom-2-tom-2-query-runner
+  sessionAffinity: None
+  type: ClusterIP
+status:
+  loadBalancer: {}
+---

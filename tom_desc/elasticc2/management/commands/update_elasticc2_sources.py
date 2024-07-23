@@ -1,5 +1,3 @@
-raise RuntimeError( "May be out of date; Rob, review." )
-
 import sys
 import re
 import pathlib
@@ -28,7 +26,9 @@ class Command(BaseCommand):
     help = 'Update DiaObject, DiaSources, and DiaSorcedSources from PPDB with new sources learned from brokers.'
 
     def add_arguments( self, parser ):
-        pass
+        parser.add_argument( '--doall', action='store_true', default=False,
+                             help=( "Search the whole broker message table, not just the "
+                                    "brokersourceids table." ) )
 
     def handle( self, *args, **options ):
         conn = None
@@ -65,33 +65,57 @@ class Command(BaseCommand):
             setrunningflag = True
             conn.commit()
 
+            cursor = conn.cursor( cursor_factory=psycopg2.extras.RealDictCursor )
+
+
             # Figure out which sources we don't know about
+
+            sourcetab = 'elasticc2_brokermessage' if options['doall'] else 'elasticc2_brokersourceids'
+
+            _logger.info( "Copying unknown sources" )
+            cursor.execute( f"CREATE TEMP TABLE tmp_orig_unknownsources( diasource_id bigint )" )
+            cursor.execute( f"INSERT INTO tmp_orig_unknownsources "
+                            f"  SELECT diasource_id FROM {sourcetab}" )
 
             _logger.info( "Finding unknown sources" )
             cursor.execute( "CREATE TEMP TABLE tmp_unknownsources( diasource_id bigint )" )
-            cursor.execute( "INSERT INTO tmp_unknownsources "
-                            "  SELECT bid FROM "
-                            "    ( SELECT DISTINCT ON (b.diasource_id) b.diasource_id AS bid, s.diasource_id AS sid "
-                            "      FROM elasticc2_brokermessage b "
-                            "      LEFT JOIN elasticc2_diasource s ON b.diasource_id=s.diasource_id "
-                            "      WHERE s.diasource_id IS NULL ) subq" )
+            cursor.execute( f"INSERT INTO tmp_unknownsources "
+                            f"  SELECT bid FROM "
+                            f"    ( SELECT DISTINCT ON (b.diasource_id) b.diasource_id AS bid, s.diasource_id AS sid "
+                            f"      FROM tmp_orig_unknownsources b "
+                            f"      LEFT JOIN elasticc2_diasource s ON b.diasource_id=s.diasource_id "
+                            f"      WHERE s.diasource_id IS NULL ) subq" )
+
+            _logger.info( "Finding updated and unknown objects" )
+            cursor.execute( "CREATE TEMP TABLE tmp_updatedobjects( diaobject_id bigint )" )
+            cursor.execute( "INSERT INTO tmp_updatedobjects "
+                            "  SELECT pid FROM "
+                            "  ( SELECT DISTINCT ON (p.diaobject_id) p.diaobject_id AS pid "
+                            "    FROM tmp_unknownsources t "
+                            "    INNER JOIN elasticc2_ppdbdiasource p ON t.diasource_id=p.diasource_id ) subq" )
 
             _logger.info( "Finding unknown objects" )
             cursor.execute( "CREATE TEMP TABLE tmp_unknownobjects( diaobject_id bigint )" )
             cursor.execute( "INSERT INTO tmp_unknownobjects "
                             "  SELECT pid FROM "
-                            "    ( SELECT DISTINCT ON (p.diaobject_id) p.diaobject_id AS pid, o.diaobject_id AS oid"
-                            "      FROM tmp_unknownsources t "
-                            "      INNER JOIN elasticc2_ppdbdiasource p ON t.diasource_id=p.diasource_id "
-                            "      LEFT JOIN elasticc2_diaobject o ON p.diaobject_id=o.diaobject_id "
-                            "      WHERE o.diaobject_id IS NULL ) subq" )
+                            "  ( SELECT t.diaobject_id AS pid "
+                            "    FROM tmp_updatedobjects t"
+                            "    LEFT JOIN elasticc2_diaobject o ON t.diaobject_id=o.diaobject_id "
+                            "    WHERE o.diaobject_id IS NULL ) subq" )
+            # cursor.execute( "INSERT INTO tmp_unknownobjects "
+            #                 "  SELECT pid FROM "
+            #                 "    ( SELECT DISTINCT ON (p.diaobject_id) p.diaobject_id AS pid, o.diaobject_id AS oid"
+            #                 "      FROM tmp_unknownsources t "
+            #                 "      INNER JOIN elasticc2_ppdbdiasource p ON t.diasource_id=p.diasource_id "
+            #                 "      LEFT JOIN elasticc2_diaobject o ON p.diaobject_id=o.diaobject_id "
+            #                 "      WHERE o.diaobject_id IS NULL ) subq" )
 
             _logger.info( "Importing unknown objects" )
             cursor.execute( "INSERT INTO elasticc2_diaobject "
                             "  ( SELECT o.* FROM elasticc2_ppdbdiaobject o "
                             "    INNER JOIN tmp_unknownobjects t "
                             "    ON o.diaobject_id=t.diaobject_id )" )
-                            
+
             _logger.info( "Importing unknown sources" )
             cursor.execute( "INSERT INTO elasticc2_diasource "
                             "  ( SELECT s.* FROM tmp_unknownsources t "
@@ -113,8 +137,50 @@ class Command(BaseCommand):
                             "    INNER JOIN elasticc2_ppdbdiaforcedsource p "
                             "      ON t.diaobject_id=p.diaobject_id AND p.midpointtai <= t.midpointtai ) "
                             "ON CONFLICT DO NOTHING" )
-            
-            
+
+            # ...this one will usually be a slow null operation,
+            # as the first source is not likely to change as additional sources are added
+            _logger.info( "Updating DiaObjectInfo -- first source in each filter" )
+            cursor.execute( "INSERT INTO elasticc2_diaobjectinfo(diaobject_id,filtername,"
+                            "                                    firstsource_id,firstsourceflux,"
+                            "                                    firstsourcefluxerr,firstsourcemjd) "
+                            "  SELECT DISTINCT ON (t.diaobject_id,s.filtername) "
+                            "     t.diaobject_id,s.filtername,s.diasource_id,s.psflux,s.psfluxerr,s.midpointtai "
+                            "  FROM tmp_updatedobjects t "
+                            "  INNER JOIN elasticc2_diasource s ON t.diaobject_id=s.diaobject_id "
+                            "  ORDER BY t.diaobject_id,s.filtername,s.midpointtai "
+                            "ON CONFLICT ON CONSTRAINT diaobjectinfo_unique DO UPDATE "
+                            "  SET firstsource_id=excluded.firstsource_id, "
+                            "      firstsourceflux=excluded.firstsourceflux, "
+                            "      firstsourcefluxerr=excluded.firstsourcefluxerr, "
+                            "      firstsourcemjd=excluded.firstsourcemjd" )
+
+            _logger.info( "Updating DiaObjectInfo -- latest source in each filter" )
+            cursor.execute( "INSERT INTO elasticc2_diaobjectinfo(diaobject_id,filtername,"
+                            "                                    latestsource_id,latestsourceflux,"
+                            "                                    latestsourcefluxerr,latestsourcemjd) "
+                            "  SELECT DISTINCT ON (t.diaobject_id,s.filtername) "
+                            "     t.diaobject_id,s.filtername,s.diasource_id,s.psflux,s.psfluxerr,s.midpointtai "
+                            "  FROM tmp_updatedobjects t "
+                            "  INNER JOIN elasticc2_diasource s ON t.diaobject_id=s.diaobject_id "
+                            "  ORDER BY t.diaobject_id,s.filtername,s.midpointtai DESC "
+                            "ON CONFLICT ON CONSTRAINT diaobjectinfo_unique DO UPDATE "
+                            "  SET latestsource_id=excluded.latestsource_id, "
+                            "      latestsourceflux=excluded.latestsourceflux, "
+                            "      latestsourcefluxerr=excluded.latestsourcefluxerr, "
+                            "      latestsourcemjd=excluded.latestsourcemjd" )
+
+
+            if ( not options['doall'] ):
+                _logger.info( "Cleaning up elasticc2_brokersourceids" )
+                cursor.execute( "DELETE FROM elasticc2_brokersourceids "
+                                "WHERE diasource_id IN "
+                                "  ( SELECT diasource_id FROM tmp_orig_unknownsources )" )
+
+        except Exception as e:
+            _logger.exception( "Exception during transaction, rolling back." )
+            conn.rollback()
+
         finally:
             if cursor is not None:
                 cursor.close()
@@ -130,7 +196,7 @@ class Command(BaseCommand):
                 conn.autocommit = origautocommit
                 origautocommit = None
                 conn = None
-            
-            
+
+
 
         _logger.info( "Done." )

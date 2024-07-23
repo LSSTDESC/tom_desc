@@ -45,7 +45,7 @@ spec:
               value: cassandra
             - name: CASSANDRA_PASSWORD
               value: cassandra
-            image: registry.nersc.gov/m1727/raknop/tom_desc_extcode:chimaera
+            image: registry.nersc.gov/m1727/raknop/tom_desc_bindmount:chimaera
             imagePullPolicy: Always
             name: tom-update-metrics
             resources: {}

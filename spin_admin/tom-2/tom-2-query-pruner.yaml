@@ -1,60 +1,40 @@
-THIS NEEDS TO BE UPDATED, MANY THINGS HERE ARE WRONG
-
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  annotations:
-    field.cattle.io/creatorId: u-6fc5nwq2ou
-    nersc.gov/collab_uids: 70268,99896
-    nersc.gov/gid: "95089"
-    nersc.gov/gids: 45703,60152,57177,58102,59318,60070,63477,64483,79186,70268,74560,92576,94721,95089,96414,99650
-    nersc.gov/roles: user
-    nersc.gov/uid: "95089"
-    nersc.gov/username: raknop
-  creationTimestamp: "2022-11-08T17:38:58Z"
-  labels:
-    cattle.io/creator: norman
-  name: tom-desc-diagnosticupdate
-  namespace: desc-tom
-  resourceVersion: "425251230"
-  selfLink: /apis/batch/v1/namespaces/desc-tom/cronjobs/tom-desc-diagnosticupdate
-  uid: 45615d7a-17d3-434f-afb9-f99c752cf5d7
+  name: tom-2-query-pruner
+  namespace: desc-tom-2
 spec:
-  concurrencyPolicy: Allow
+  concurrencyPolicy: Forbid
   failedJobsHistoryLimit: 1
   jobTemplate:
-    metadata:
-      creationTimestamp: null
     spec:
       template:
         metadata:
           annotations:
-            cattle.io/timestamp: "2022-11-08T18:28:05Z"
             field.cattle.io/ports: '[[]]'
-            nersc.gov/collab_uids: 70268,99896
+            nersc.gov/collab_uids: "70268"
             nersc.gov/gid: "95089"
-            nersc.gov/gids: 45703,60152,57177,58102,59318,60070,63477,64483,79186,70268,74560,92576,94721,95089,96414,99650
+            nersc.gov/gids: 95089,60152,57177,96414
             nersc.gov/roles: user
             nersc.gov/uid: "95089"
             nersc.gov/username: raknop
           creationTimestamp: null
         spec:
           containers:
-          - command:
-            - bash
-            - /tom_desc/scripts/run_diagnostics.sh
+          - command: ['python']
+            args: ['manage.py', 'long_query_runner', '-p', '1']
             env:
             - name: DB_HOST
-              value: tom-desc-postgres
+              value: tom-2-postgres
             - name: DB_NAME
               value: tom_desc
             - name: DB_PASS
               value: fragile
             - name: DB_USER
               value: postgres
-            image: rknop/tom_desc_bindmount:chimaera
+            image: registry.nersc.gov/m1727/raknop/tom_desc_bindmount:daedalus
             imagePullPolicy: Always
-            name: tom-desc-diagnosticupdate
+            name: tom-2-query-pruner
             resources: {}
             securityContext:
               allowPrivilegeEscalation: false
@@ -73,27 +53,34 @@ spec:
             tty: true
             volumeMounts:
             - mountPath: /secrets
-              name: desc-tom-secrets
+              name: tom-2-secrets
             - mountPath: /tom_desc
-              name: tom-deploy-production
+              name: tom-2-deployment
+            - mountPath: /query_results
+              name: tom-2-query-results
+            workingDir: /tom_desc
           dnsPolicy: ClusterFirst
           restartPolicy: Never
           schedulerName: default-scheduler
           securityContext:
-            fsGroup: 60152
+            fsGroup: 57177
           terminationGracePeriodSeconds: 30
+          imagePullSecrets:
+            - name: registry-nersc
           volumes:
-          - name: desc-tom-secrets
+          - name: tom-2-secrets
             secret:
               defaultMode: 256
               optional: false
-              secretName: desc-tom-secrets
+              secretName: tom-2-secrets
           - hostPath:
-              path: /global/cfs/cdirs/desc-td/SOFTWARE/tom_deployment/production/tom_desc
+              path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/production-2/tom_desc/tom_desc
               type: Directory
-            name: tom-deploy-production
-  schedule: 30 18 * * *
+            name: tom-2-deployment
+          - hostPath:
+              path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/production-2/query_results
+              type: Directory
+            name: tom-2-query-results
+  schedule: 25 8 * * *
   successfulJobsHistoryLimit: 3
-  suspend: true
-status:
-  lastScheduleTime: "2023-02-27T18:30:00Z"
+  suspend: false

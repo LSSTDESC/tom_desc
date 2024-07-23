@@ -5,11 +5,16 @@ from elasticc2 import views
 app_name = 'elasticc2'
 
 router = DefaultRouter()
-router.register( f'ppdbdiaobject', views.PPDBDiaObjectViewSet )
-router.register( f'ppdbdiasource', views.PPDBDiaSourceViewSet )
-router.register( f'ppdbdiaforcedsource', views.PPDBDiaForcedSourceViewSet )
-router.register( f'ppdbdiaobjectwithsources', views.PPDBDiaObjectSourcesViewSet )
-router.register( f'ppdbdiaobjectofsource', views.PPDBDiaObjectAndPrevSourcesForSourceViewSet )
+router.register( f'ppdbdiaobject/', views.PPDBDiaObjectViewSet )
+router.register( f'ppdbdiasource/', views.PPDBDiaSourceViewSet )
+router.register( f'ppdbdiaforcedsource/', views.PPDBDiaForcedSourceViewSet )
+# Something has changed recently in django; the following two no longer work,
+#   whereas they did in the past.
+#   It's yelling at me that router "ppdbdiaobject" already exists.
+# TODO : figure this out.  The answer is probably not to use the django REST
+#   interface.  Django can be *so* annoying.
+# router.register( f'ppdbdiaobjectwithsources/', views.PPDBDiaObjectSourcesViewSet )
+# router.register( f'ppdbdiaobjectofsource/', views.PPDBDiaObjectAndPrevSourcesForSourceViewSet )
 
 urlpatterns = [
     path( '', views.Elasticc2MainView.as_view(), name='elasticc2' ),
@@ -33,5 +38,13 @@ urlpatterns = [
     path('brokermessage/<path:info>/', views.BrokerMessageView.as_view(), name='brokermessage-path'),
     path('brokermessage/', views.BrokerMessageView.as_view(), name='brokermessage-noparam'),
 
+    path('gethottransients', views.GetHotSNeView.as_view(), name='gethottransients'),
+    path('askforspectrum', views.AskForSpectrumView.as_view(), name='askforspectrum'),
+    path('spectrawanted', views.WhatSpectraAreWanted.as_view(), name='spectrawanted'),
+    path('planspectrum', views.PlanToDoSpectrum.as_view(), name='planspectrum' ),
+    path('removespectrumplan', views.RemoveSpectrumPlan.as_view(), name='removespectrumplan' ),
+    path('reportspectruminfo', views.ReportSpectrumInfo.as_view(), name='reportspectruminfo' ),
+    path('getknownspectruminfo', views.GetSpectrumInfo.as_view(), name='getknownspectruminfo' ),
+    
     path( '', include( ( router.urls, 'elasticc2' ), namespace=app_name ) )
 ]
