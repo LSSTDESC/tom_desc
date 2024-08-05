@@ -5,7 +5,7 @@ import os
 import os.path
 import configparser
 
-URL = 'http://tom-app.desc-tom-buckley-dev.production.svc.spin.nersc.org/fastdb_dev/'
+URL = 'https://desc-tom-fastdb-dev.lbl.gov/fastdb_dev/'
 LOGIN_URL = URL + 'acquire_token'
 TOKEN_URL = URL + 'api-token-auth/'
 RAW_QUERY_LONG_URL = URL + 'raw_query_long'

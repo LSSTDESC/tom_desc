@@ -173,17 +173,18 @@ spec:
             port:
               number: 8080
         pathType: ImplementationSpecific
-  # - host: tom-buckley-dev.lbl.gov
-  #   http:
-  #     paths:
-  #     - backend:
-  #         service:
-  #           name: tom-app-ingress
-  #           port:
-  #             number: 8080
-  #       pathType: ImplementationSpecific
-  # tls:
-  # - hosts:
-  #   - tom-buckley-dev.lbl.gov
-  #   secretName: tom-app-cert
+  - host: desc-tom-fastdb-dev.lbl.gov 
+    http:
+      paths:
+      - backend:
+          service:
+            name: tom-app-ingress
+            port:
+              number: 8080
+        pathType: ImplementationSpecific
+  tls:
+  - hosts:
+    - desc-tom-fastdb-dev.lbl.gov
+    - tom-app.desc-tom-buckley-dev.production.svc.spin.nersc.org
+    secretName: tom-cert
 ---
