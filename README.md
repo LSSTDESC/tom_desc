@@ -410,8 +410,9 @@ If you want to test the TOM out, you can deploy it on your local machine.  If yo
 
 * Run <code>docker compose up -d tom</code>.  This will use the <code>docker-compose.yml</code> file to either build or pull three images (the web server, the postgres server, and the cassandra server), and create three containers.  It will also create docker volumes named "tomdbdata" and "tomcassandradata" where postgres and cassandra respectively will store their contents, so that you can persist the databases from one run of the container to the next.</li>
 
-* Database migrations are applied automatically as part of the docker compose setup, but you need to manually create the TOM superuser account so that you have something to log into.  The first time you run it for a given postgres volume, once the containers are up you need to run a shell on the server container with <code>docker compose exec -it tom /bin/bash</code>, and then run the command:
-  - <code>python manage.py createsuperuser</code> (and answer the prompts)
+* Database migrations are applied automatically as part of the docker compose setup.
+
+* A superuser with username `root` and password `testing` is created as part of the docker compose setup.  If you're building your own environment, or any environment that will be visible on the net (not just on your own machine), obviously you will not want to use this superuser password!  There is a django management command `createsuperuser` that interactively creates a superuser account.
 
 * If you are using a new postgres data volume (i.e. you're not reusing one from a previous run of docker compose), you need to create the "Public" group.  You need to do this before adding any users.  If all is well, any users added thereafter will automatically be added to this group.  Some of the DESC specific code will break if this group does not exist.  (The TOM documentation seems to imply that this group should have been created automatically, but that doesn't seem to be the case.)  To do this:
 ``` python manage.py shell
