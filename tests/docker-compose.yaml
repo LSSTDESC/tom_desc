@@ -1,5 +1,3 @@
-version: "3.3"
-
 services:
   kafka-zookeeper:
     image: registry.nersc.gov/m1727/raknop/kafka
