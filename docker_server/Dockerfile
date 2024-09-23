@@ -47,7 +47,7 @@ FROM base AS build
 RUN DEBIAN_FRONTEND="noninteractive" \
    apt-get update \
    && apt-get -y upgrade \
-   && apt-get install -y librdkafka-dev cython3 python3-venv python3-pip python3-pytest libpq-dev \
+   && apt-get install -y librdkafka-dev cython3 python3-venv python3-pip libpq-dev \
    && apt-get clean \
    && rm -rf /var/lib/apt/lists/*
 
@@ -72,21 +72,26 @@ ENV PATH=/venv/bin:$PATH
 
 # Run the TOM server
 EXPOSE 8080
-ENTRYPOINT [ "/usr/local/bin/gunicorn", "tom_desc.wsgi", "-b", "0.0.0.0:8080", "--access-logfile", "-", "--error-logfile", "-", "-k", "gevent", "--timeout", "300", "--workers", "2"]
+ENTRYPOINT [ "/venv/bin/gunicorn", "tom_desc.wsgi", "-b", "0.0.0.0:8080", "--access-logfile", "-", "--error-logfile", "-", "-k", "gevent", "--timeout", "300", "--workers", "2"]
 
 # ======================================================================
 # TODO -- make an install here that doesn't copy the git checkout, but
-#   exports the git tree to something
+#   exports the git tree to something.  With all the submodules, this
+#   could be complicated.
 
 # FROM base AS tom-server
 #
+# copy --FROM=build /venv/ /venv/
+# ENV PATH=/venv/bin:$PATH
 # COPY tom_desc/ ./tom_desc/
 #
 # EXPOSE 8080
-# ENTRYPOINT [ "/usr/local/bin/gunicorn", "tom_desc.wsgi", "-b", "0.0.0.0:8080", "--access-logfile", "-", "--error-logfile", "-", "-k", "gevent", "--timeout", "300", "--workers", "2"]
+# ENTRYPOINT [ "/venv/gunicorn", "tom_desc.wsgi", "-b", "0.0.0.0:8080", "--access-logfile", "-", "--error-logfile", "-", "-k", "gevent", "--timeout", "300", "--workers", "2"]
 
 # ======================================================================
 FROM build AS tom-server-bindmount-dev
 
+ENV PATH=/venv/bin:$PATH
+
 EXPOSE 8080
-ENTRYPOINT [ "/usr/local/bin/gunicorn", "tom_desc.wsgi", "-b", "0.0.0.0:8080", "--access-logfile", "-", "--error-logfile", "-", "-k", "gevent", "--timeout", "300", "--workers", "2"]
+ENTRYPOINT [ "/venv/gunicorn", "tom_desc.wsgi", "-b", "0.0.0.0:8080", "--access-logfile", "-", "--error-logfile", "-", "-k", "gevent", "--timeout", "300", "--workers", "2"]

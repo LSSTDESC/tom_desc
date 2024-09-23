@@ -28,7 +28,8 @@ Based on the [Tom Toolkit](https://lco.global/tomtoolkit/)
       * [For ELAsTiCC](#for-elasticc)
       * [For ELAsTiCC2](#for-elasticc2)
     * [Development and database migrations](#development-and-database-migrations)
-      * [Cassandra Migrations](#cassandra-migrations)
+  * [Running Tests](#running-tests)
+    * [Starting the test environment](#starting-the-test-environemnt)
   * [Deployment at NERSC](#deployment-at-nersc)
     * [Steps for deployment](#steps-for-deployment)
       * [The steps necessarcy to create the production TOM from scratch](#prodscratch)
@@ -406,11 +407,11 @@ Make a branch `/u/{yourname}/{name}` to do dev work, which (if appropriate) may 
 
 If you want to test the TOM out, you can deploy it on your local machine.  If you're lucky, all you need to do is, within the top level of the git checkout:
 
-* Run <code>git submodule update --init --recursive</code>.  There are a number of git submodules that have the standard TOM code.  By default, when you clone, git doesn't clone submodules, so do this in order to make sure all that stuff is there.  (Alternative, if instead of just <code>git clone...</code> you did <code>git clone --recurse-submodules ...</code>, then you've already taken care of this step.)  If you do a <code>git pull</code> later, you either need to do <code>git pull --recurse-submodules</code>, or do <code>git submodule --update --recursive</code> after your pull.</li>
+* Run <code>git submodule update --init --recursive</code>.  There are a number of git submodules that have the standard TOM code.  By default, when you clone, git doesn't clone submodules, so do this in order to make sure all that stuff is there.  (Alternative, if instead of just <code>git clone...</code> you did <code>git clone --recurse-submodules ...</code>, then you've already taken care of this step.)  If you do a <code>git pull</code> later, you either need to do <code>git pull --recurse-submodules</code>, or do <code>git submodule update --recursive</code> after your pull.</li>
 
 * (Optional) Run <code>docker compose build</code>.  This will be done automatically as part of the next step.  However, you may want to run it manually here, as this step will take a while the first time you do it.  (Once the docker images are built, they'll be cached on your machine.)
 
-* Run <code>docker compose up -d tom</code>.  This will use the <code>docker-compose.yml</code> file to either build or pull three images (the postgres server, the web server, and a version of the web server with additional dev packages), and create three containers.  It will also create a docker volume named "tomdbdata" where postgres stores its contents, so that you can persist the databases from one run of the container to the next.</li>
+* Run <code>docker compose up -d tom</code>.  This will use the <code>docker-compose.yml</code> file to either build or pull a few docker images, and create two containers: one running the postgres server, one running the tom server.  (The postgres server has a very insecure password, but it's also not directly accessible from outside the docker environment).  It will also create a docker volume named "tomdbdata" where postgres stores its contents, so that you can persist the databases from one run of the container to the next.</li>
 
 * Database migrations are applied automatically as part of the docker compose setup, but you need to manually create the TOM superuser account so that you have something to log into. The first time you run it for a given postgres volume, once the containers are up you need to run a shell on the server container with <code>docker compose exec -it tom /bin/bash</code>, and then run the command:
 
@@ -424,8 +425,26 @@ If you want to test the TOM out, you can deploy it on your local machine.  If yo
 >>> exit()
 ```
 
-At this point, you should be able to connect to your running TOM at `localhost:8080`.
+At this point, you should be able to connect to your running TOM at `localhost:8080`.  It will be running the code that you have checked out in this directory.  If you edit the code, and want to have the running server reflect those edits, run the following:
+```
+   docker compose exec -it tom /bin/bash
+   python manage.py check
+   kill -HUP 1
+```
 
+The first command gets you a shell on the running tom web server.  The second one does a quick check to make sure that you don't have any python compilation errors; if you do, fix them and rerun the second command until it's happy.  The third command restarts the web server; if all is well, it doesn't actually kill anything.  (The unix command `kill` really means "send a signal"; it's called "kill" because by default, it sends the "interupt" signal, which usually (but not always) causes processes to exit.  The gunicorn web server, which the container is running in process 1, listens for the HUP signal, and when it receives it, it reload all running web code.)  If there are any python compilation errors, the `kill` command will in fact kill your server, and you won't be able to start it back up until you fix your compilation errors.  To get out of the shell, just run `exit`.
+
+If you want to run django management commands manually, or if you want to poke directly at the postgres database server, you can start up a shell server within the docker environment by running:
+```
+   docker compose up -d shell
+```
+
+Once it's up, get a shell on it by running
+```
+   docker compose exec -it shell /bin/bash
+```
+
+Within that shell, you can connect to the postgres server at hostname `postgres`, database `desc_tom`, user `postgres`, password `fragile`.
 
 If you ever run a server that exposes its interface to the outside web, you probably want to edit your local version of the file `secrets/django_secret_key`.  Don't commit anything sensitive to git, and especially don't upload it to github!  (There *are* postgres passwords in the github archive, which would seem to voilate this warning.  The reason we're not worried about that is that both in the docker compose file, and as the server is deployed in production, the postgres server is not directly accessible from outside, but only from within the docker environment (or, for production, the Spin namespace). Of course, it would be better to add the additional layer of security of obfuscating those passwords, but, whatever.)
 
@@ -434,7 +453,7 @@ To shut down all the containers you started, just run
 docker compose down -v
 ```
 
-If you include the `-v` at the end of that command, it will also destroy the Postgres and Cassandra data volumes you created.  If you *don't* add `-v`, next time you do `docker compose up -d tom`, the information in the database you had from last time around will still be there.
+If you include the `-v` at the end of that command, it will also destroy the Postgres data volume you created.  If you *don't* add `-v`, next time you do `docker compose up -d tom`, the information in the database you had from last time around will still be there.
 
 ### Populating the database
 
@@ -513,9 +532,62 @@ If you change any database schema, you have to get a shell on the server's conta
 
 BE CAREFUL ABOUT DATABASE MIGRATIONS.  For throw-away development environments, it's fine.  But, the nature of database migrations is such that forks in database schema history are potentially a lot more painful to deal with than forks in source code (where git and text merge can usually handle it without _too_ much pain).  If you're going to make migrations that you want to have pulled into the main branch, coordinate with the other people working on the DESC Tom.  (As of this writing, that's me, Rob Knop.)
 
+<!--
 #### Cassandra Migrations
 
 `pgmakemigrations` will create a migration file, but it doesn't seem to do anything.  You have to run `python manage.py sync_cassandra` to update cassandra schema.  This is scary; it doesn't seem to actually handle reversable migrations.
+-->
+
+
+## Running Tests
+
+### Starting the test environment
+
+The test environment is in the `tests` subdirectory beneath the top of the git checkout.  There is a file here `elasticc2_alert_test_data.tar.bz2` that needs to be unpacked for the tests to run succesfully.  Unpack it with `tar xf elasticc2_alert_test_data.tar.bz2`; that will create subdirectory `elasticc2_alert_test_data`.
+
+In the `tests` subdictory, build all the necessary docker images with
+```
+   docker compose build
+```
+
+Then, run
+```
+   docker compose up -d shell
+```
+That will bring up several docker containers, including a postgres server, a kafka zookeeper, a kafka server, a fake broker server, the tom server, and a shell server.  You can see what's running with:
+```
+   docker compose ps
+```
+Get a shell on the shell server with:
+```
+   docker compose exec -it shell /bin/bash
+```
+
+When done, close down the test environment (from the host, not from within the shell server!) with:
+```
+   docker compose down -v
+```
+
+### Running tests
+
+Inside the docker shell server, the tests subdirectory can be found at `/tests`.
+
+### Diagnosing test failures
+
+Sometimes, if tests fail, the error messages are not going to be on the machine running the tests.  Perusing the log files of the other servers might help.  On the host machine (i.e. not inside one of the running containers), in the `tests` sub directory, try running one or more of
+```
+   docker compose logs fakebroker
+   docker compose logs brokerpoll
+   docker compose logs kafka-zookeeper
+   docker compose logs kafka-server
+   docker compose logs postgres
+   docker compose logs tom
+```
+Some of these log files will be extremely verbose, so you will probably want to pipe them into `more` or `less`.
+
+### Non-repeatable tests
+
+The tests don't all fully clean up after themselves; in particular, at least `test_alertcycle.py` will leave behind state even after the tests exist.  The primary reason is that the kafka servers maintain a lot of state, and the tests don't directly control what's on the kafka servers.  As such, if you run some tests a second time within the same environment, they will fail even if they passed the first time.  While it would be possible to set things up so that they do clean up after themselves, we haven't bothered.  The solution is just to take down and bring back up your docker compose environment when you want to restart one of these tests.
 
 
 ## Deployment at NERSC

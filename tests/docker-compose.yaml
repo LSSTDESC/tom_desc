@@ -149,7 +149,7 @@ services:
       DB_PORT: 5432
     entrypoint: [ "python", "manage.py", "brokerpoll2", "--do-test" ]
 
-  shellhost:
+  shell:
     depends_on:
       postgres:
         condition: service_healthy
