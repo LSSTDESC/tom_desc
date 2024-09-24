@@ -86,7 +86,7 @@ ENTRYPOINT [ "/venv/bin/gunicorn", "tom_desc.wsgi", "-b", "0.0.0.0:8080", "--acc
 # COPY tom_desc/ ./tom_desc/
 #
 # EXPOSE 8080
-# ENTRYPOINT [ "/venv/gunicorn", "tom_desc.wsgi", "-b", "0.0.0.0:8080", "--access-logfile", "-", "--error-logfile", "-", "-k", "gevent", "--timeout", "300", "--workers", "2"]
+# ENTRYPOINT [ "/venv/bin/gunicorn", "tom_desc.wsgi", "-b", "0.0.0.0:8080", "--access-logfile", "-", "--error-logfile", "-", "-k", "gevent", "--timeout", "300", "--workers", "2"]
 
 # ======================================================================
 FROM build AS tom-server-bindmount-dev
@@ -94,4 +94,4 @@ FROM build AS tom-server-bindmount-dev
 ENV PATH=/venv/bin:$PATH
 
 EXPOSE 8080
-ENTRYPOINT [ "/venv/gunicorn", "tom_desc.wsgi", "-b", "0.0.0.0:8080", "--access-logfile", "-", "--error-logfile", "-", "-k", "gevent", "--timeout", "300", "--workers", "2"]
+ENTRYPOINT [ "/venv/bin/gunicorn", "tom_desc.wsgi", "-b", "0.0.0.0:8080", "--access-logfile", "-", "--error-logfile", "-", "-k", "gevent", "--timeout", "300", "--workers", "2"]
