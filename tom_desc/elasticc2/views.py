@@ -7,6 +7,7 @@ import json
 import logging
 import traceback
 
+import numpy
 import astropy.time
 import light_curve
 
@@ -664,53 +665,61 @@ class LtcvFeatures(PermissionRequiredMixin, django.views.View):
                    ( 'objectid' ) not in data.keys() ) ):
                 raise ValueError( f"Must supply either alertid or sourceid or objectid" )
 
+            includeltcv = ( 'includeltcv' in data.keys() ) and ( data['includeltcv'] )
+
             if 'features' in data.keys():
                 raise NotImplementedError( "Passing feature list not yet implemented" )
             else:
-                featureargs = [ licu.AndersonDarlingNormal(),
-                                licu.InterPercentileRange(0.05),
-                                licu.ReducedChi2(),
-                                licu.StetsonK(),
-                                licu.WeightedMean(),
-                                licu.Duration(),
-                                licu.OtsuSplit(),
-                                licu.LinearFit() ]
+                featureargs = [ light_curve.AndersonDarlingNormal(),
+                                light_curve.InterPercentileRange(0.05),
+                                light_curve.ReducedChi2(),
+                                light_curve.StetsonK(),
+                                light_curve.WeightedMean(),
+                                light_curve.Duration(),
+                                light_curve.OtsuSplit(),
+                                light_curve.LinearFit() ]
 
-            # We're going to get all forced sources up to the date of the source.
             with django.db.connection.cursor() as cursor:
                 if 'sourceid' in data.keys():
+                    # We're going to get all forced sources up to the date of the source.
                     cursor.execute( 'SELECT f.midpointtai,f.psflux,f.psfluxerr '
                                     'FROM elasticc2_ppdbdiaforcedsource f '
-                                    'WHERE f.diaobject_id = ( SELECT diaobject_id FROM elasticc2_pddbdiasource '
+                                    'WHERE f.diaobject_id = ( SELECT diaobject_id FROM elasticc2_ppdbdiasource '
                                     '                         WHERE diasource_id=%(sourceid)s ) '
-                                    '  AND f.midpointtai < ( SELECT midpoittai FROM elasticc2_ppdbdiasource '
-                                    '                        WHERE diasource_id=%(sourceid)s ) '
+                                    '  AND f.midpointtai <= ( SELECT midpointtai FROM elasticc2_ppdbdiasource '
+                                    '                         WHERE diasource_id=%(sourceid)s ) '
                                     'ORDER BY f.midpointtai',
-                                    sourceid=int(data['sourceid']) )
+                                    { 'sourceid': int(data['sourceid']) } )
                 elif 'objectid' in data.keys():
-                    cursor.execute( 'SELECT f.midpointtai,f.psfflux,f.psferr '
+                    # Get *all* forced source entries for the object, even after the last source
+                    cursor.execute( 'SELECT f.midpointtai,f.psflux,f.psfluxerr '
                                     'FROM elasticc2_ppdbdiaforcedsource f '
                                     'WHERE f.diaobject_id=%(objid)s '
                                     'ORDER BY f.midpointtai',
-                                    objid=int(data['objectid']) )
+                                    { 'objid': int(data['objectid']) } )
                 else:
                     raise ValueError( "This should never happen." )
 
 
                 rows = cursor.fetchall()
-                t = []
-                f = []
-                df = []
-                for row in rows:
-                    t.append( rows[0] )
-                    f.append( rows[1] )
-                    df.append( rows[2] )
+                t = [ r[0] for r in rows ]
+                f = [ r[1] for r in rows ]
+                df = [ r[2] for r in rows ]
 
+            extractor = light_curve.Extractor( *featureargs )
+            results = extractor( numpy.array(t), numpy.array(f), numpy.array(df), sorted=True, check=False )
 
-            extractor = light_curve.Extractor( *args )
-            results = extractor( t, f, df, sorted=True, check=False )
-            return JsonResponse( { name: value for name, value in zip( extractor.names, results ) } )
+            resp = { name: value for name, value in zip( extractor.names, results ) }
+            if includeltcv:
+                resp[ 'lightcurve' ] = { 'mjd': t, 'flux': f, 'dflux': df }
 
+            return JsonResponse( resp )
+
+        except Exception as ex:
+            sys.stderr.write( f"Exception in LtcvFeatures: {ex}\n" )
+            traceback.print_exc( file=sys.stderr )
+            return HttpResponse( f"Exception in LtcvFeatures: {str(ex)}", status=500,
+                                 content_type='text/plain; charset=utf-8' )
 
 
 # ======================================================================

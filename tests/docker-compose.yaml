@@ -95,10 +95,6 @@ services:
     depends_on:
       createdb:
         condition: service_completed_successfully
-    # Want to move to daedalus image.  However, in production right
-    #   now, we use the chimaera image, because of some weird
-    #   incompatibility with kafka libraries and what's running
-    #   on ANTARES.
     image: registry.nersc.gov/m1727/raknop/tom_desc_bindmount
     build:
       context: ../
