@@ -8,6 +8,7 @@ import logging
 import traceback
 
 import astropy.time
+import light_curve
 
 import django.db
 import django.views
@@ -605,6 +606,112 @@ class PPDBDiaObjectAndPrevSourcesForSourceViewSet( rest_framework.viewsets.ReadO
             ser = PPDBDiaForcedSourceSerializer( src )
             objdict[ 'diaforcedsources' ].append( ser.data )
         return rest_framework.response.Response( objdict )
+
+# ======================================================================
+
+class GetAlert(PermissionRequiredMixin, django.views.View):
+    raise_exception = True
+
+    def has_permission( self ):
+        return bool( self.request.user.is_authenticated )
+
+    def get( self, *args, **kwargs ):
+        return self.post( *args, **kwargs )
+
+    def post( self, request ):
+        try:
+            data = json.loads( request.body )
+            if ( ( not isinstance( data, dict ) ) or
+                 ( ( 'alertid' not in data.keys() ) and ( 'sourceid' not in data.keys() ) ) ):
+                raise ValueError( f"Must supply either alertid or sourceid" )
+
+            if 'alertid' in data.keys():
+                alert = PPDBAlert.objects.get( pk=int( data['alertid'] ) )
+            else:
+                # Just assume it's not multiply defined...
+                alert = PPDBAlert.objects.filter( diasource_id=int( data['sourceid'] ) ).first()
+
+            if alert is None:
+                raise ValueError( f"Unknown {'alertid' if 'alertid' in data.keys() else 'sourceid'} "
+                                  f"{data['alertid'] if 'alertid' in data.keys() else data['sourceid']}" )
+
+            # TODO: nprevious, daysprevious
+            return JsonResponse( alert.reconstruct() )
+
+        except Exception as ex:
+            sys.stderr.write( f"Exception in GetAlert: {ex}\n" )
+            traceback.print_exc( file=sys.stderr )
+            return HttpResponse( f"Exception in GetAlert: {str(ex)}", status=500,
+                                 content_type='text/plain; charset=utf-8' )
+
+
+# ======================================================================
+
+class LtcvFeatures(PermissionRequiredMixin, django.views.View):
+    raise_exception = True
+
+    def has_permission( self ):
+        return bool( self.request.user.is_authenticated )
+
+    def get( self, *args, **kwargs ):
+        return self.post( *args, **kwargs )
+
+    def post( self, request ):
+        try:
+            data = json.loads( request.body )
+            if ( ( not isinstance( data, dict ) ) or
+                 ( ( 'sourceid' not in data.keys() ) and
+                   ( 'objectid' ) not in data.keys() ) ):
+                raise ValueError( f"Must supply either alertid or sourceid or objectid" )
+
+            if 'features' in data.keys():
+                raise NotImplementedError( "Passing feature list not yet implemented" )
+            else:
+                featureargs = [ licu.AndersonDarlingNormal(),
+                                licu.InterPercentileRange(0.05),
+                                licu.ReducedChi2(),
+                                licu.StetsonK(),
+                                licu.WeightedMean(),
+                                licu.Duration(),
+                                licu.OtsuSplit(),
+                                licu.LinearFit() ]
+
+            # We're going to get all forced sources up to the date of the source.
+            with django.db.connection.cursor() as cursor:
+                if 'sourceid' in data.keys():
+                    cursor.execute( 'SELECT f.midpointtai,f.psflux,f.psfluxerr '
+                                    'FROM elasticc2_ppdbdiaforcedsource f '
+                                    'WHERE f.diaobject_id = ( SELECT diaobject_id FROM elasticc2_pddbdiasource '
+                                    '                         WHERE diasource_id=%(sourceid)s ) '
+                                    '  AND f.midpointtai < ( SELECT midpoittai FROM elasticc2_ppdbdiasource '
+                                    '                        WHERE diasource_id=%(sourceid)s ) '
+                                    'ORDER BY f.midpointtai',
+                                    sourceid=int(data['sourceid']) )
+                elif 'objectid' in data.keys():
+                    cursor.execute( 'SELECT f.midpointtai,f.psfflux,f.psferr '
+                                    'FROM elasticc2_ppdbdiaforcedsource f '
+                                    'WHERE f.diaobject_id=%(objid)s '
+                                    'ORDER BY f.midpointtai',
+                                    objid=int(data['objectid']) )
+                else:
+                    raise ValueError( "This should never happen." )
+
+
+                rows = cursor.fetchall()
+                t = []
+                f = []
+                df = []
+                for row in rows:
+                    t.append( rows[0] )
+                    f.append( rows[1] )
+                    df.append( rows[2] )
+
+
+            extractor = light_curve.Extractor( *args )
+            results = extractor( t, f, df, sorted=True, check=False )
+            return JsonResponse( { name: value for name, value in zip( extractor.names, results ) } )
+
+
 
 # ======================================================================
 # A REST interface (but not using the Django REST framework) for
