@@ -586,9 +586,9 @@ class PPDBDiaObjectAndPrevSourcesForSourceViewSet( rest_framework.viewsets.ReadO
                                                  data="Must give a source id" )
 
     def retrieve( self, request, pk=None ):
-        # sys.stderr.write( f"Trying to get source {pk}" )
+        # sys.stderr.write( f"Trying to get source {pk}\n" )
         src = get_object_or_404( PPDBDiaSource.objects.all(), pk=pk )
-        # sys.stderr.write( f"Trying to get object {src.diaobject_id}" )
+        # sys.stderr.write( f"Trying to get object {src.diaobject_id}\n" )
         obj = get_object_or_404( PPDBDiaObject.objects.all(), pk=src.diaobject_id )
         objserializer = PPDBDiaObjectSerializer( obj )
         objdict = dict( objserializer.data )
@@ -1077,9 +1077,9 @@ class WhatSpectraAreWanted(PermissionRequiredMixin, django.views.View):
                     hour = 0
                     minute = 0
                     second = 0
-                since = datetime.datetime( y, m, d, hour, minute, second )
+                wantsince = datetime.datetime( y, m, d, hour, minute, second, tzinfo=datetime.timezone.utc )
             else:
-                since = datetime.datetime.now() - datetime.timedelta( days=14 )
+                wantsince = datetime.datetime.now( tz=datetime.timezone.utc ) - datetime.timedelta( days=14 )
 
             if 'not_claimed_in_last_days' in data.keys():
                 notclaimedinlastdays = int( data['not_claimed_in_last_days'] )
@@ -1115,16 +1115,20 @@ class WhatSpectraAreWanted(PermissionRequiredMixin, django.views.View):
                       "    FROM elasticc2_wantedspectra w "
                       "    LEFT JOIN elasticc2_plannedspectra r "
                       "      ON r.diaobject_id=w.diaobject_id AND r.created_at>%(reqtime)s "
+                      "    WHERE w.wanttime>=%(wanttime)s "
                       "  ) subq "
                       "  WHERE reqspec_id IS NULL "
                       "  GROUP BY diaobject_id,requester,priority )" )
-                cursor.execute( q, { 'reqtime': claimsince } )
+                # sys.stderr.write( f"Sending query: {cursor.mogrify(q,{'wanttime':wantsince,'reqtime':claimsince})}\n" )
+                cursor.execute( q, { 'wanttime': wantsince, 'reqtime': claimsince } )
 
                 cursor.execute( "SELECT COUNT(diaobject_id) FROM tmp_wanted" )
                 row = cursor.fetchall()
                 if row[0]['count'] == 0:
-                    sys.stderr.write( "Empty table tmp_wanted\n" )
+                    # sys.stderr.write( "Empty table tmp_wanted\n" )
                     return JsonResponse( {} )
+                # else:
+                #     sys.stderr.write( f"{row[0]['count']} rows in tmp_wanted\n" )
 
                 cursor.execute( "CREATE TEMP TABLE tmp_wanted2( diaobject_id bigint, requester text, priority int ) " )
                 q = ( "INSERT INTO tmp_wanted2 ( "
@@ -1142,8 +1146,10 @@ class WhatSpectraAreWanted(PermissionRequiredMixin, django.views.View):
                 cursor.execute( "SELECT COUNT(diaobject_id) FROM tmp_wanted2" )
                 row = cursor.fetchall()
                 if row[0]['count'] == 0:
-                    sys.stderr.write( "Empty table tmp_wanted2" )
+                    # sys.stderr.write( "Empty table tmp_wanted2\n" )
                     return JsonResponse( {} )
+                # else:
+                #     sys.stderr.write( f"{row[0]['count']} rows in tmp_wanted2\n" )
 
                 cursor.execute( "CREATE TEMP TABLE tmp_wanted3( diaobject_id bigint, requester text, priority int ) " )
                 q = ( "INSERT INTO tmp_wanted3 ( "
@@ -1157,8 +1163,10 @@ class WhatSpectraAreWanted(PermissionRequiredMixin, django.views.View):
                 cursor.execute( "SELECT COUNT(diaobject_id) FROM tmp_wanted3" )
                 row = cursor.fetchall()
                 if row[0]['count'] == 0:
-                    sys.stderr.write( "Empty table tmp_wanted3" )
+                    # sys.stderr.write( "Empty table tmp_wanted3\n" )
                     return JsonResponse( {} )
+                # else:
+                #     sys.stderr.write( f"{row[0]['count']} rows in tmp_wanted3\n" )
 
                 cursor.execute( "CREATE TEMP TABLE tmp_wanted4( diaobject_id bigint, mjd real, "
                                 "                               filtername text, mag real )" )
@@ -1181,7 +1189,7 @@ class WhatSpectraAreWanted(PermissionRequiredMixin, django.views.View):
                 cursor.execute( "SELECT COUNT(diaobject_id) FROM tmp_wanted4" )
                 row = cursor.fetchall()
                 if row[0]['count'] == 0:
-                    sys.stderr.write( "empty table tmp_wanted4" )
+                    # sys.stderr.write( "empty table tmp_wanted4\n" )
                     return JsonResponse( {} )
 
                 cursor.execute( "SELECT w3.diaobject_id AS objid, w3.requester, w3.priority, "
@@ -1280,7 +1288,7 @@ class PlanToDoSpectrum(PermissionRequiredMixin, django.views.View):
                     'comment': newps.comment }
             return JsonResponse( res )
         except Exception as ex:
-            sys.stderr.write( "Exception in PlanToDoSpectrum" )
+            sys.stderr.write( "Exception in PlanToDoSpectrum\n" )
             traceback.print_exc( file=sys.stderr )
             return HttpResponse( f"Exception in PlanToDoSpectrum: {ex}",
                                  status=500, content_type='text/plain; charset=utf-8' )
@@ -1402,7 +1410,7 @@ class ReportSpectrumInfo(PermissionRequiredMixin, django.views.View):
                     'classid': newsi.classid }
             return JsonResponse( res )
         except Exception as ex:
-            sys.stderr.write( "Exception in ReportSpectrumInfo" )
+            sys.stderr.write( "Exception in ReportSpectrumInfo\n" )
             traceback.print_exc( file=sys.stderr )
             return HttpResponse( f"Exception in ReportSpectrumInfo: {ex}",
                                  status=500, content_type='text/plain; charset=utf-8' )
@@ -1455,7 +1463,7 @@ class GetSpectrumInfo(PermissionRequiredMixin, django.views.View):
             return JsonResponse( resp )
 
         except Exception as ex:
-            sys.stderr.write( "Exception in GetKnownSpectrumInfo" )
+            sys.stderr.write( "Exception in GetKnownSpectrumInfo\n" )
             traceback.print_exc( file=sys.stderr )
             return HttpResponse( f"Exception in GetKnownSpectrumInfo: {ex}",
                                  status=500, content_type='text/plain; charset=utf-8' )
