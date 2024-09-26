@@ -682,24 +682,28 @@ class LtcvFeatures(PermissionRequiredMixin, django.views.View):
             with django.db.connection.cursor() as cursor:
                 if 'sourceid' in data.keys():
                     # We're going to get all forced sources up to the date of the source.
-                    cursor.execute( 'SELECT f.midpointtai,f.psflux,f.psfluxerr '
-                                    'FROM elasticc2_ppdbdiaforcedsource f '
-                                    'WHERE f.diaobject_id = ( SELECT diaobject_id FROM elasticc2_ppdbdiasource '
-                                    '                         WHERE diasource_id=%(sourceid)s ) '
-                                    '  AND f.midpointtai <= ( SELECT midpointtai FROM elasticc2_ppdbdiasource '
-                                    '                         WHERE diasource_id=%(sourceid)s ) '
-                                    'ORDER BY f.midpointtai',
-                                    { 'sourceid': int(data['sourceid']) } )
+                    q = ( 'SELECT f.midpointtai,f.psflux,f.psfluxerr '
+                          'FROM elasticc2_ppdbdiaforcedsource f '
+                          'WHERE f.diaobject_id = ( SELECT diaobject_id FROM elasticc2_ppdbdiasource '
+                          '                         WHERE diasource_id=%(sourceid)s ) '
+                          '  AND f.midpointtai <= ( SELECT midpointtai FROM elasticc2_ppdbdiasource '
+                          '                         WHERE diasource_id=%(sourceid)s ) ' )
+                    subdict = { 'sourceid': int(data['sourceid']) }
                 elif 'objectid' in data.keys():
                     # Get *all* forced source entries for the object, even after the last source
-                    cursor.execute( 'SELECT f.midpointtai,f.psflux,f.psfluxerr '
-                                    'FROM elasticc2_ppdbdiaforcedsource f '
-                                    'WHERE f.diaobject_id=%(objid)s '
-                                    'ORDER BY f.midpointtai',
-                                    { 'objid': int(data['objectid']) } )
+                    q = ( 'SELECT f.midpointtai,f.psflux,f.psfluxerr '
+                          'FROM elasticc2_ppdbdiaforcedsource f '
+                          'WHERE f.diaobject_id=%(objid)s ' )
+                    subdict = { 'objid': int(data['objectid']) }
                 else:
                     raise ValueError( "This should never happen." )
 
+                if 'through_mjd' in data.keys():
+                    q += '  AND f.midpointtai <= %(throughmjd)s '
+                    subdict['throughmjd'] = float( data['through_mjd'] )
+
+                q += 'ORDER BY f.midpointtai'
+                cursor.execute( q, subdict )
 
                 rows = cursor.fetchall()
                 t = [ r[0] for r in rows ]
