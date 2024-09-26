@@ -1126,7 +1126,7 @@ class WhatSpectraAreWanted(PermissionRequiredMixin, django.views.View):
                 row = cursor.fetchall()
                 if row[0]['count'] == 0:
                     # sys.stderr.write( "Empty table tmp_wanted\n" )
-                    return JsonResponse( {} )
+                    return JsonResponse( { 'status': 'ok', 'wantedspectra': [] } )
                 # else:
                 #     sys.stderr.write( f"{row[0]['count']} rows in tmp_wanted\n" )
 
@@ -1147,7 +1147,7 @@ class WhatSpectraAreWanted(PermissionRequiredMixin, django.views.View):
                 row = cursor.fetchall()
                 if row[0]['count'] == 0:
                     # sys.stderr.write( "Empty table tmp_wanted2\n" )
-                    return JsonResponse( {} )
+                    return JsonResponse( { 'status': 'ok', 'wantedspectra': [] } )
                 # else:
                 #     sys.stderr.write( f"{row[0]['count']} rows in tmp_wanted2\n" )
 
@@ -1164,7 +1164,7 @@ class WhatSpectraAreWanted(PermissionRequiredMixin, django.views.View):
                 row = cursor.fetchall()
                 if row[0]['count'] == 0:
                     # sys.stderr.write( "Empty table tmp_wanted3\n" )
-                    return JsonResponse( {} )
+                    return JsonResponse( { 'status': 'ok', 'wantedspectra': [] } )
                 # else:
                 #     sys.stderr.write( f"{row[0]['count']} rows in tmp_wanted3\n" )
 
@@ -1190,7 +1190,7 @@ class WhatSpectraAreWanted(PermissionRequiredMixin, django.views.View):
                 row = cursor.fetchall()
                 if row[0]['count'] == 0:
                     # sys.stderr.write( "empty table tmp_wanted4\n" )
-                    return JsonResponse( {} )
+                    return JsonResponse( { 'status': 'ok', 'wantedspectra': [] } )
 
                 cursor.execute( "SELECT w3.diaobject_id AS objid, w3.requester, w3.priority, "
                                 "       w4.filtername, w4.mjd, w4.mag, o.ra, o.decl AS dec "
