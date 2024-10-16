@@ -91,6 +91,8 @@ spec:
           name: tom-checkout
         - mountPath: /sample
           name: tom-sample
+        - mountPath: /query_results
+          name: tom-query-results
       dnsConfig: {}
       dnsPolicy: ClusterFirst
       restartPolicy: Always
@@ -118,6 +120,10 @@ spec:
           path: /global/cfs/cdirs/desc-td/ELASTICC2
           type: Directory
         name: tom-sample
+      - hostPath:
+          path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/production/query_results
+          type: Directory
+        name: tom-query-results
 ---
 apiVersion: v1
 kind: Service

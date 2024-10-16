@@ -1,20 +1,23 @@
 import requests
 from requests import Request, Session
 import json
+import sys
 import os
 import os.path
 import configparser
 
-URL = 'https://desc-tom-fastdb-dev.lbl.gov/fastdb_dev/'
+URL =  'https://desc-tom-fastdb-dev.lbl.gov/fastdb_dev/'
+#URL = 'http://tom-app.desc-tom-buckley-dev.production.svc.spin.nersc.org/fastdb_dev/'
 LOGIN_URL = URL + 'acquire_token'
 TOKEN_URL = URL + 'api-token-auth/'
-RAW_QUERY_LONG_URL = URL + 'raw_query_long'
-RAW_QUERY_SHORT_URL = URL + 'raw_query_short'
-DIA_OBJECTS_URL = URL + 'get_dia_objects'
-DIA_SOURCE_URL = URL + 'store_dia_source_data'
-DS_PV_SS_URL = URL + 'store_ds_pv_ss_data'
-UPDATE_DS_PV_SS_URL = URL + 'update_ds_pv_ss_valid_flag'
-UPDATE_DIA_SOURCE_URL = URL + 'update_dia_source_valid_flag'
+SUBMIT_LONG_QUERY_URL = URL + 'submit_long_query'
+SUBMIT_SHORT_QUERY_URL = URL + 'submit_short_query'
+CHECK_LONG_SQL_QUERY_URL = URL + 'check_long_sql_query'
+GET_LONG_SQL_QUERY_URL = URL + 'get_long_sql_query'
+DIA_SOURCE_URL = URL + 'bulk_create_dia_source_data'
+DS_PV_SS_URL = URL + 'bulk_create_ds_pv_ss_data'
+UPDATE_DS_PV_SS_URL = URL + 'bulk_update_ds_pv_ss_valid_flag'
+UPDATE_DIA_SOURCE_URL = URL + 'bulk_update_dia_source_valid_flag'
 AUTHENTICATE_USER = URL + 'authenticate_user'
 
 class FASTDBDataAccess(object):
@@ -42,26 +45,83 @@ class FASTDBDataAccess(object):
             print('Cannot find %s. Failed to authenticate' % fastdbservices)
             
     
-    def raw_query_long(self,q):
+    def submit_long_query(self,q,format='csv'):
 
-        query = json.dumps([{'csrfmiddlewaretoken': self.csrf_token},
-                            {'query':q},])
-        r = requests.post(RAW_QUERY_LONG_URL, json=query, headers=self.headers)
-        if r.status_code != status.HTTP_403_FORBIDDEN:
-            print("query started")
+        queryid = None
+        self.format = format
+        
+        query = json.dumps([{'csrfmiddlewaretoken': self.csrf_token},{'query':q},{'format':self.format}])
+        print(query)
+        if isinstance(query,str):
+            print('string')
 
+        res = requests.post(SUBMIT_LONG_QUERY_URL, json=query, headers=self.headers)
+        if res.status_code != 200:
+            sys.stderr.write( f"ERROR, got status {res.status_code}\n" )
+        elif res.headers['Content-Type'][:16] != 'application/json':
+            sys.stderr.write( f"ERROR, didn't get json, got {res.headers['Content-Type']}" )
+        else:
+            data = res.json()
+            if 'status' not in data.keys():
+                sys.stderr.write( f"Unexpected response: {data}\n" )
+            elif data['status'] == 'error':
+                sys.stderr.write( f"Got an error: {data['error']}\n" )
+            elif data['status'] != 'ok':
+                sys.stderr.write( f"status is {data['status']} and I don't know how to cope.\n" )
+            else:
+                queryid = data['queryid']
+                print( f"Submitted query {queryid}" )
+                return queryid
+ 
+        
 
-    def raw_query_short(self,q):
+    def submit_short_query(self, query, subdict=None ):
 
-        query = json.dumps([{'csrfmiddlewaretoken': self.csrf_token},{'query':q},])
-        r = requests.post(RAW_QUERY_SHORT_URL, json=query, headers=self.headers)
+        
+        if subdict is not None:
+            query = json.dumps([{'csrfmiddlewaretoken': self.csrf_token},{'query':query},{'subdict':subdict},])
+        else:
+            query = json.dumps([{'csrfmiddlewaretoken': self.csrf_token},{'query':query},])
+        res = requests.post(SUBMIT_SHORT_QUERY_URL, json=query, headers=self.headers)
+        if res.status_code != 200:
+            sys.stderr.write( f"ERROR, got status {res.status_code}\n" )
+        elif res.headers['Content-Type'][:16] != 'application/json':
+            sys.stderr.write( f"ERROR, didn't get json, got {res.headers['Content-Type']}" )
+        else:
+            data = res.json()
+            if 'status' not in data.keys():
+                sys.stderr.write( f"Unexpected response: {data}\n" )
+            elif data['status'] == 'error':
+                sys.stderr.write( f"Got an error: {data['error']}\n" )
+            elif data['status'] != 'ok':
+                sys.stderr.write( f"status is {data['status']} and I don't know how to cope.\n" )
+            else:
+                return data['data']
+            
+
+    def check_long_sql_query(self, queryid):
+
+        query = json.dumps([{'csrfmiddlewaretoken': self.csrf_token},{'queryid':queryid},])
+
+        r = requests.post(CHECK_LONG_SQL_QUERY_URL, json=query, headers=self.headers)
+        print(r.status_code)
         if r.status_code == requests.codes.ok:
             return r.json()
         else:
             print("Failed to authenticate")
+
+
+    def get_long_sql_query(self, queryid):
+
+        query = json.dumps([{'csrfmiddlewaretoken': self.csrf_token},{'queryid':queryid},])
+
+        r = requests.post(GET_LONG_SQL_QUERY_URL, json=query, headers=self.headers)
+        print(r.status_code)
+        if r.status_code == requests.codes.ok:
+            return r.text
+        else:
+            print("Failed to authenticate")
             
-
-
 class FASTDBDataStore(object):
 
     def __init__(self):
@@ -90,7 +150,7 @@ class FASTDBDataStore(object):
     def data_insert(self,table,data):
 
         query = json.dumps([{'csrfmiddlewaretoken': self.csrf_token},
-                        {'query':data},
+                        {'insert':data},
         ])
         if table == 'dia_source':
             r = requests.post(DIA_SOURCE_URL, json=query, headers=self.headers)
@@ -102,7 +162,7 @@ class FASTDBDataStore(object):
     def data_update(self,table,data):
 
         query = json.dumps([{'csrfmiddlewaretoken': self.csrf_token},
-                        {'query':data},
+                        {'update':data},
         ])
         if table == 'dia_source':
             r = requests.post(UPDATE_DIA_SOURCE_URL, json=query, headers=self.headers)

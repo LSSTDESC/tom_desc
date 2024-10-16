@@ -1,0 +1,86 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: tom-query-pruner
+  namespace: desc-tom-buckley-dev
+spec:
+  concurrencyPolicy: Forbid
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          annotations:
+            field.cattle.io/ports: '[[]]'
+            nersc.gov/collab_uids: "70268"
+            nersc.gov/gid: "95089"
+            nersc.gov/gids: 95089,60152,57177,96414
+            nersc.gov/roles: user
+            nersc.gov/uid: "56805"
+            nersc.gov/username: buckley
+          creationTimestamp: null
+        spec:
+          containers:
+          - command: ['python']
+            args: ['manage.py', 'long_query_runner', '-p', '4']
+            env:
+            - name: DB_HOST
+              value: tom-postgres
+            - name: DB_NAME
+              value: tom_desc
+            - name: DB_PASS
+              value: fragile
+            - name: DB_USER
+              value: postgres
+            image: registry.nersc.gov/m1727/buckley/devuan-chimaera-buckley:latest
+            imagePullPolicy: Always
+            name: tom-query-pruner
+            resources: {}
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities:
+                add:
+                - NET_BIND_SERVICE
+                drop:
+                - ALL
+              privileged: false
+              readOnlyRootFilesystem: false
+              runAsNonRoot: true
+              runAsUser: 56805
+            stdin: true
+            terminationMessagePath: /dev/termination-log
+            terminationMessagePolicy: File
+            tty: true
+            volumeMounts:
+            - mountPath: /secrets
+              name: tom-secrets
+            - mountPath: /tom_desc
+              name: tom-deployment
+            - mountPath: /query_results
+              name: tom-query-results
+            workingDir: /tom_desc
+          dnsPolicy: ClusterFirst
+          restartPolicy: Never
+          schedulerName: default-scheduler
+          securityContext:
+            fsGroup: 57177
+          terminationGracePeriodSeconds: 30
+          imagePullSecrets:
+            - name: registry-nersc
+          volumes:
+          - name: tom-secrets
+            secret:
+              defaultMode: 256
+              optional: false
+              secretName: tom-secrets
+          - hostPath:
+              path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/des-tom-buckley-dev/tom_desc
+              type: Directory
+            name: tom-deployment
+          - hostPath:
+              path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/production/query_results
+              type: Directory
+            name: tom-query-results
+  schedule: 20 8 * * *
+  successfulJobsHistoryLimit: 3
+  suspend: false
