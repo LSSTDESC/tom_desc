@@ -53,7 +53,7 @@ spec:
               value: cassandra
             - name: CASSANDRA_PASSWORD
               value: cassandra
-            image: registry.nersc.gov/m1727/raknop/tom_desc_extcode:chimaera
+            image: registry.nersc.gov/m1727/raknop/tom_server_bindmount
             imagePullPolicy: Always
             name: tom-2-send-alerts
             resources: {}

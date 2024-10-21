@@ -32,7 +32,7 @@ spec:
               value: fragile
             - name: DB_USER
               value: postgres
-            image: registry.nersc.gov/m1727/raknop/tom_server_bindmount_dev
+            image: registry.nersc.gov/m1727/raknop/tom_server_bindmount
             imagePullPolicy: Always
             name: tom-2-query-pruner
             resources: {}
