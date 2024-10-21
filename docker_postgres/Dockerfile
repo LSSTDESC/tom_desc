@@ -66,8 +66,8 @@ CMD ["bash", "/run_postgres.sh"]
 
 FROM base AS tom-pgdump
 
-RUN mkdir /home/pgdump
-ENV HOME /home/pgdump
+RUN mkdir=/home/pgdump
+ENV HOME=/home/pgdump
 ADD run_pgdump.sh /home/pgdump/run_pgdump.sh
 
 USER postgres
