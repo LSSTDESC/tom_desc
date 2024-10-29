@@ -415,7 +415,7 @@ If you want to test the TOM out, you can deploy it on your local machine.  If yo
 
 * Database migrations are applied automatically as part of the docker compose setup, but you need to manually create the TOM superuser account so that you have something to log into. The first time you run it for a given postgres volume, once the containers are up you need to run a shell on the server container with <code>docker compose exec -it tom /bin/bash</code>, and then run the command:
 
-** <code>python manage.py createsuperuser</code> (and answer the prompts)
+  * <code>python manage.py createsuperuser</code> (and answer the prompts)
 
 * If you are using a new postgres data volume (i.e. you're not reusing one from a previous run of docker compose), you need to create the "Public" group.  You need to do this before adding any users.  If all is well, any users added thereafter will automatically be added to this group.  Some of the DESC specific code will break if this group does not exist.  (The TOM documentation seems to imply that this group should have been created automatically, but that doesn't seem to be the case.)  To do this:
 ``` python manage.py shell
@@ -498,23 +498,24 @@ The 10, 100, or 1000 objects were chosen randomly.  As of this writing (2023-11-
 
 Save the file you download into the `tom_desc/admin_tools` subdirectory if your git checkout.  (This directory already exists.)
 
-For various reasons, the docker image for the Tom server is based on an older version (Chimaera) of the Linux distribution (Devuan).  The postgres image is based on Daedalus, which as of this writing is the current stable version of Devuan.  The restoration process requires `pg_restore` to have a version that's compatible with the postgres server, and for that reason you need to run a special shell just for this restoration process.  Start that shell with
+Start that shell with
 ```
-docker compose up -d daedalus-shell
+docker compose up -d shell
 ```
 and then go into the shell with
 ```
-docker compose exec -it daedalus-shell /bin/bash
+docker compose exec -it shell /bin/bash
 ```
-cd into the directory `admin_tools` and run:
+cd into the directory `admin_tools` and run the `import_elasticc2_subset_dump.py` script as follows:
 ```
+cd admin_tools
 python import_elasticc2_subset_dump.py -f <filename>
 ```
 where `<filename>` is the .sql file that you downloaded.
 
 If all is well, when you're done run
 ```
-docker compose down daedalus-shell
+docker compose down shell
 ```
 
 ### Development and database migrations
