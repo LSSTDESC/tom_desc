@@ -2,15 +2,15 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: tom-rknop-dev-postgres
-  namespace: desc-tom
+  name: tom-postgres
+  namespace: desc-tom-rknop-dev
 spec:
   progressDeadlineSeconds: 600
   replicas: 1
   revisionHistoryLimit: 10
   selector:
     matchLabels:
-      workload.user.cattle.io/workloadselector: deployment-desc-tom-tom-rknop-dev-postgres
+      workload.user.cattle.io/workloadselector: deployment-desc-tom-rknop-dev-tom-postgres
   strategy:
     rollingUpdate:
       maxSurge: 1
@@ -29,22 +29,22 @@ spec:
         nersc.gov/username: raknop
       creationTimestamp: null
       labels:
-        workload.user.cattle.io/workloadselector: deployment-desc-tom-tom-rknop-dev-postgres
+        workload.user.cattle.io/workloadselector: deployment-desc-tom-rknop-dev-tom-postgres
     spec:
       initContainers:
       - name: volume-mount-hack
         image: busybox
         command: [ "sh", "-c", "chown 100:108 /pgdata" ]
         volumeMounts:
-        - name: tom-rknop-dev-postgres-pvc
+        - name: tom-postgres
           mountPath: /pgdata
       containers:
       - env:
         - name: POSTGRES_DATA_DIR
           value: /var/lib/postgresql/data
-        image: registry.nersc.gov/m1727/raknop/tom-postgres:daedalus
+        image: registry.nersc.gov/m1727/raknop/tom_postgres
         imagePullPolicy: Always
-        name: tom-rknop-dev-postgres
+        name: tom-postgres
         resources: {}
         securityContext:
           allowPrivilegeEscalation: false
@@ -66,7 +66,7 @@ spec:
         tty: true
         volumeMounts:
         - mountPath: /var/lib/postgresql/data
-          name: tom-rknop-dev-postgres-pvc
+          name: tom-postgres
         - mountPath: /dev/shm
           name: dshm
       dnsPolicy: ClusterFirst
@@ -77,19 +77,19 @@ spec:
       imagePullSecrets:
         - name: registry-nersc
       volumes:
-      - name: tom-rknop-dev-postgres-pvc
+      - name: tom-postgres
         persistentVolumeClaim:
-          claimName: tom-rknop-dev-postgres-pvc
+          claimName: tom-rknop-dev-postgres-pvc-20241030
       - emptyDir:
           medium: Memory
-          sizeLimit: 16Gi
+          sizeLimit: 128Gi
         name: dshm
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: tom-rknop-dev-postgres
-  namespace: desc-tom
+  name: tom-postgres
+  namespace: desc-tom-rknop-dev
 spec:
   clusterIP: None
   clusterIPs:
@@ -100,7 +100,7 @@ spec:
     protocol: TCP
     targetPort: 42
   selector:
-    workload.user.cattle.io/workloadselector: deployment-desc-tom-tom-rknop-dev-postgres
+    workload.user.cattle.io/workloadselector: deployment-desc-tom-rknop-dev-tom-postgres
   sessionAffinity: None
   type: ClusterIP
 status:
