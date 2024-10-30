@@ -7,7 +7,9 @@ import json
 import logging
 import traceback
 
+import numpy
 import astropy.time
+import light_curve
 
 import django.db
 import django.views
@@ -22,8 +24,10 @@ from django.template import loader
 import rest_framework
 
 import pandas
+import psycopg2
 import psycopg2.extras
 
+import tom_desc.settings
 import elasticc2.models
 from elasticc2.models import PPDBDiaObject, PPDBDiaSource, PPDBDiaForcedSource, PPDBAlert, DiaObjectTruth
 from elasticc2.models import DiaObject, DiaSource, DiaForcedSource, BrokerClassifier, BrokerMessage
@@ -475,30 +479,38 @@ class Elasticc2BrokerClassificationForTrueType( LoginRequiredMixin, django.views
             return HttpResponseBadRequest(
                 json.dumps( { "error": f"Can't find data file for classifier {classifier_id}, class {classid}" } ),
                 content_type="application/json" )
-        df = pandas.read_pickle( path )
 
         if dataformat == 'pickle':
+            _logger.debug( f"Dumping binary contents of {path} to http response content" )
             with open( path, "rb" ) as ifp:
                 return HttpResponse( ifp.read(), content_type='application/octet-stream' )
-
-        dfdict = df.to_dict( orient='split' ) if dictifier is None else dictifier( df )
-        if len( indexes ) == 1:
-            data = { i: v for i, v in zip( dfdict['index'], dfdict['data'] ) }
-        elif len( indexes ) == 2:
-            # I should write a recursive function to support any length....
-            data = {}
-            for k, v in zip( dfdict[ 'index' ], dfdict[ 'data' ] ):
-                topk, lowerk = k
-                if topk not in data:
-                    data[ topk ] = {}
-                data[ topk ][ lowerk ] = v
         else:
-            return HttpResponse( "This should never happen", content_type='text/plain', status=500 )
+            _logger.debug( f"Reading pickled data file {path}..." )
+            df = pandas.read_pickle( path )
+            _logger.debug( f"...done reading {path}" )
+            if isinstance( df, pandas.Series ):
+                df = df.to_frame()
+            # _logger.debug( f"About to do_dict a {type(df)}\n{df[:5]}" )
+            return HttpResponse( json.dumps( df.to_dict( orient='tight' ) ), content_type='application/json' )
 
-        retdict = { 'columns': dfdict['columns'],
-                    'index': indexes,
-                    'data': data
-                   }
+        # dfdict = df.to_dict( orient='split' ) if dictifier is None else dictifier( df )
+        # if len( indexes ) == 1:
+        #     data = { i: v for i, v in zip( dfdict['index'], dfdict['data'] ) }
+        # elif len( indexes ) == 2:
+        #     # I should write a recursive function to support any length....
+        #     data = {}
+        #     for k, v in zip( dfdict[ 'index' ], dfdict[ 'data' ] ):
+        #         topk, lowerk = k
+        #         if topk not in data:
+        #             data[ topk ] = {}
+        #         data[ topk ][ lowerk ] = v
+        # else:
+        #     return HttpResponse( "This should never happen", content_type='text/plain', status=500 )
+
+        # retdict = { 'columns': dfdict['columns'],
+        #             'index': indexes,
+        #             'data': data
+        #            }
 
         return HttpResponse( json.dumps( retdict ), content_type='application/json' )
 
@@ -584,9 +596,9 @@ class PPDBDiaObjectAndPrevSourcesForSourceViewSet( rest_framework.viewsets.ReadO
                                                  data="Must give a source id" )
 
     def retrieve( self, request, pk=None ):
-        # sys.stderr.write( f"Trying to get source {pk}" )
+        # sys.stderr.write( f"Trying to get source {pk}\n" )
         src = get_object_or_404( PPDBDiaSource.objects.all(), pk=pk )
-        # sys.stderr.write( f"Trying to get object {src.diaobject_id}" )
+        # sys.stderr.write( f"Trying to get object {src.diaobject_id}\n" )
         obj = get_object_or_404( PPDBDiaObject.objects.all(), pk=src.diaobject_id )
         objserializer = PPDBDiaObjectSerializer( obj )
         objdict = dict( objserializer.data )
@@ -605,6 +617,124 @@ class PPDBDiaObjectAndPrevSourcesForSourceViewSet( rest_framework.viewsets.ReadO
             ser = PPDBDiaForcedSourceSerializer( src )
             objdict[ 'diaforcedsources' ].append( ser.data )
         return rest_framework.response.Response( objdict )
+
+# ======================================================================
+
+class GetAlert(PermissionRequiredMixin, django.views.View):
+    raise_exception = True
+
+    def has_permission( self ):
+        return bool( self.request.user.is_authenticated )
+
+    def get( self, *args, **kwargs ):
+        return self.post( *args, **kwargs )
+
+    def post( self, request ):
+        try:
+            data = json.loads( request.body )
+            if ( ( not isinstance( data, dict ) ) or
+                 ( ( 'alertid' not in data.keys() ) and ( 'sourceid' not in data.keys() ) ) ):
+                raise ValueError( f"Must supply either alertid or sourceid" )
+
+            if 'alertid' in data.keys():
+                alert = PPDBAlert.objects.get( pk=int( data['alertid'] ) )
+            else:
+                # Just assume it's not multiply defined...
+                alert = PPDBAlert.objects.filter( diasource_id=int( data['sourceid'] ) ).first()
+
+            if alert is None:
+                raise ValueError( f"Unknown {'alertid' if 'alertid' in data.keys() else 'sourceid'} "
+                                  f"{data['alertid'] if 'alertid' in data.keys() else data['sourceid']}" )
+
+            # TODO: nprevious, daysprevious
+            return JsonResponse( alert.reconstruct() )
+
+        except Exception as ex:
+            sys.stderr.write( f"Exception in GetAlert: {ex}\n" )
+            traceback.print_exc( file=sys.stderr )
+            return HttpResponse( f"Exception in GetAlert: {str(ex)}", status=500,
+                                 content_type='text/plain; charset=utf-8' )
+
+
+# ======================================================================
+
+class LtcvFeatures(PermissionRequiredMixin, django.views.View):
+    raise_exception = True
+
+    def has_permission( self ):
+        return bool( self.request.user.is_authenticated )
+
+    def get( self, *args, **kwargs ):
+        return self.post( *args, **kwargs )
+
+    def post( self, request ):
+        try:
+            data = json.loads( request.body )
+            if ( ( not isinstance( data, dict ) ) or
+                 ( ( 'sourceid' not in data.keys() ) and
+                   ( 'objectid' ) not in data.keys() ) ):
+                raise ValueError( f"Must supply either alertid or sourceid or objectid" )
+
+            includeltcv = ( 'includeltcv' in data.keys() ) and ( data['includeltcv'] )
+
+            if 'features' in data.keys():
+                raise NotImplementedError( "Passing feature list not yet implemented" )
+            else:
+                featureargs = [ light_curve.AndersonDarlingNormal(),
+                                light_curve.InterPercentileRange(0.05),
+                                light_curve.ReducedChi2(),
+                                light_curve.StetsonK(),
+                                light_curve.WeightedMean(),
+                                light_curve.Duration(),
+                                light_curve.OtsuSplit(),
+                                light_curve.LinearFit() ]
+
+            with django.db.connection.cursor() as cursor:
+                if 'sourceid' in data.keys():
+                    # We're going to get all forced sources up to the date of the source.
+                    q = ( 'SELECT f.midpointtai,f.psflux,f.psfluxerr '
+                          'FROM elasticc2_ppdbdiaforcedsource f '
+                          'WHERE f.diaobject_id = ( SELECT diaobject_id FROM elasticc2_ppdbdiasource '
+                          '                         WHERE diasource_id=%(sourceid)s ) '
+                          '  AND f.midpointtai <= ( SELECT midpointtai FROM elasticc2_ppdbdiasource '
+                          '                         WHERE diasource_id=%(sourceid)s ) ' )
+                    subdict = { 'sourceid': int(data['sourceid']) }
+                elif 'objectid' in data.keys():
+                    # Get *all* forced source entries for the object, even after the last source
+                    q = ( 'SELECT f.midpointtai,f.psflux,f.psfluxerr '
+                          'FROM elasticc2_ppdbdiaforcedsource f '
+                          'WHERE f.diaobject_id=%(objid)s ' )
+                    subdict = { 'objid': int(data['objectid']) }
+                else:
+                    raise ValueError( "This should never happen." )
+
+                if 'through_mjd' in data.keys():
+                    q += '  AND f.midpointtai <= %(throughmjd)s '
+                    subdict['throughmjd'] = float( data['through_mjd'] )
+
+                q += 'ORDER BY f.midpointtai'
+                cursor.execute( q, subdict )
+
+                rows = cursor.fetchall()
+                t = [ r[0] for r in rows ]
+                f = [ r[1] for r in rows ]
+                df = [ r[2] for r in rows ]
+
+            extractor = light_curve.Extractor( *featureargs )
+            results = extractor( numpy.array(t), numpy.array(f), numpy.array(df), sorted=True, check=False )
+
+            resp = { name: value for name, value in zip( extractor.names, results ) }
+            if includeltcv:
+                resp[ 'lightcurve' ] = { 'mjd': t, 'flux': f, 'dflux': df }
+
+            return JsonResponse( resp )
+
+        except Exception as ex:
+            sys.stderr.write( f"Exception in LtcvFeatures: {ex}\n" )
+            traceback.print_exc( file=sys.stderr )
+            return HttpResponse( f"Exception in LtcvFeatures: {str(ex)}", status=500,
+                                 content_type='text/plain; charset=utf-8' )
+
 
 # ======================================================================
 # A REST interface (but not using the Django REST framework) for
@@ -783,6 +913,60 @@ class BrokerMessageView(PermissionRequiredMixin, django.views.View):
         return resp
 
 # ======================================================================
+# The format of the return from this one can be configured.
+#
+# The return is always (if successful) JSON like:
+#  { 'status': str,
+#    'diaobject': <something> }
+#
+# <something> depends on the return_format parameter:
+#
+# return_format = 0 (default)
+#
+#   <something> is a list.  Each element is a dictionary:
+#     { 'objectid': int,
+#       'ra': float,
+#       'dec': float,
+#       'photometry: { 'mjd': list of float,
+#                      'band': list of str,
+#                      'flux': list of float,
+#                      'fluxerr': list of float
+#                    },
+#       'zp': 27.5,
+#       'redshift': -99,
+#       'sncode': -99 }
+#
+#
+# return_format = 1
+#
+#   <something> is a list.  Each element is a dictionary:
+#     { 'objectid': int,
+#       'ra': float,
+#       'dec': float,
+#       'mjd': list of float,
+#       'band': list of str,
+#       'flux': list of float,
+#       'fluxerr': list of float,
+#       'zp': 27.5,
+#       'redshift': -99,
+#       'sncode': -99 }
+#
+# return_format = 2
+#   <something> is a dictionary.
+#     { 'objectid': list of int,
+#       'ra': list of float,
+#       'dec': list of float,
+#       'mjd': list of lists of float,
+#       'band': list of lists of str,
+#       'flux': list of lists of float,
+#       'fluxerr': list of lists of float,
+#       'zp': list of 27.5,
+#       'redshift': list of -99,
+#       'sncode': list of -99
+#
+# (zp is the SNANA zeropoint.  redshift and sncode are there for future
+# expansion as we deal with getting back specturm information.)
+
 
 class GetHotSNeView(PermissionRequiredMixin, django.views.View):
     raise_exception = True
@@ -802,6 +986,15 @@ class GetHotSNeView(PermissionRequiredMixin, django.views.View):
 
             mjdnow = None
             mjd0 = 0.
+
+            if 'return_format' in data.keys():
+                return_format = int( data['return_format'] )
+                if return_format not in (0, 1, 2):
+                    return HttpResponse( f"Error, unknown return_format {return_format}",
+                                         status=500, content_type='text/plain; charset=utf-8' )
+            else:
+                return_format = 0
+
             if 'detected_since_mjd' in data.keys():
                 if 'detected_in_last_days' in data.keys():
                     return HttpResponse( f'Error, only give one of detected_since_mjd or '
@@ -821,39 +1014,91 @@ class GetHotSNeView(PermissionRequiredMixin, django.views.View):
                     mjd0 = astropy.time.Time( datetime.datetime.now( datetime.timezone.utc )
                                               - datetime.timedelta( days=lastdays ) ).mjd
 
+            cheat_gentypes = None
+            if 'cheat_gentypes' in data.keys():
+                cheat_gentypes = data['cheat_gentypes']
+                if not isinstance( cheat_gentypes, list ):
+                    return HttpResponse( "Error, cheat_gentypes must be a list", status=500,
+                                         content_type='text/plain; charset=utf-8' )
+                cheat_gentypes = tuple( cheat_gentypes )
 
             # _logger.info( f"Getting SNe detected since mjd {mjd0}" )
 
-            djangoconn = django.db.connection
-            with djangoconn.cursor().connection.cursor( cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-                # _logger.info( "GetHotSNeView: sending query." )
-                q = ( "SELECT f.diaobject_id AS diaobject_id, o.ra AS ra, o.decl AS dec,"
-                      "       f.diaforcedsource_id AS diaforcedsource_id,"
-                      "       f.filtername AS band,f.midpointtai AS mjd,"
-                      "       f.psflux AS flux, f.psfluxerr AS fluxerr "
-                      "FROM elasticc2_diaforcedsource f "
-                      "INNER JOIN elasticc2_diaobject o ON f.diaobject_id=o.diaobject_id "
-                      "WHERE f.diaobject_id IN ("
-                      "  SELECT DISTINCT ON(diaobject_id) diaobject_id "
-                      "  FROM elasticc2_diaforcedsource "
-                      "  WHERE midpointtai>=%(t0)s AND psflux/psfluxerr >= 5." )
-                if mjdnow is not None:
-                    q += "    AND midpointtai<=%(t1)s"
-                q += ( ") "
-                       "ORDER BY f.diaobject_id,f.midpointtai" )
-                # _logger.info( f"Sending query: {cursor.mogrify(q,{'t0':mjd0,'t1':mjdnow})}" )
-                cursor.execute( q , { "t0": mjd0, "t1": mjdnow } )
-                df = pandas.DataFrame( cursor.fetchall() )
-                # _logger.info( f"GetHotSNeView: pulled dataframe of length {len(df)}" )
+            # Work with a raw psycopg2 connection, not a django connection,
+            #   so we actually know what's going on.  Do it in a with block
+            #   so there will be a ROLLBACK when we exit and the temp
+            #   table will go away.
+            dbinfo = tom_desc.settings.DATABASES['default']
+            with psycopg2.connect( host=dbinfo['HOST'],
+                                   port=dbinfo['PORT'],
+                                   user=dbinfo['USER'],
+                                   password=dbinfo['PASSWORD'],
+                                   dbname=dbinfo['NAME']
+                                  ) as dbcon:
+                with dbcon.cursor( cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
 
+                    # Try to wrangle postgres into doing this more efficiently
+                    #  than it would by default.  I'm not sure I've done it
+                    #  all right here (in particular, the NoBitmapScan),
+                    #  but I do think that postgres makes bad choices about
+                    #  indexes into the forced source tables.  (See big
+                    #  comment in models.py::BaseAlert.reconstruct.)
+
+                    q = ( "/*+ NoBitmapScan(elasticc2_diasource)\n"
+                          "*/\n"
+                          "SELECT DISTINCT ON(diaobject_id) diaobject_id "
+                          "INTO TEMP TABLE tmp_objids "
+                          "FROM elasticc2_diasource "
+                          "WHERE midpointtai>=%(t0)s " )
+                    if mjdnow is not None:
+                        q += "  AND midpointtai<=%(t1)s"
+                    cursor.execute( q, { "t0": mjd0, "t1": mjdnow } )
+
+                    q = ( "/* IndexScan(f diaobject_id)\n"
+                          "   IndexScan(o)\n"
+                          "*/\n"
+                          "SELECT f.diaobject_id AS diaobject_id, o.ra AS ra, o.decl AS dec,"
+                          "       f.diaforcedsource_id AS diaforcedsource_id,"
+                          "       f.filtername AS band,f.midpointtai AS mjd,"
+                          "       f.psflux AS flux, f.psfluxerr AS fluxerr "
+                          "FROM elasticc2_diaforcedsource f "
+                          "INNER JOIN elasticc2_diaobject o ON f.diaobject_id=o.diaobject_id " )
+                    if cheat_gentypes is not None:
+                        q += "INNER JOIN elasticc2_diaobjecttruth t ON o.diaobject_id=t.diaobject_id "
+                    q += "WHERE f.diaobject_id IN ( SELECT diaobject_id FROM tmp_objids ) "
+                    if cheat_gentypes is not None:
+                        q += "  AND t.gentype IN %(gentypes)s "
+                    if mjdnow is not None:
+                        q += "  AND f.midpointtai<=%(t1)s "
+                    q += "ORDER BY f.diaobject_id,f.midpointtai"
+
+                    cursor.execute( q , { "t0": mjd0, "t1": mjdnow, "gentypes": cheat_gentypes } )
+                    df = pandas.DataFrame( cursor.fetchall() )
+
+            if ( return_format == 0 ) or ( return_format == 1 ):
                 sne = []
-                if len(df) > 0:
-                    objids = df['diaobject_id'].unique()
-                    _logger.info( f"GetHotSNEView: got {len(objids)} objects" )
-                    df.set_index( [ 'diaobject_id', 'diaforcedsource_id' ], inplace=True )
+            elif ( return_format == 2 ):
+                sne = { 'objectid': [],
+                        'ra': [],
+                        'dec': [],
+                        'mjd': [],
+                        'band': [],
+                        'flux': [],
+                        'fluxerr': [],
+                        'zp': [],
+                        'redshift': [],
+                        'sncode': [] }
+            else:
+                raise RuntimeError( "This should never happen." )
 
-                    for objid in objids:
-                        subdf = df.xs( objid, level='diaobject_id' )
+            if len(df) > 0:
+                objids = df['diaobject_id'].unique()
+                _logger.info( f"GetHotSNEView: got {len(objids)} objects" )
+                df.set_index( [ 'diaobject_id', 'diaforcedsource_id' ], inplace=True )
+
+                for objid in objids:
+                    subdf = df.xs( objid, level='diaobject_id' )
+                    if return_format == 0:
                         sne.append( { 'objectid': int(objid),
                                       'ra': subdf.ra.values[0],
                                       'dec': subdf.dec.values[0],
@@ -864,6 +1109,31 @@ class GetHotSNeView(PermissionRequiredMixin, django.views.View):
                                       'zp': 27.5,   # standard SNANA zeropoint,
                                       'redshift': -99,
                                       'sncode': -99 } )
+                    elif return_format == 1:
+                        sne.append( { 'objectid': int(objid),
+                                      'ra': subdf.ra.values[0],
+                                      'dec': subdf.dec.values[0],
+                                      'mjd': list( subdf['mjd'] ),
+                                      'band': list( subdf['band'] ),
+                                      'flux': list( subdf['flux'] ),
+                                      'fluxerr': list( subdf['fluxerr'] ),
+                                      'zp': 27.5,   # standard SNANA zeropoint,
+                                      'redshift': -99,
+                                      'sncode': -99 } )
+                    elif return_format == 2:
+                        sne['objectid'].append( int(objid) )
+                        sne['ra'].append( subdf.ra.values[0] )
+                        sne['dec'].append( subdf.dec.values[0] )
+                        sne['mjd'].append( list( subdf['mjd'] ) )
+                        sne['band'].append( list( subdf['band'] ) )
+                        sne['flux'].append( list( subdf['flux'] ) )
+                        sne['fluxerr'].append( list( subdf['fluxerr'] ) )
+                        sne['zp'].append( 27.5 )
+                        sne['redshift'].append( -99 )
+                        sne['sncode'].append( -99 )
+                    else:
+                        raise RuntimeError( "This should never happen." )
+
 
             # _logger.info( "GetHotSNeView; returning" )
             resp = JsonResponse( { 'status': 'ok',
@@ -948,9 +1218,9 @@ class WhatSpectraAreWanted(PermissionRequiredMixin, django.views.View):
                     hour = 0
                     minute = 0
                     second = 0
-                since = datetime.datetime( y, m, d, hour, minute, second )
+                wantsince = datetime.datetime( y, m, d, hour, minute, second, tzinfo=datetime.timezone.utc )
             else:
-                since = datetime.datetime.now() - datetime.timedelta( days=14 )
+                wantsince = datetime.datetime.now( tz=datetime.timezone.utc ) - datetime.timedelta( days=14 )
 
             if 'not_claimed_in_last_days' in data.keys():
                 notclaimedinlastdays = int( data['not_claimed_in_last_days'] )
@@ -986,16 +1256,20 @@ class WhatSpectraAreWanted(PermissionRequiredMixin, django.views.View):
                       "    FROM elasticc2_wantedspectra w "
                       "    LEFT JOIN elasticc2_plannedspectra r "
                       "      ON r.diaobject_id=w.diaobject_id AND r.created_at>%(reqtime)s "
+                      "    WHERE w.wanttime>=%(wanttime)s "
                       "  ) subq "
                       "  WHERE reqspec_id IS NULL "
                       "  GROUP BY diaobject_id,requester,priority )" )
-                cursor.execute( q, { 'reqtime': claimsince } )
+                # sys.stderr.write( f"Sending query: {cursor.mogrify(q,{'wanttime':wantsince,'reqtime':claimsince})}\n" )
+                cursor.execute( q, { 'wanttime': wantsince, 'reqtime': claimsince } )
 
                 cursor.execute( "SELECT COUNT(diaobject_id) FROM tmp_wanted" )
                 row = cursor.fetchall()
                 if row[0]['count'] == 0:
-                    sys.stderr.write( "Empty table tmp_wanted\n" )
-                    return JsonResponse( {} )
+                    # sys.stderr.write( "Empty table tmp_wanted\n" )
+                    return JsonResponse( { 'status': 'ok', 'wantedspectra': [] } )
+                # else:
+                #     sys.stderr.write( f"{row[0]['count']} rows in tmp_wanted\n" )
 
                 cursor.execute( "CREATE TEMP TABLE tmp_wanted2( diaobject_id bigint, requester text, priority int ) " )
                 q = ( "INSERT INTO tmp_wanted2 ( "
@@ -1013,8 +1287,10 @@ class WhatSpectraAreWanted(PermissionRequiredMixin, django.views.View):
                 cursor.execute( "SELECT COUNT(diaobject_id) FROM tmp_wanted2" )
                 row = cursor.fetchall()
                 if row[0]['count'] == 0:
-                    sys.stderr.write( "Empty table tmp_wanted2" )
-                    return JsonResponse( {} )
+                    # sys.stderr.write( "Empty table tmp_wanted2\n" )
+                    return JsonResponse( { 'status': 'ok', 'wantedspectra': [] } )
+                # else:
+                #     sys.stderr.write( f"{row[0]['count']} rows in tmp_wanted2\n" )
 
                 cursor.execute( "CREATE TEMP TABLE tmp_wanted3( diaobject_id bigint, requester text, priority int ) " )
                 q = ( "INSERT INTO tmp_wanted3 ( "
@@ -1028,8 +1304,10 @@ class WhatSpectraAreWanted(PermissionRequiredMixin, django.views.View):
                 cursor.execute( "SELECT COUNT(diaobject_id) FROM tmp_wanted3" )
                 row = cursor.fetchall()
                 if row[0]['count'] == 0:
-                    sys.stderr.write( "Empty table tmp_wanted3" )
-                    return JsonResponse( {} )
+                    # sys.stderr.write( "Empty table tmp_wanted3\n" )
+                    return JsonResponse( { 'status': 'ok', 'wantedspectra': [] } )
+                # else:
+                #     sys.stderr.write( f"{row[0]['count']} rows in tmp_wanted3\n" )
 
                 cursor.execute( "CREATE TEMP TABLE tmp_wanted4( diaobject_id bigint, mjd real, "
                                 "                               filtername text, mag real )" )
@@ -1052,8 +1330,8 @@ class WhatSpectraAreWanted(PermissionRequiredMixin, django.views.View):
                 cursor.execute( "SELECT COUNT(diaobject_id) FROM tmp_wanted4" )
                 row = cursor.fetchall()
                 if row[0]['count'] == 0:
-                    sys.stderr.write( "empty table tmp_wanted4" )
-                    return JsonResponse( {} )
+                    # sys.stderr.write( "empty table tmp_wanted4\n" )
+                    return JsonResponse( { 'status': 'ok', 'wantedspectra': [] } )
 
                 cursor.execute( "SELECT w3.diaobject_id AS objid, w3.requester, w3.priority, "
                                 "       w4.filtername, w4.mjd, w4.mag, o.ra, o.decl AS dec "
@@ -1151,7 +1429,7 @@ class PlanToDoSpectrum(PermissionRequiredMixin, django.views.View):
                     'comment': newps.comment }
             return JsonResponse( res )
         except Exception as ex:
-            sys.stderr.write( "Exception in PlanToDoSpectrum" )
+            sys.stderr.write( "Exception in PlanToDoSpectrum\n" )
             traceback.print_exc( file=sys.stderr )
             return HttpResponse( f"Exception in PlanToDoSpectrum: {ex}",
                                  status=500, content_type='text/plain; charset=utf-8' )
@@ -1273,7 +1551,61 @@ class ReportSpectrumInfo(PermissionRequiredMixin, django.views.View):
                     'classid': newsi.classid }
             return JsonResponse( res )
         except Exception as ex:
-            sys.stderr.write( "Exception in ReportSpectrumInfo" )
+            sys.stderr.write( "Exception in ReportSpectrumInfo\n" )
             traceback.print_exc( file=sys.stderr )
             return HttpResponse( f"Exception in ReportSpectrumInfo: {ex}",
                                  status=500, content_type='text/plain; charset=utf-8' )
+
+# ======================================================================
+
+class GetSpectrumInfo(PermissionRequiredMixin, django.views.View):
+    raise_exception = True
+
+    def has_permission( self ):
+        return bool( self.request.user.is_authenticated )
+
+    def post( self, request ):
+        try:
+            data = json.loads( request.body )
+
+            q = SpectrumInfo.objects
+
+            if 'objectid' in data.keys():
+                if isinstance( data['objectid'], list ):
+                    q = q.filter( diaobject_id__in=data['objectid'] )
+                else:
+                    q = q.filter( diaobject_id=int(data['objectid']) )
+            if 'facility' in data.keys():
+                q = q.filter( facillity=data['facility'] )
+            if 'mjd_min' in data.keys():
+                q = q.filter( mjd__gte=float(data['mjd']) )
+            if 'mjd_max' in data.keys():
+                q = q.filter( mjd__lte=float(data['mjd']) )
+            if 'classid' in data.keys():
+                q = q.filter( classid=int(data['classid']) )
+            if 'z_min' in data.keys():
+                q = q.filter( z__gte=float(data['z_min']) )
+            if 'z_max' in data.keys():
+                q = q.filter( z__lte=float(data['z_max']) )
+            if 'since' in data.keys():
+                q = q.filter( inserted_at__gte=dateutil.parser.parse( data['since'] ) )
+
+            q = q.order_by( 'mjd' )
+
+            resp = { 'status': 'ok',
+                     'spectra': [] }
+            for spec in q:
+                resp['spectra'].append( { 'objectid': spec.diaobject_id,
+                                          'facility': spec.facility,
+                                          'mjd': spec.mjd,
+                                          'z': spec.z,
+                                          'classid': spec.classid,
+                                          'report_time': spec.inserted_at } )
+            return JsonResponse( resp )
+
+        except Exception as ex:
+            sys.stderr.write( "Exception in GetKnownSpectrumInfo\n" )
+            traceback.print_exc( file=sys.stderr )
+            return HttpResponse( f"Exception in GetKnownSpectrumInfo: {ex}",
+                                 status=500, content_type='text/plain; charset=utf-8' )
+

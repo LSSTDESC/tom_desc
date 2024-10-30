@@ -4,6 +4,7 @@
 import sys
 import os
 import random
+import time
 import datetime
 import dateutil.parser
 import pytest
@@ -112,6 +113,37 @@ class TestSpectrumCycle:
         res = tomclient.post( 'elasticc2/spectrawanted', json={ 'detected_since_mjd': 60660 } )
         detsince_specinfo = res.json()['wantedspectra']
         assert { o['oid'] for o in detsince_specinfo } == objnewenough
+
+        # Ask for more spectra then make sure that if we ask for ones that
+        #   were requested since a certain time, we only get the new ones
+        # Strip the format down to YYYY-MM-DDTHH:MM:SS
+        # Wait a second before and after to make sure the roundoff doesn't screw the test
+        time.sleep( 1 )
+        wanttime = datetime.datetime.now( tz=datetime.timezone.utc ).isoformat()[0:19]
+        time.sleep( 1 )
+
+        newobjs = elasticc2.models.DiaObject.objects.all().order_by("diaobject_id")
+        newobjs = [ o for o in newobjs if o.diaobject_id not in objs ]
+        try:
+            req = { 'requester': 'tests',
+                    'objectids': [ o.diaobject_id for o in newobjs[0:3] ],
+                    'priorities': [ 1, 2, 3 ] }
+            res = tomclient.post( 'elasticc2/askforspectrum', json=req )
+            assert res.status_code == 200
+
+            # Ask for everyting wanted since forever ago so we get the three new ones;
+            #   we should get *just* the three new ones because of requested_since
+            res = tomclient.post( 'elasticc2/spectrawanted', json={ 'requested_since': wanttime,
+                                                                    'detected_since_mjd': 0. } )
+            wantedobjs = res.json()[ 'wantedspectra' ]
+            assert set( [ i['oid'] for i in wantedobjs ] ) == set( req['objectids'] )
+            pass
+
+        finally:
+            # Clean out the additional ones we just asked for from the database, to avoid munging future tests
+            elasticc2.models.WantedSpectra.objects.filter(
+                diaobject_id__in=[ o.diaobject_id for o in newobjs[0:3] ]
+            ).delete()
 
 
     def test_plan_spectrum( self, ask_for_spectra, tomclient ):
@@ -242,3 +274,16 @@ class TestSpectrumCycle:
         wanted = elasticc2.models.WantedSpectra.objects.all()
         assert len(wanted) == 24
         assert oid not in [ o.diaobject_id for o in wanted ]
+
+    def test_get_spectrum_info( self, ask_for_spectra, tomclient ):
+        # Get everything
+
+        res = tomclient.post( 'elasticc2/getknownspectruminfo', json={} )
+        assert res.status_code == 200
+        data = res.json()
+        assert data['status'] == 'ok'
+        assert len( data['spectra'] ) == 1
+        assert data['spectra'][0]['objectid'] == 114982
+        assert data['spectra'][0]['mjd'] == pytest.approx( 65536., abs=0.01 )
+        assert data['spectra'][0]['z'] == pytest.approx( 0.25, abs=0.01 )
+        assert data['spectra'][0]['classid'] == 2222

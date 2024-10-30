@@ -17,7 +17,7 @@ from msgconsumer import MsgConsumer
 from alertcyclefixtures import *
 
 # NOTE -- many of the actual tests are run in the fixtures rather than
-#   the tests below.  See comments in conftest.py for the reason for
+#   the tests below.  See comments in alercyclefixtures.py for the reason for
 #   this.
 
 class TestAlertCycle:
