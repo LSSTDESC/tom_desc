@@ -105,10 +105,6 @@ spec:
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
         tty: true
-#        ports:
-#        - name: mongodb
-#          containerPort: 27017
-#          protocol: TCP
         volumeMounts:
         - mountPath: /mongodb-data
           name: mongodb-datadir
@@ -130,6 +126,9 @@ metadata:
   name: mongodb-service
   namespace: desc-tom
 spec:
+  clusterIP: None
+  clusterIPs:
+  - None
   ports:
   - name: default
     port: 42

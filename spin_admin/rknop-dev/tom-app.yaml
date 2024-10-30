@@ -198,17 +198,17 @@ spec:
             port:
               number: 8080
         pathType: ImplementationSpecific
-#   - host: desc-tom-rknop-dev.lbl.gov
-#     http:
-#       paths:
-#       - backend:
-#           service:
-#             name: tom-ingress-service
-#             port:
-#               number: 8080
-#         pathType: ImplementationSpecific
-#   tls:
-#   - hosts:
-#     - desc-tom-rknop-dev.lbl.gov
-#     secretName: tom-cert
+  - host: desc-tom-rknop-dev.lbl.gov
+    http:
+      paths:
+      - backend:
+          service:
+            name: tom-ingress-service
+            port:
+              number: 8080
+        pathType: ImplementationSpecific
+  tls:
+  - hosts:
+    - desc-tom-rknop-dev.lbl.gov
+    secretName: tom-cert
 ---
