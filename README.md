@@ -28,6 +28,7 @@ Based on the [Tom Toolkit](https://lco.global/tomtoolkit/)
       * [For ELAsTiCC](#for-elasticc)
       * [For ELAsTiCC2](#for-elasticc2)
     * [Development and database migrations](#development-and-database-migrations)
+    * [MongoDB installation and users]
   * [Running Tests](#running-tests)
     * [Starting the test environment](#starting-the-test-environemnt)
   * [Deployment at NERSC](#deployment-at-nersc)
@@ -36,6 +37,7 @@ Based on the [Tom Toolkit](https://lco.global/tomtoolkit/)
       * [Updating the running code](#updating-the-running code)
       * [Additional YAML files](#additional-yaml-files)
       * [Removing it all from Spin](#removing-it-all-from-spin)
+
 * [Notes for ELAsTiCC](#notes-for-elasticc)
   * [ELAsTiCC](#noteselasticc)
     * [Streaming to ZADS](#elasticcstream)
@@ -533,6 +535,32 @@ If you change any database schema, you have to get a shell on the server's conta
 
 BE CAREFUL ABOUT DATABASE MIGRATIONS.  For throw-away development environments, it's fine.  But, the nature of database migrations is such that forks in database schema history are potentially a lot more painful to deal with than forks in source code (where git and text merge can usually handle it without _too_ much pain).  If you're going to make migrations that you want to have pulled into the main branch, coordinate with the other people working on the DESC Tom.  (As of this writing, that's me, Rob Knop.)
 
+### MongoDB installation and users
+
+The `fastdb_dev` application uses Mongo for storing broker alerts.  In `docker_server/Dockerfile`, it tries to install `mongosh`, so that should be available on both the running `tom` server and a shell server (if you start one, as the dev docker-compose environment can).  The URL for downloading the `.deb` was discovered from this web page (in case at some point in the future we want to update the version): https://www.mongodb.com/try/download/shell
+
+The connection string is something like:
+
+```
+mongodb://mongodb_admin:password@mongodb/
+```
+
+Where `password` is whatever you set it to when configuring the server, and replace the `mongodb` after the `@` with the right host address.  (`mongodb` is the right thing to use in the test docker compose environment, and in Spin deployments that Rob did, assuming you're connecting from a server elsewhere within the same spin deployment.)
+
+#### Creating the database
+
+Just as you may have to do a `python manage.py migrate` and `python manage.py createsuperuser` to update the postgres databases*, when you first install you probably need to create the mongodb `alerts` database and a couple of users.  Use `mongosh` to connect to the database and run:
+
+```
+use alerts
+db.createUser( {user: 'mongodb_alert_reader', pwd: '<password>', 'roles': [ { role: 'read', db: 'alerts' } ] } )
+db.createUser( {user: 'mongodb_alert_writer', pwd: '<password>', 'roles': [ { role: 'readWrite', db: 'alerts' } ] } )
+```
+
+where the usernames should match what you set in the `MONGO_ALERT_READER_USERNAME` and `MONGO_ALERT_WRITER_USERNAME` environment variables passed to the container, and the passwords likewise match the `*_PASSWORD` env vars.
+
+* Note: for postgres, but _not_ (as of this writing) mongo, in the test environment defined in `tests/docker-compose.yaml` the database migrations and user creation are performed automatically when you bring up the docker compose environment.
+
 <!--
 #### Cassandra Migrations
 
@@ -624,6 +652,8 @@ where you cut and paste the full ugly pod name from the output of `get all` or `
 (It's also possible to use the web interface to monitor what's going; you should know about that if you've been trained on NERSC Spin.)
 
 #### <a name="prodscratch"></a> The steps necessary to create the production TOM from scratch:
+
+NOTE, THIS IS OUT OF DATE, NEEDS TO BE UDPATED FOR THE ADDITION OF MONGODB
 
 If you're making a new deployment somewhere (rather than just recreating
 desc_tom on the Spin production server), you *will* need to edit the YAML files before applying them
