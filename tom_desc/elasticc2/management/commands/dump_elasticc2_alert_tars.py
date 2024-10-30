@@ -42,8 +42,8 @@ class Command(BaseCommand):
                              help='File with AVRO schema' )
         parser.add_argument( '-l', '--log-every', default=1000, type=int,
                              help="Log alerts saved at this interval; 0=don't log" )
-        parser.add_argument( '-n', '--num-reconstruct-processes', default=6, type=int,
-                             help="Run this many alert reconstruction subprocesses (default 6)" )
+        parser.add_argument( '-n', '--num-reconstruct-processes', default=3, type=int,
+                             help="Run this many alert reconstruction subprocesses (default 3)" )
         parser.add_argument( '-o', '--outdir', default='.', help="Directory to write output files." )
         parser.add_argument( '-g', '--gentype', type=int, default=None,
                              help="Only write objects with this gentype (default: write all)" )
@@ -120,7 +120,7 @@ class Command(BaseCommand):
             while ( alertdex < len(alerts) ) or ( len(busyprocs) > 0 ):
                 if ( options['log_every'] > 0 ) and ( alertdex >= nextlog ):
                     self.logger.info( f"Have saved {alertdex} of {len(alerts)} for MJD {mjd}" )
-                nextlog += options['log_every']
+                    nextlog += options['log_every']
 
                 # Submit alerts to any free process
                 while ( alertdex < len(alerts) ) and ( len(freeprocs) > 0 ):
