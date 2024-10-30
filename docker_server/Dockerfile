@@ -19,14 +19,13 @@ SHELL ["/bin/bash", "-c"]
 ENV TZ="UTC"
 
 RUN mkdir /tom_desc
-WORKDIR /tom_desc
 ENV HOME="/"
 
 RUN DEBIAN_FRONTEND="noninteractive" \
    apt-get update \
    && apt-get -y upgrade \
    && apt-get install -y gdal-bin python3 postgresql-client \
-                 tmux dumb-init netcat-openbsd bind9-dnsutils \
+                 tmux dumb-init netcat-openbsd bind9-dnsutils curl \
    && apt-get clean \
    && rm -rf /var/lib/apt/lists/*
 
@@ -40,6 +39,13 @@ RUN chmod -R 777 /.astropy
 
 # Sanity
 ENV LESS=-XLRi
+
+WORKDIR /usr/src
+
+# Try to install mongosh
+RUN curl -L https://downloads.mongodb.com/compass/mongodb-mongosh-shared-openssl3_2.3.3_amd64.deb -O \
+     && dpkg --install mongodb-mongosh-shared-openssl3_2.3.3_amd64.deb \
+     && rm -f mongodb-mongosh-shared-openssl3_2.3.3_amd64.deb
 
 # ======================================================================
 FROM base AS build
@@ -70,6 +76,8 @@ FROM base AS tom-server-bindmount
 COPY --from=build /venv/ /venv/
 ENV PATH=/venv/bin:$PATH
 
+WORKDIR /tom_desc
+
 # Run the TOM server
 EXPOSE 8080
 ENTRYPOINT [ "/venv/bin/gunicorn", "tom_desc.wsgi", "-b", "0.0.0.0:8080", "--access-logfile", "-", "--error-logfile", "-", "-k", "gevent", "--timeout", "300", "--workers", "2"]
@@ -92,6 +100,8 @@ ENTRYPOINT [ "/venv/bin/gunicorn", "tom_desc.wsgi", "-b", "0.0.0.0:8080", "--acc
 FROM build AS tom-server-bindmount-dev
 
 ENV PATH=/venv/bin:$PATH
+
+WORKDIR /tom_desc
 
 EXPOSE 8080
 ENTRYPOINT [ "/venv/bin/gunicorn", "tom_desc.wsgi", "-b", "0.0.0.0:8080", "--access-logfile", "-", "--error-logfile", "-", "-k", "gevent", "--timeout", "300", "--workers", "2"]
