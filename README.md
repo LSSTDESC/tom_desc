@@ -19,6 +19,7 @@ Based on the [Tom Toolkit](https://lco.global/tomtoolkit/)
     * [Declaring intent to take a spectrum](#elasticc2planspec)
     * [Removing declared intent to take a spectrum](#elasticc2removespecplan)
     * [Reporting spectrum information](#elasticc2reportspec)
+    * [Getting information about reported spectra](#elasticc2getknownspec)
 
 * [Internal Documentation](#internal-documentation)
   * [Branch Management](#branch-management)
@@ -27,13 +28,16 @@ Based on the [Tom Toolkit](https://lco.global/tomtoolkit/)
       * [For ELAsTiCC](#for-elasticc)
       * [For ELAsTiCC2](#for-elasticc2)
     * [Development and database migrations](#development-and-database-migrations)
-      * [Cassandra Migrations](#cassandra-migrations)
+    * [MongoDB installation and users]
+  * [Running Tests](#running-tests)
+    * [Starting the test environment](#starting-the-test-environemnt)
   * [Deployment at NERSC](#deployment-at-nersc)
     * [Steps for deployment](#steps-for-deployment)
       * [The steps necessarcy to create the production TOM from scratch](#prodscratch)
       * [Updating the running code](#updating-the-running code)
       * [Additional YAML files](#additional-yaml-files)
       * [Removing it all from Spin](#removing-it-all-from-spin)
+
 * [Notes for ELAsTiCC](#notes-for-elasticc)
   * [ELAsTiCC](#noteselasticc)
     * [Streaming to ZADS](#elasticcstream)
@@ -365,6 +369,29 @@ If the type is totally indeterminate from the specrum, use type 300 ("NotClassif
 
 (TODO: think about allowing mulitiple types and probabilities.)
 
+### <a name="elasticc2getknownspec"></a> Getting information about reported spectra
+
+This is to get what spectrum information has been reported.  Post to URL `elasticc2/getknownspectruminfo`.  The POST body should be a json-encoded dict with keys:
+
+* `objectid : int or list of int` — optional.  If included, only get spectrum information for this object.  (Query multiple objects by passing a list rather than a single int.)
+* `facility : str` — optional.  If included, only get spectrum information from this facility.
+* `mjd_min : float` — optional.  If included, only get information about spectra taken at this mjd or later.
+* `mjd_max : float` — optional.  If included, only get information about spectra taken at this mjd or earlier.
+* `classid : int` — optional.  If included, only get information about spectra tagged with this class id.
+* `z_min : float` — optional.  If included, only get information about spectra with this redshift or higher.
+* `z_max : float` — optional.  If included, only get information about spectra with this redshift or lower.
+* `since : str` — optional.  Format "YYYY-MM-DDThh:mm:ss" (where "Thh:mm:ss" may be omitted).  Only get spectra that were reported to the TOM on this date/time (UTC) or later.
+
+If you include no keys, you'll get information about all spectra that the database knows about, which may be overwhelming.  (The API may also time out.)
+
+The response you get back is a json-encoded dictionary, call it `resp`.  `resp['status']` should be `ok`; if it's `error`, then `resp['error']` may have an error message.  (However, if there's an error, you're more likely to get an HTTP 500 response, in which case, look at the body of the response as plain text to see if there's an error message.)  `resp['spectra']` is an array of dictionaries, one for each known spectrum that matched your criteria, ordered by mjd.  Each dictionary in this array has keys:
+
+* `objectid` — The same objectid that you've been using all along
+* `facility` — The facility that was reported with the spectrum
+* `mjd` — The MJD that the spectrum was reported to be taken at
+* `z` — The reported redshift
+* `classid` — The reported class id.
+
 ---
 
 # Internal Documentation
@@ -382,12 +409,15 @@ Make a branch `/u/{yourname}/{name}` to do dev work, which (if appropriate) may 
 
 If you want to test the TOM out, you can deploy it on your local machine.  If you're lucky, all you need to do is, within the top level of the git checkout:
 
-* Run <code>git submodule update --init --recursive</code>.  There are a number of git submodules that have the standard TOM code.  By default, when you clone, git doesn't clone submodules, so do this in order to make sure all that stuff is there.  (Alternative, if instead of just <code>git clone...</code> you did <code>git clone --recurse-submodules ...</code>, then you've already taken care of this step.)  If you do a <code>git pull</code> later, you either need to do <code>git pull --recurse-submodules</code>, or do <code>git submodule --update --recursive</code> after your pull.</li>
+* Run <code>git submodule update --init --recursive</code>.  There are a number of git submodules that have the standard TOM code.  By default, when you clone, git doesn't clone submodules, so do this in order to make sure all that stuff is there.  (Alternative, if instead of just <code>git clone...</code> you did <code>git clone --recurse-submodules ...</code>, then you've already taken care of this step.)  If you do a <code>git pull</code> later, you either need to do <code>git pull --recurse-submodules</code>, or do <code>git submodule update --recursive</code> after your pull.</li>
 
-* Run <code>docker compose up -d tom</code>.  This will use the <code>docker-compose.yml</code> file to either build or pull three images (the web server, the postgres server, and the cassandra server), and create three containers.  It will also create docker volumes named "tomdbdata" and "tomcassandradata" where postgres and cassandra respectively will store their contents, so that you can persist the databases from one run of the container to the next.</li>
+* (Optional) Run <code>docker compose build</code>.  This will be done automatically as part of the next step.  However, you may want to run it manually here, as this step will take a while the first time you do it.  (Once the docker images are built, they'll be cached on your machine.)
 
-* Database migrations are applied automatically as part of the docker compose setup, but you need to manually create the TOM superuser account so that you have something to log into.  The first time you run it for a given postgres volume, once the containers are up you need to run a shell on the server container with <code>docker compose exec -it tom /bin/bash</code>, and then run the command:
-  - <code>python manage.py createsuperuser</code> (and answer the prompts)
+* Run <code>docker compose up -d tom</code>.  This will use the <code>docker-compose.yml</code> file to either build or pull a few docker images, and create two containers: one running the postgres server, one running the tom server.  (The postgres server has a very insecure password, but it's also not directly accessible from outside the docker environment).  It will also create a docker volume named "tomdbdata" where postgres stores its contents, so that you can persist the databases from one run of the container to the next.</li>
+
+* Database migrations are applied automatically as part of the docker compose setup, but you need to manually create the TOM superuser account so that you have something to log into. The first time you run it for a given postgres volume, once the containers are up you need to run a shell on the server container with <code>docker compose exec -it tom /bin/bash</code>, and then run the command:
+
+  * <code>python manage.py createsuperuser</code> (and answer the prompts)
 
 * If you are using a new postgres data volume (i.e. you're not reusing one from a previous run of docker compose), you need to create the "Public" group.  You need to do this before adding any users.  If all is well, any users added thereafter will automatically be added to this group.  Some of the DESC specific code will break if this group does not exist.  (The TOM documentation seems to imply that this group should have been created automatically, but that doesn't seem to be the case.)  To do this:
 ``` python manage.py shell
@@ -397,8 +427,26 @@ If you want to test the TOM out, you can deploy it on your local machine.  If yo
 >>> exit()
 ```
 
-At this point, you should be able to connect to your running TOM at `localhost:8080`.
+At this point, you should be able to connect to your running TOM at `localhost:8080`.  It will be running the code that you have checked out in this directory.  If you edit the code, and want to have the running server reflect those edits, run the following:
+```
+   docker compose exec -it tom /bin/bash
+   python manage.py check
+   kill -HUP 1
+```
 
+The first command gets you a shell on the running tom web server.  The second one does a quick check to make sure that you don't have any python compilation errors; if you do, fix them and rerun the second command until it's happy.  The third command restarts the web server; if all is well, it doesn't actually kill anything.  (The unix command `kill` really means "send a signal"; it's called "kill" because by default, it sends the "interupt" signal, which usually (but not always) causes processes to exit.  The gunicorn web server, which the container is running in process 1, listens for the HUP signal, and when it receives it, it reload all running web code.)  If there are any python compilation errors, the `kill` command will in fact kill your server, and you won't be able to start it back up until you fix your compilation errors.  To get out of the shell, just run `exit`.
+
+If you want to run django management commands manually, or if you want to poke directly at the postgres database server, you can start up a shell server within the docker environment by running:
+```
+   docker compose up -d shell
+```
+
+Once it's up, get a shell on it by running
+```
+   docker compose exec -it shell /bin/bash
+```
+
+Within that shell, you can connect to the postgres server at hostname `postgres`, database `desc_tom`, user `postgres`, password `fragile`.
 
 If you ever run a server that exposes its interface to the outside web, you probably want to edit your local version of the file `secrets/django_secret_key`.  Don't commit anything sensitive to git, and especially don't upload it to github!  (There *are* postgres passwords in the github archive, which would seem to voilate this warning.  The reason we're not worried about that is that both in the docker compose file, and as the server is deployed in production, the postgres server is not directly accessible from outside, but only from within the docker environment (or, for production, the Spin namespace). Of course, it would be better to add the additional layer of security of obfuscating those passwords, but, whatever.)
 
@@ -407,7 +455,7 @@ To shut down all the containers you started, just run
 docker compose down -v
 ```
 
-If you include the `-v` at the end of that command, it will also destroy the Postgres and Cassandra data volumes you created.  If you *don't* add `-v`, next time you do `docker compose up -d tom`, the information in the database you had from last time around will still be there.
+If you include the `-v` at the end of that command, it will also destroy the Postgres data volume you created.  If you *don't* add `-v`, next time you do `docker compose up -d tom`, the information in the database you had from last time around will still be there.
 
 ### Populating the database
 
@@ -452,23 +500,24 @@ The 10, 100, or 1000 objects were chosen randomly.  As of this writing (2023-11-
 
 Save the file you download into the `tom_desc/admin_tools` subdirectory if your git checkout.  (This directory already exists.)
 
-For various reasons, the docker image for the Tom server is based on an older version (Chimaera) of the Linux distribution (Devuan).  The postgres image is based on Daedalus, which as of this writing is the current stable version of Devuan.  The restoration process requires `pg_restore` to have a version that's compatible with the postgres server, and for that reason you need to run a special shell just for this restoration process.  Start that shell with
+Start that shell with
 ```
-docker compose up -d daedalus-shell
+docker compose up -d shell
 ```
 and then go into the shell with
 ```
-docker compose exec -it daedalus-shell /bin/bash
+docker compose exec -it shell /bin/bash
 ```
-cd into the directory `admin_tools` and run:
+cd into the directory `admin_tools` and run the `import_elasticc2_subset_dump.py` script as follows:
 ```
+cd admin_tools
 python import_elasticc2_subset_dump.py -f <filename>
 ```
 where `<filename>` is the .sql file that you downloaded.
 
 If all is well, when you're done run
 ```
-docker compose down daedalus-shell
+docker compose down shell
 ```
 
 ### Development and database migrations
@@ -486,9 +535,88 @@ If you change any database schema, you have to get a shell on the server's conta
 
 BE CAREFUL ABOUT DATABASE MIGRATIONS.  For throw-away development environments, it's fine.  But, the nature of database migrations is such that forks in database schema history are potentially a lot more painful to deal with than forks in source code (where git and text merge can usually handle it without _too_ much pain).  If you're going to make migrations that you want to have pulled into the main branch, coordinate with the other people working on the DESC Tom.  (As of this writing, that's me, Rob Knop.)
 
+### MongoDB installation and users
+
+The `fastdb_dev` application uses Mongo for storing broker alerts.  In `docker_server/Dockerfile`, it tries to install `mongosh`, so that should be available on both the running `tom` server and a shell server (if you start one, as the dev docker-compose environment can).  The URL for downloading the `.deb` was discovered from this web page (in case at some point in the future we want to update the version): https://www.mongodb.com/try/download/shell
+
+The connection string is something like:
+
+```
+mongodb://mongodb_admin:password@mongodb/
+```
+
+Where `password` is whatever you set it to when configuring the server, and replace the `mongodb` after the `@` with the right host address.  (`mongodb` is the right thing to use in the test docker compose environment, and in Spin deployments that Rob did, assuming you're connecting from a server elsewhere within the same spin deployment.)
+
+#### Creating the database
+
+Just as you may have to do a `python manage.py migrate` and `python manage.py createsuperuser` to update the postgres databases*, when you first install you probably need to create the mongodb `alerts` database and a couple of users.  Use `mongosh` to connect to the database and run:
+
+```
+use alerts
+db.createUser( {user: 'mongodb_alert_reader', pwd: '<password>', 'roles': [ { role: 'read', db: 'alerts' } ] } )
+db.createUser( {user: 'mongodb_alert_writer', pwd: '<password>', 'roles': [ { role: 'readWrite', db: 'alerts' } ] } )
+```
+
+where the usernames should match what you set in the `MONGO_ALERT_READER_USERNAME` and `MONGO_ALERT_WRITER_USERNAME` environment variables passed to the container, and the passwords likewise match the `*_PASSWORD` env vars.
+
+* Note: for postgres, but _not_ (as of this writing) mongo, in the test environment defined in `tests/docker-compose.yaml` the database migrations and user creation are performed automatically when you bring up the docker compose environment.
+
+<!--
 #### Cassandra Migrations
 
 `pgmakemigrations` will create a migration file, but it doesn't seem to do anything.  You have to run `python manage.py sync_cassandra` to update cassandra schema.  This is scary; it doesn't seem to actually handle reversable migrations.
+-->
+
+
+## Running Tests
+
+### Starting the test environment
+
+The test environment is in the `tests` subdirectory beneath the top of the git checkout.  There is a file here `elasticc2_alert_test_data.tar.bz2` that needs to be unpacked for the tests to run succesfully.  Unpack it with `tar xf elasticc2_alert_test_data.tar.bz2`; that will create subdirectory `elasticc2_alert_test_data`.
+
+In the `tests` subdictory, build all the necessary docker images with
+```
+   docker compose build
+```
+
+Then, run
+```
+   docker compose up -d shell
+```
+That will bring up several docker containers, including a postgres server, a kafka zookeeper, a kafka server, a fake broker server, the tom server, and a shell server.  You can see what's running with:
+```
+   docker compose ps
+```
+Get a shell on the shell server with:
+```
+   docker compose exec -it shell /bin/bash
+```
+
+When done, close down the test environment (from the host, not from within the shell server!) with:
+```
+   docker compose down -v
+```
+
+### Running tests
+
+Inside the docker shell server, the tests subdirectory can be found at `/tests`.
+
+### Diagnosing test failures
+
+Sometimes, if tests fail, the error messages are not going to be on the machine running the tests.  Perusing the log files of the other servers might help.  On the host machine (i.e. not inside one of the running containers), in the `tests` sub directory, try running one or more of
+```
+   docker compose logs fakebroker
+   docker compose logs brokerpoll
+   docker compose logs kafka-zookeeper
+   docker compose logs kafka-server
+   docker compose logs postgres
+   docker compose logs tom
+```
+Some of these log files will be extremely verbose, so you will probably want to pipe them into `more` or `less`.
+
+### Non-repeatable tests
+
+The tests don't all fully clean up after themselves; in particular, at least `test_alertcycle.py` will leave behind state even after the tests exist.  The primary reason is that the kafka servers maintain a lot of state, and the tests don't directly control what's on the kafka servers.  As such, if you run some tests a second time within the same environment, they will fail even if they passed the first time.  While it would be possible to set things up so that they do clean up after themselves, we haven't bothered.  The solution is just to take down and bring back up your docker compose environment when you want to restart one of these tests.
 
 
 ## Deployment at NERSC
@@ -524,6 +652,8 @@ where you cut and paste the full ugly pod name from the output of `get all` or `
 (It's also possible to use the web interface to monitor what's going; you should know about that if you've been trained on NERSC Spin.)
 
 #### <a name="prodscratch"></a> The steps necessary to create the production TOM from scratch:
+
+NOTE, THIS IS OUT OF DATE, NEEDS TO BE UDPATED FOR THE ADDITION OF MONGODB
 
 If you're making a new deployment somewhere (rather than just recreating
 desc_tom on the Spin production server), you *will* need to edit the YAML files before applying them

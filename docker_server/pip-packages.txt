@@ -1,48 +1,59 @@
 # These were extracted from the requires_dist
 # from the metadata of tomtoolkit on PyPI
+# The TOM Toolkit itself is not installed
+#   from pip, but is rather included as
+#   a set of git submodules.
 
-astroquery>=0.4.2
+Markdown~=3.4
 astroplan~=0.8
 astropy>=5.0
+astroquery>=0.4.2
 beautifulsoup4~=4.9
-django<5.0,>=3.1
-djangorestframework~=3.12
 django-bootstrap4<23,>=3
+django-cassandra-engine~=1.8.0
 django-contrib-comments~=2.0
 django-crispy-forms~=1.11
 django-extensions~=3.1
 django-filter<23,>=21
 django-gravatar2~=1.4
 django-guardian~=2.3
-django-cassandra-engine~=1.8.0
+django<5.0,>=3.1
+djangorestframework~=3.12
+factory-boy~=3.2.1
 fits2image>=0.4.2
-Markdown~=3.4
 numpy~=1.20
 pillow~=9.2
 plotly~=5.0
 python-dateutil~=2.8
+recommonmark~=0.7
 requests~=2.25
 specutils~=1.8
-recommonmark~=0.7
 sphinx<6,>=4
 factory-boy~=3.2.1
 pymongo
 
-# 
+#  More things we need
 
-django-postgres-extra~=2.0.8
-gunicorn[gevent]==20.0.4
-psycopg2===2.9.6
+avro==1.12.0
+confluent_kafka==2.5.3
 cqlsh
-confluent_kafka==1.9.2
-kafka-python
-avro==1.10.2
-fastavro==1.8.4
+django-postgres-extra~=2.0.8
+fastavro==1.9.7
+gunicorn[gevent]==23.0.0
 healpy>=1.14
-scikit-learn
-seaborn
-tables
+kafka-python3~=3.0.0
+light-curve~=0.9.5
+psycopg2~=2.9.9
+pytest~=8.3.3
+pytest-timestamper~=0.0.10
+pytz~=2024.2
+scikit-learn~=1.5.2
+seaborn~=0.13.2
+tables~=3.10.1
 whitenoise~=5.2
+
+# Broker clients
+# Note that we apply a patch to pittgoogle-client (see Dockerfile)
 
 # antares-client==1.4.0
 fink-client~=2.0
@@ -51,22 +62,3 @@ hop-client==0.8.0
 # fink-client~=2.0
 # hop-client==0.5.0
 pittgoogle-client==0.2.0
-
-#
-# I'm including all of these as git submodules
-#  now rather than pulling them from PyPI,
-#  as I am going to modify some things in tom_base
-#
-# tomtoolkit>=2.6.5
-# tom-antares
-# tom-fink
-# tom-alerts-dash[scimma]>=0.1.2
-
-#
-# # Seems to be needed by tom-pittgoogle
-# 
-# tom-pittgoogle==0.1.11
-# google-api-core
-# google-cloud-pubsub
-# google-cloud-logging
-# google-auth-oauthlib

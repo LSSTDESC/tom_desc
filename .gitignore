@@ -149,5 +149,10 @@ fastdb_get_alerts/test*.py
 tom_desc/fastdb_dev/management/commands/test.py
 
 # Untarred test data
-
 tests/elasticc2_alert_test_data/
+
+# Typcal locations of database dumps for devs using docker compose env
+tom_desc/admin_tools/elasticc2_dump_10obj.sql
+tom_desc/admin_tools/elasticc2_dump_100obj.sql
+tom_desc/admin_tools/elasticc2_dump_1000obj.sql
+tom_desc/elasticc_subset.sql

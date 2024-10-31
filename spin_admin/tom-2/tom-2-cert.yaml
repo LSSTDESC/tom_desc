@@ -1,0 +1,9 @@
+apiVersion: v1
+data:
+  tls.crt: PUT THE RIGHT THING HERE
+  tls.key: PUT THE RIGHT THING HERE
+kind: Secret
+metadata:
+  name: tom-2-cert
+  namespace: desc-tom-2
+type: kubernetes.io/tls

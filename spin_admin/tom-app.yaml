@@ -64,7 +64,7 @@ spec:
           value: /secrets/pitt_google_auth_key.json
         - name: GOOGLE_CLOUD_PROJECT
           value: elasticc-challenge
-        image: registry.nersc.gov/m1727/raknop/tom_desc_bindmount:chimaera
+        image: registry.nersc.gov/m1727/raknop/tom_server_bindmount
         imagePullPolicy: Always
         name: tom-app
         resources: {}
@@ -88,6 +88,8 @@ spec:
           name: tom-secrets
         - mountPath: /tom_desc
           name: tom-deployment
+        - mountPath: /code
+          name: tom-checkout
         - mountPath: /query_results
           name: tom-query-results
         - mountPath: /sample
@@ -107,6 +109,10 @@ spec:
           defaultMode: 256
           optional: false
           secretName: tom-secrets
+      - hostPath:
+          path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/production/tom_desc
+          type: Directory
+        name: tom-checkout
       - hostPath:
           path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/production/tom_desc/tom_desc
           type: Directory

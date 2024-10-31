@@ -1,11 +1,10 @@
-version: "3.8"
 services:
   tom:
-    image: registry.nersc.gov/m1727/raknop/tom_desc_extcode:chimaera
+    image: registry.nersc.gov/m1727/raknop/tom_desc_bindmount
     build:
       context: ./
       dockerfile: docker_server/Dockerfile
-      target: tom-server-extcode
+      target: tom-server-bindmount
     ports:
       - "8080:8080"
     depends_on:
@@ -29,12 +28,12 @@ services:
 #       - CASSANDRA_PASSWORD=cassandra
     user: ${USERID:-0}:${GROUPID:-0}
 
-  daedalus-shell:
-    image: registry.nersc.gov/m1727/raknop/tom_desc_extcode:daedalus
+  shell:
+    image: registry.nersc.gov/m1727/raknop/tom_desc_bindmount_dev
     build:
       context: ./
-      dockerfile: docker_server/Dockerfile.daedalus
-      target: tom-server-extcode
+      dockerfile: docker_server/Dockerfile
+      target: tom-server-bindmount-dev
     depends_on:
       migratedb:
         condition: service_completed_successfully
@@ -58,11 +57,11 @@ services:
     entrypoint: [ "tail", "-f", "/etc/issue" ]
 
   migratedb:
-    image: registry.nersc.gov/m1727/raknop/tom_desc_extcode:chimaera
+    image: registry.nersc.gov/m1727/raknop/tom_desc_bindmount
     build:
       context: ./
       dockerfile: docker_server/Dockerfile
-      target: tom-server-extcode
+      target: tom-server-bindmount
     depends_on:
       postgres:
         condition: service_healthy
@@ -92,7 +91,7 @@ services:
 #         python manage.py sync_cassandra
 
   postgres:
-    image: registry.nersc.gov/m1727/raknop/tom-postgres:daedalus
+    image: registry.nersc.gov/m1727/raknop/tom-postgres
     build:
       context: ./docker_postgres
       dockerfile: Dockerfile
@@ -121,7 +120,7 @@ services:
   kafka-zookeeper:
     image: registry.nersc.gov/m1727/raknop/kafka
     build:
-      context: ../docker_kafka
+      context: docker_kafka
     healthcheck:
       test: netcat -w 1 localhost 2181 || exit 1
       interval: 5s
@@ -135,7 +134,7 @@ services:
          condition: service_healthy
     image: registry.nersc.gov/m1727/raknop/kafka
     build:
-      context: ../docker_kafka
+      context: docker_kafka
     healthcheck:
       test: netcat -w 1 localhost 9092 || exit 1
       interval: 5s

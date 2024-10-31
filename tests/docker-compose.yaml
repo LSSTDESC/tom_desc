@@ -1,5 +1,3 @@
-version: "3.3"
-
 services:
   kafka-zookeeper:
     image: registry.nersc.gov/m1727/raknop/kafka
@@ -36,7 +34,7 @@ services:
       dockerfile: Dockerfile.fakebroker
 
   postgres:
-    image: registry.nersc.gov/m1727/raknop/tom-postgres:daedalus
+    image: registry.nersc.gov/m1727/raknop/tom-postgres
     build:
       context: ../docker_postgres
       target: tom-postgres
@@ -62,7 +60,7 @@ services:
         condition: service_healthy
       # cassandra:
       #   condition: service_healthy
-    image: registry.nersc.gov/m1727/raknop/tom_desc_bindmount:daedalus
+    image: registry.nersc.gov/m1727/raknop/tom_desc_bindmount
     build:
       context: ../
       dockerfile: docker_server/Dockerfile
@@ -97,11 +95,7 @@ services:
     depends_on:
       createdb:
         condition: service_completed_successfully
-    # Want to move to daedalus image.  However, in production right
-    #   now, we use the chimaera image, because of some weird
-    #   incompatibility with kafka libraries and what's running
-    #   on ANTARES.
-    image: registry.nersc.gov/m1727/raknop/tom_desc_bindmount:chimaera
+    image: registry.nersc.gov/m1727/raknop/tom_desc_bindmount
     build:
       context: ../
       dockerfile: docker_server/Dockerfile
@@ -131,11 +125,7 @@ services:
         condition: service_started
       fakebroker:
         condition: service_started
-    # Want to move to daedalus image.  However, in production right
-    #   now, we use the chimaera image, because of some weird
-    #   incompatibility with kafka libraries and what's running
-    #   on ANTARES.
-    image: registry.nersc.gov/m1727/raknop/tom_desc_bindmount:chimaera
+    image: registry.nersc.gov/m1727/raknop/tom_desc_bindmount
     build:
       context: ../
       dockerfile: docker_server/Dockerfile
@@ -155,7 +145,7 @@ services:
       DB_PORT: 5432
     entrypoint: [ "python", "manage.py", "brokerpoll2", "--do-test" ]
 
-  shellhost:
+  shell:
     depends_on:
       postgres:
         condition: service_healthy
@@ -167,11 +157,11 @@ services:
        condition: service_started
       brokerpoll:
         condition: service_started
-    image: registry.nersc.gov/m1727/raknop/tom_desc_extcode:daedalus
+    image: registry.nersc.gov/m1727/raknop/tom_server_bindmount_dev
     build:
       context: ../
-      dockerfile: docker_server/Dockerfile.daedalus
-      target: tom-server-extcode
+      dockerfile: docker_server/Dockerfile
+      target: tom-server-bindmount-dev
     volumes:
       - type: bind
         source: ../secrets
@@ -208,11 +198,11 @@ services:
   #       condition: service_started
   #     brokerpoll:
   #       condition: service_started
-  #   image: registry.nersc.gov/m1727/raknop/tom_desc_extcode:daedalus
+  #   image: registry.nersc.gov/m1727/raknop/tom_server_bindmount_dev
   #   build:
   #     context: ../
-  #     dockerfile: docker_server/Dockerfile.daedalus
-  #     target: tom-server-extcode
+  #     dockerfile: docker_server/Dockerfile
+  #     target: tom-server-bindmount-dev
   #   volumes:
   #     - type: bind
   #       source: ../secrets

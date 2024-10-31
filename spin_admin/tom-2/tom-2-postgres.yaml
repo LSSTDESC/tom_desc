@@ -42,7 +42,7 @@ spec:
       - env:
         - name: POSTGRES_DATA_DIR
           value: /var/lib/postgresql/data
-        image: registry.nersc.gov/m1727/raknop/tom-postgres:daedalus
+        image: registry.nersc.gov/m1727/raknop/tom_postgres
         imagePullPolicy: Always
         name: tom-2-postgres
         resources: {}

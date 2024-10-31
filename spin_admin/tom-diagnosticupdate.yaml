@@ -52,7 +52,7 @@ spec:
               value: fragile
             - name: DB_USER
               value: postgres
-            image: rknop/tom_desc_bindmount:chimaera
+            image: registry.nersc.gov/m1727/raknop/tom_server_bindmount
             imagePullPolicy: Always
             name: tom-desc-diagnosticupdate
             resources: {}
