@@ -1,18 +1,11 @@
 import sys
 import os
-import io
-import re
 import pathlib
 import time
-import datetime
 import logging
-import traceback
 import signal
-import json
 import multiprocessing
-import fastavro
-import confluent_kafka
-from concurrent.futures import ThreadPoolExecutor  # for pittgoogle
+
 import django.db
 from django.core.management.base import BaseCommand, CommandError
 import elasticc2.models
@@ -95,11 +88,12 @@ class Command(BaseCommand):
                        lambda sig, stack: self.logger.warning( f"{brokerclass.__name__} ignoring SIGUSR1" ) )
         consumer = brokerclass( pipe=pipe,
                                 postgres_brokermessage_model=elasticc2.models.BrokerMessage,
+                                loggername_prefix='elasticc2_',
                                 **options )
         consumer.poll()
 
     def handle( self, *args, **options ):
-        self.logger.info( "******** brokerpoll starting ***********" )
+        self.logger.info( "******** elasticc2 brokerpoll starting ***********" )
 
         self.mustdie = False
         signal.signal( signal.SIGTERM, lambda sig, stack: self.sigterm( "TERM" ) )
@@ -122,7 +116,7 @@ class Command(BaseCommand):
         if len( brokerstodo ) == 0:
             self.logger.error( "Must give at least one broker to listen to." )
             raise RuntimeError( "No brokers given to listen to." )
-            
+
         # Launch a process for each broker that will poll that broker indefinitely
 
         # We want to make sure that django doesn't send copies of database sessions
@@ -132,7 +126,7 @@ class Command(BaseCommand):
         # (They already open mongo connections as necessary, and django doesn't muck
         # about with mongo, so we don't have to do things for that.)
         django.db.connections.close_all()
-        
+
         brokers = {}
         for name,brokerclass in brokerstodo.items():
             self.logger.info( f"Launching thread for {name}" )

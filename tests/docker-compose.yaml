@@ -61,6 +61,12 @@ services:
       timeout: 10s
       retries: 5
 
+  # TODO: make sure this one fails if any of the commands it runs inside
+  #   the bash shell below fails.  (That way, the rest of the compose
+  #   environment won't come up if it depends on this having
+  #   completed_successfully.)  (In particular, right now,
+  #   at least if the manage.py migrate fails, it doesn't cause
+  #   the container think it failed to complete successfully.)
   createdb:
     depends_on:
       postgres:
@@ -92,6 +98,13 @@ services:
       DB_USER: postgres
       DB_PASS: fragile
       DB_PORT: 5432
+      MONGOHOST: mongodb
+      MONGODB_ADMIN: mongodb_admin
+      MONGODB_ADMIN_PASSWORD: fragile
+      MONGODB_ALERT_WRITER: mongodb_alert_writer
+      MONGODB_ALERT_WRITER_PASSWORD: writer
+      MONGODB_ALERT_READER: mongdb_alert_reader
+      MONGODB_ALERT_READER_PASSWORD: reader
     entrypoint:
       - /bin/bash
       - -c
@@ -100,6 +113,7 @@ services:
         python tom_desc/manage.py create_test_superuser
         python tom_desc/manage.py create_test_apibroker
         python /tests/create_postgres_ro_user.py
+        python /tests/setup_mongodb.py
 
 
   tom:
@@ -170,7 +184,47 @@ services:
       DB_USER: postgres
       DB_PASS: fragile
       DB_PORT: 5432
-    entrypoint: [ "python", "manage.py", "brokerpoll2", "--do-test" ]
+    entrypoint: [ "python", "manage.py", "brokerpoll2", "--do-test", "--grouptag", "elasticc2" ]
+
+
+  brokerpoll_fastdb_dev:
+    depends_on:
+      createdb:
+        condition: service_completed_successfully
+      tom:
+        condition: service_started
+      fakebroker:
+        condition: service_started
+    image: registry.nersc.gov/m1727/raknop/tom_desc_bindmount
+    build:
+      context: ../
+      dockerfile: docker_server/Dockerfile
+      target: tom-server-bindmount
+    volumes:
+      - type: bind
+        source: ../secrets
+        target: /secrets
+      - type: bind
+        source: ../tom_desc
+        target: /tom_desc
+      - type: volume
+        source: logs
+        target: /logs
+    environment:
+      LOGDIR: /logs
+      MONGOHOST: mongodb
+      MONGODB_ADMIN: mongodb_admin
+      MONGODB_ADMIN_PASSWORD: fragile
+      MONGODB_ALERT_WRITER: mongodb_alert_writer
+      MONGODB_ALERT_WRITER_PASSWORD: writer
+      MONGODB_ALERT_READER: mongdb_alert_reader
+      MONGODB_ALERT_READER_PASSWORD: reader
+      DB_NAME: tom_desc
+      DB_HOST: postgres
+      DB_USER: postgres
+      DB_PASS: fragile
+      DB_PORT: 5432
+    entrypoint: [ "python", "manage.py", "fastdb_dev_brokerpoll", "--do-test", "--grouptag", "fastdb_dev" ]
 
 
   # Thought required: want to make this dependent on
@@ -190,6 +244,8 @@ services:
       fakebroker:
         condition: service_started
       brokerpoll:
+        condition: service_started
+      brokerpoll_fastdb_dev:
         condition: service_started
     image: registry.nersc.gov/m1727/raknop/tom_server_bindmount_dev
     build:

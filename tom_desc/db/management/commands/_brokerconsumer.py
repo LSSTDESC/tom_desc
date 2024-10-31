@@ -15,6 +15,7 @@ from pymongo import MongoClient
 # TODO : uncomment this next line
 #   and the whole PittGoogleBroker class
 #   when pittgoogle works again
+# from concurrent.futures import ThreadPoolExecutor  # for pittgoogle
 # import pittgoogle
 
 _rundir = pathlib.Path(__file__).parent
@@ -37,10 +38,11 @@ class BrokerConsumer:
     Currently may assume that broker messages are coming in the elasticc2 v0.91 schema.
 
     """
+    _brokername = 'unknown_broker'
 
     def __init__( self, server, groupid, topics=None, updatetopics=False,
                   schemaless=True, reset=False, extraconfig={},
-                  schemafile=None, pipe=None, loggername="BROKER",
+                  schemafile=None, pipe=None, loggername="BROKER", loggername_prefix='',
                   postgres_brokermessage_model=None, mongodb_dbname=None, mongodb_collection=None,
                   **kwargs ):
 
@@ -48,15 +50,15 @@ class BrokerConsumer:
         self.logger.propagate = False
         logout = logging.StreamHandler( sys.stderr )
         self.logger.addHandler( logout )
-        formatter = logging.Formatter( f'[%(asctime)s - {loggername} - %(levelname)s] - %(message)s',
+        formatter = logging.Formatter( f'[%(asctime)s - {loggername_prefix}{loggername} - %(levelname)s] - %(message)s',
                                        datefmt='%Y-%m-%d %H:%M:%S' )
         logout.setFormatter( formatter )
         # self.logger.setLevel( logging.INFO )
         self.logger.setLevel( logging.DEBUG )
 
-        self.countlogger = logging.getLogger( f"countlogger_{loggername}" )
+        self.countlogger = logging.getLogger( f"countlogger_{loggername_prefix}{loggername}" )
         self.countlogger.propagate = False
-        _countlogout = logging.FileHandler( _logdir / f"brokerpoll_counts_{loggername}.log" )
+        _countlogout = logging.FileHandler( _logdir / f"brokerpoll_counts_{loggername_prefix}{loggername}.log" )
         _countformatter = logging.Formatter( f'[%(asctime)s - %(levelname)s] - %(message)s',
                                              datefmt='%Y-%m-%d %H:%M:%S' )
         _countlogout.setFormatter( _countformatter )
@@ -100,6 +102,11 @@ class BrokerConsumer:
         self.mongodb_collection = mongodb_collection
         if ( self.mongodb_dbname is None ) != ( self.mongodb_collection is None ):
             raise ValueError( "Must give either both or neither of mongodb_name and mongodb_collection" )
+
+        if ( ( self.postgres_brokermessage_model is None ) and
+             ( self.mongodb_dbname is None ) ):
+            raise ValueError( "Both postgres_brokermessage_model and mongodb_dbname are None; "
+                              "nowhere to save consumed messages!" )
 
         if self.postgres_brokermessage_model is not None:
             self.logger.info( f"Writing broker messages to postgres model "
@@ -211,8 +218,10 @@ class BrokerConsumer:
     def mongodb_store(self, messagebatch=None):
         if messagebatch is None:
             return 0
-        client = MongoClient( f"mongodb://{self.mongousername}:{self.mongopassword}@{self.mongohost}:27017/"
-                              f"?authSource={self.mongodb_dbname}" )
+        connstr = ( f"mongodb://{self.mongousername}:{self.mongopassword}@{self.mongohost}:27017/"
+                    f"?authSource={self.mongodb_dbname}" )
+        self.logger.debug( f"mongodb connection string {connstr}" )
+        client = MongoClient( connstr )
         db = getattr( client, self.mongodb_dbname )
         collection = db[ self.mongodb_collection ]
         results = collection.insert_many(messagebatch)
@@ -270,6 +279,8 @@ class BrokerConsumer:
 # I should replace this and the next one with a generic noauth consumer
 
 class BrahmsConsumer(BrokerConsumer):
+    _brokername = 'brahms'
+
     def __init__( self, grouptag=None, brahms_topic=None, loggername="BRAHMS", **kwargs ):
         if brahms_topic is None:
             raise RuntimeError( "Must specify brahms topic" )
@@ -283,6 +294,8 @@ class BrahmsConsumer(BrokerConsumer):
 # This consumer is used in the tests
 
 class TestConsumer(BrokerConsumer):
+    _brokername = 'fakebroker'
+
     def __init__( self, grouptag=None, test_topic=None, loggername="TEST", **kwargs ):
         if test_topic is None:
             raise RuntimeError( "Must specify test topic" )
@@ -296,6 +309,8 @@ class TestConsumer(BrokerConsumer):
 # ======================================================================
 
 class AntaresConsumer(BrokerConsumer):
+    _brokername = 'antares'
+
     def __init__( self, grouptag=None,
                   usernamefile='/secrets/antares_username', passwdfile='/secrets/antares_passwd',
                   loggername="ANTARES", antares_topic='elasticc2-st1-ddf-full', **kwargs ):
@@ -327,6 +342,8 @@ class AntaresConsumer(BrokerConsumer):
 # ======================================================================
 
 class FinkConsumer(BrokerConsumer):
+    _brokername = 'fink'
+
     def __init__( self, grouptag=None, loggername="FINK", fink_topic='fink_elasticc-2022fall', **kwargs ):
         server = "134.158.74.95:24499"
         groupid = "elasticc-lbnl" + ( "" if grouptag is None else "-" + grouptag )
@@ -340,6 +357,8 @@ class FinkConsumer(BrokerConsumer):
 # ======================================================================
 
 class AlerceConsumer(BrokerConsumer):
+    _brokername = 'alerce'
+
     def __init__( self,
                   grouptag=None,
                   usernamefile='/secrets/alerce_username',
@@ -386,6 +405,8 @@ class AlerceConsumer(BrokerConsumer):
 # =====================================================================
 
 # class PittGoogleBroker(BrokerConsumer):
+#     _brokername = 'pitt-google'
+#
 #     def __init__(
 #         self,
 #         pitt_topic: str,
