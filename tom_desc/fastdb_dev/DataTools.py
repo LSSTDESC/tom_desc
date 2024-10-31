@@ -1,6 +1,7 @@
 import datetime
 import json
 import os
+import pathlib
 import psycopg2
 from psycopg2.extras import execute_batch
 from time import sleep
@@ -47,7 +48,7 @@ import uuid
 from rest_framework.settings import api_settings
 
 _logger = logging.getLogger("fastdb_queries")
-_logout = logging.FileHandler("/code/logs/queries.log")
+_logout = logging.FileHandler( pathlib.Path( os.getenv('LOGDIR'), "/logs" ) / "fastdb_queries.log" )
 _logger.addHandler( _logout )
 _formatter = logging.Formatter( f'[%(asctime)s - %(levelname)s] - %(message)s',
                                     datefmt='%Y-%m-%d %H:%M:%S' )

@@ -62,7 +62,11 @@ class Command(BaseCommand):
         mongo_username = urllib.parse.quote_plus(os.environ['MONGODB_ALERT_WRITER'])
         mongo_password = urllib.parse.quote_plus(os.environ['MONGODB_ALERT_WRITER_PASSWORD'])
 
-        client = MongoClient("mongodb://%s:%s@fastdbdev-mongodb:27017/?authSource=alerts" %(mongo_username,mongo_password) )    
+        # mongodb running on port 27017 on host $MONGOHOST; default
+        #   $MONGOHOST to fastdbdev-mongodb for backwards compatibility
+        #   with previous installs
+        mongohost = os.getenv( 'MONGOHOST', 'fastdbdev-mongodb' )
+        client = MongoClient(f"mongodb://{mongo_username}:{mongo_password}@{mongohost}:27017/?authSource=alerts")
         self.db = client.alerts
         
         # Connect to the PPDB

@@ -1,54 +1,43 @@
+from pymongo import MongoClient
 import sys
+import pathlib
+import logging
+import fastavro
+import json
+import multiprocessing
+import signal
+import time
+import confluent_kafka
+import io
 import os
-import django.db
-import django_cassandra_engine
+import re
+import traceback
+import datetime
+import collections
+import atexit
+import argparse
+import urllib
 
-class Command(BaseCommand):
-    help = 'Create Cassandra database and keyspace'
 
-    def handle( self, *args, **options ):
-        cursor = django.db.connections['cassandra'].cursor()
-        cursor.execute( 
 
-    def __init__( self, *args, **kwargs ):
-        super().__init__( *args, **kwargs )
+class Broker(object):
 
-        # Make sure the log directory exists
-
-        logdir = _rundir.parent.parent.parent / "logs"
-        if logdir.exists():
-            if not logdir.is_dir():
-                raise RuntimeError( "{logdir} exists but is not a directory!" )
-        else:
-            logdir.mkdir( parents=True )
+    def __init__( self, username=None, password=None, *args, **options ):
 
         self.logger = logging.getLogger( "brokerpoll_baselogger" )
         self.logger.propagate = False
-        logout = logging.FileHandler( _rundir.parent.parent.parent / f"logs/brokerpoll.log" )
+        logout = logging.FileHandler( _logdir / f"logs/brokerpoll.log" )
         self.logger.addHandler( logout )
         formatter = logging.Formatter( f'[%(asctime)s - brokerpoll - %(levelname)s] - %(message)s',
                                        datefmt='%Y-%m-%d %H:%M:%S' )
         logout.setFormatter( formatter )
-        self.logger.setLevel( logging.INFO )
+        self.logger.setLevel( logging.DEBUG )
+        if options['reset']:
+            self.reset = options['reset']
 
-    def add_arguments( self, parser ):
-        parser.add_argument( '--do-alerce', action='store_true', default=False, help="Poll from ALERCE" )
-        parser.add_argument( '--do-antares', action='store_true', default=False, help="Poll from ANTARES" )
-        parser.add_argument( '--do-fink', action='store_true', default=False, help="Poll from FINK" )
-        parser.add_argument( '--do-brahms', action='store_true', default=False,
-                             help="Poll from Rob's test kafka server" )
-        parser.add_argument( '--brahms-topic', default=None,
-                             help="Topic to poll on brahms (required if --do-brahms is True)" )
-        parser.add_argument( '--do-pitt', action='store_true', default=False, help="Poll from PITT-Google" )
-        parser.add_argument( '--pitt-topic', default=None, help="Topic name for PITT-Google" )
-        parser.add_argument( '--pitt-project', default=None, help="Project name for PITT-Google" )
-        parser.add_argument( '--do-test', action='store_true', default=False,
-                             help="Poll from kafka-server:9092 (for testing purposes)" )
-        parser.add_argument( '---test-topic', default='classifications',
-                             help="Topic to poll from on kafka-server:9092" )
-        parser.add_argument( '-g', '--grouptag', default=None, help="Tag to add to end of kafka group ids" )
-        parser.add_argument( '-r', '--reset', default=False, action='store_true',
-                             help='Reset all stream pointers' )
+        self.username = username
+        self.password = password
+
 
     def sigterm( self, sig="TERM" ):
         self.logger.warning( f"Got a {sig} signal, trying to die." )
@@ -59,18 +48,16 @@ class Command(BaseCommand):
                        lambda sig, stack: self.logger.warning( f"{brokerclass.__name__} ignoring SIGINT" ) )
         signal.signal( signal.SIGTERM,
                        lambda sig, stack: self.logger.warning( f"{brokerclass.__name__} ignoring SIGTERM" ) )
-        signal.signal( signal.SIGUSR1,
-                       lambda sig, stack: self.logger.warning( f"{brokerclass.__name__} ignoring SIGUSR1" ) )
         consumer = brokerclass( pipe=pipe, **options )
         consumer.poll()
 
-    def handle( self, *args, **options ):
+    def broker_poll( self, *args, **options):
         self.logger.info( "******** brokerpoll starting ***********" )
 
         self.mustdie = False
         signal.signal( signal.SIGTERM, lambda sig, stack: self.sigterm( "TERM" ) )
         signal.signal( signal.SIGINT, lambda sig, stack: self.sigterm( "INT" ) )
-        signal.signal( signal.SIGUSR1, lambda sig, stack: self.sigterm( "USR1" ) )
+
 
         brokerstodo = {}
         if options['do_alerce']:
@@ -86,16 +73,16 @@ class Command(BaseCommand):
         if options['do_test']:
             brokerstodo['test'] = TestConsumer
         if len( brokerstodo ) == 0:
-            self.logger.error( "Must give at least one broker to listen to." )
-            raise RuntimeError( "No brokers given to listen to." )
-            
-        # Launch a process for each broker that will poll that broker indefinitely
+            print( "Must give at least one broker to listen to." )
 
         brokers = {}
+
+        # Launch a process for each broker that will poll that broker indefinitely
+
         for name,brokerclass in brokerstodo.items():
             self.logger.info( f"Launching thread for {name}" )
             parentconn, childconn = multiprocessing.Pipe()
-            proc = multiprocessing.Process( target=lambda: self.launch_broker(brokerclass, childconn, **options) )
+            proc = multiprocessing.Process( target=self.launch_broker(brokerclass, childconn, **options) )
             proc.start()
             brokers[name] = { "process": proc,
                               "pipe": parentconn,
@@ -131,8 +118,7 @@ class Command(BaseCommand):
                 for name, broker in brokers.items():
                     dt = time.monotonic() - broker['lastheartbeat']
                     if dt > toolongsilent:
-                        self.logger.error( f"It's been {dt:.0f} seconds since last heartbeat from {name}; "
-                                           f"will restart." )
+                        self.logger.error( f"It's been {dt:.0f} seconds since last heartbeat from {name}; "f"will restart." )
                         brokerstorestart.add( name )
 
                 for torestart in brokerstorestart:
@@ -158,3 +144,44 @@ class Command(BaseCommand):
         time.sleep( 20 )
         self.logger.warning( "Exiting." )
         return
+        
+
+if __name__ == '__main__':
+    
+    logger = logging.getLogger( "brokerpoll_baselogger" )
+    logger.propagate = False
+    logout = logging.FileHandler( _logdir / f"logs/brokerpoll.log" )
+    logger.addHandler( logout )
+    formatter = logging.Formatter( f'[%(asctime)s - brokerpoll - %(levelname)s] - %(message)s',datefmt='%Y-%m-%d %H:%M:%S' )
+    logout.setFormatter( formatter )
+    logger.setLevel( logging.DEBUG )
+
+
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument( '--do-alerce', action='store_true', default=False, help="Poll from ALeRCE" )
+    parser.add_argument( '--alerce-topic-pattern', default='^lc_classifier_.*_(\d{4}\d{2}\d{2})$',
+                         help='Regex for matching ALeRCE topics (warning: custom code, see AlerceBroker)' )
+    parser.add_argument( '--do-antares', action='store_true', default=False, help="Poll from ANTARES" )
+    parser.add_argument( '--antares-topic', default=None, help='Topic name for Antares' )
+    parser.add_argument( '--do-fink', action='store_true', default=False, help="Poll from Fink" )
+    parser.add_argument( '--fink-topic', default=None, help='Topic name for Fink' )
+    parser.add_argument( '--do-brahms', action='store_true', default=False,
+                         help="Poll from Rob's test kafka server" )
+    parser.add_argument( '--brahms-topic', default=None,
+                         help="Topic to poll on brahms (required if --do-brahms is True)" )
+    parser.add_argument( '--do-pitt', action='store_true', default=False, help="Poll from PITT-Google" )
+    parser.add_argument( '--pitt-topic', default=None, help="Topic name for PITT-Google" )
+    parser.add_argument( '--pitt-project', default=None, help="Project name for PITT-Google" )
+    parser.add_argument( '--do-test', action='store_true', default=False,
+                         help="Poll from kafka-server:9092 (for testing purposes)" )
+    parser.add_argument( '--test-topic', default='classifications',
+                         help="Topic to poll from on kafka-server:9092" )
+    parser.add_argument( '-g', '--grouptag', default=None, help="Tag to add to end of kafka group ids" )
+    parser.add_argument('-r', '--reset', action='store_true', default=False, help='Reset all stream pointers')
+
+    options = vars(parser.parse_args())
+
+    broker = Broker(**options)
+    
+    poll = broker.broker_poll(**options)

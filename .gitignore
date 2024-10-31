@@ -141,7 +141,8 @@ tom_desc/elasticc2/static/elasticc2/alertsendfinish
 tom_desc/elasticc2/static/elasticc2/alertsend
 
 # Log directory
-logs/
+logs/**
+!logs/.placeholder
 
 # FastDB files
 tom_desc/fastdb_dev/management/commands/insert_last_time.sql
