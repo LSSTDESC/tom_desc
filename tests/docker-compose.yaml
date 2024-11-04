@@ -44,22 +44,35 @@ services:
       timeout: 10s
       retries: 5
 
-  # cassandra:
-  #   image: registry.nersc.gov/m1727/raknop/tom_cassandra
-  #   build:
-  #     context: ../docker_cassandra
-  #   healthcheck:
-  #      test: cqlsh -u cassandra -p cassandra cassandra < /dev/null
-  #      interval: 10s
-  #      timeout: 2s
-  #      retries: 10
+  mongodb:
+    image: registry.nersc.gov/m1727/rknop/tom-mongodb:latest
+    build:
+      context: ../docker_mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: mongodb_admin
+      MONGO_INITDB_ROOT_PASSWORD: fragile
+      MONGO_ALERT_WRITER_USERNAME: mongodb_alert_writer
+      MONGO_ALERT_WRITER_PASSWORD: writer
+      MONGO_ALERT_READER_USERNAME: mongodb_alert_reader
+      MONGO_ALERT_READER_PASSWORD: reader
+    healthcheck:
+      test: netcat -w 1 localhost 27017 || exit 1
+      interval: 5s
+      timeout: 10s
+      retries: 5
 
+  # TODO: make sure this one fails if any of the commands it runs inside
+  #   the bash shell below fails.  (That way, the rest of the compose
+  #   environment won't come up if it depends on this having
+  #   completed_successfully.)  (In particular, right now,
+  #   at least if the manage.py migrate fails, it doesn't cause
+  #   the container think it failed to complete successfully.)
   createdb:
     depends_on:
       postgres:
         condition: service_healthy
-      # cassandra:
-      #   condition: service_healthy
+      mongodb:
+        condition: service_healthy
     image: registry.nersc.gov/m1727/raknop/tom_desc_bindmount
     build:
       context: ../
@@ -75,12 +88,23 @@ services:
       - type: bind
         source: ../secrets
         target: /secrets
+      - type: volume
+        source: logs
+        target: /logs
     environment:
+      LOGDIR: /logs
       DB_NAME: tom_desc
       DB_HOST: postgres
       DB_USER: postgres
       DB_PASS: fragile
       DB_PORT: 5432
+      MONGOHOST: mongodb
+      MONGODB_ADMIN: mongodb_admin
+      MONGODB_ADMIN_PASSWORD: fragile
+      MONGODB_ALERT_WRITER: mongodb_alert_writer
+      MONGODB_ALERT_WRITER_PASSWORD: writer
+      MONGODB_ALERT_READER: mongdb_alert_reader
+      MONGODB_ALERT_READER_PASSWORD: reader
     entrypoint:
       - /bin/bash
       - -c
@@ -89,7 +113,8 @@ services:
         python tom_desc/manage.py create_test_superuser
         python tom_desc/manage.py create_test_apibroker
         python /tests/create_postgres_ro_user.py
-#        python tom_desc/manage.py sync_cassandra
+        python /tests/setup_mongodb.py
+
 
   tom:
     depends_on:
@@ -110,17 +135,29 @@ services:
       - type: volume
         source: query_results
         target: /query_results
+      - type: volume
+        source: logs
+        target: /logs
     environment:
+      LOGDIR: /logs
       DB_NAME: tom_desc
       DB_HOST: postgres
       DB_USER: postgres
       DB_PASS: fragile
       DB_PORT: 5432
+      MONGOHOST: mongodb
+      MONGODB_ADMIN: mongodb_admin
+      MONGODB_ADMIN_PASSWORD: fragile
+      MONGODB_ALERT_WRITER: mongodb_alert_writer
+      MONGODB_ALERT_WRITER_PASSWORD: writer
+      MONGODB_ALERT_READER: mongdb_alert_reader
+      MONGODB_ALERT_READER_PASSWORD: reader
+
 
   brokerpoll:
     depends_on:
-      postgres:
-        condition: service_healthy
+      createdb:
+        condition: service_completed_successfully
       tom:
         condition: service_started
       fakebroker:
@@ -137,25 +174,78 @@ services:
       - type: bind
         source: ../tom_desc
         target: /tom_desc
+      - type: volume
+        source: logs
+        target: /logs
     environment:
+      LOGDIR: /logs
       DB_NAME: tom_desc
       DB_HOST: postgres
       DB_USER: postgres
       DB_PASS: fragile
       DB_PORT: 5432
-    entrypoint: [ "python", "manage.py", "brokerpoll2", "--do-test" ]
+    entrypoint: [ "python", "manage.py", "brokerpoll2", "--do-test", "--grouptag", "elasticc2" ]
 
+
+  brokerpoll_fastdb_dev:
+    depends_on:
+      createdb:
+        condition: service_completed_successfully
+      tom:
+        condition: service_started
+      fakebroker:
+        condition: service_started
+    image: registry.nersc.gov/m1727/raknop/tom_desc_bindmount
+    build:
+      context: ../
+      dockerfile: docker_server/Dockerfile
+      target: tom-server-bindmount
+    volumes:
+      - type: bind
+        source: ../secrets
+        target: /secrets
+      - type: bind
+        source: ../tom_desc
+        target: /tom_desc
+      - type: volume
+        source: logs
+        target: /logs
+    environment:
+      LOGDIR: /logs
+      MONGOHOST: mongodb
+      MONGODB_ADMIN: mongodb_admin
+      MONGODB_ADMIN_PASSWORD: fragile
+      MONGODB_ALERT_WRITER: mongodb_alert_writer
+      MONGODB_ALERT_WRITER_PASSWORD: writer
+      MONGODB_ALERT_READER: mongdb_alert_reader
+      MONGODB_ALERT_READER_PASSWORD: reader
+      DB_NAME: tom_desc
+      DB_HOST: postgres
+      DB_USER: postgres
+      DB_PASS: fragile
+      DB_PORT: 5432
+    entrypoint: [ "python", "manage.py", "fastdb_dev_brokerpoll", "--do-test", "--grouptag", "fastdb_dev" ]
+
+
+  # Thought required: want to make this dependent on
+  #   createdb completed successfully, or just on the
+  #   database servers being up?  The advantage of the latter
+  #   is that you can get shell started even if there are
+  #   database migration errors, and use shell to diagnose/fix
+  #   them.
   shell:
     depends_on:
       postgres:
         condition: service_healthy
-      # cassandra:
-      #   condition: service_healthy
+      mongodb:
+        condition: service_healthy
       tom:
         condition: service_started
       fakebroker:
-       condition: service_started
+        condition: service_started
       brokerpoll:
+        condition: service_started
+      brokerpoll_fastdb_dev:
         condition: service_started
     image: registry.nersc.gov/m1727/raknop/tom_server_bindmount_dev
     build:
@@ -178,55 +268,25 @@ services:
       - type: volume
         source: query_results
         target: /query_results
+      - type: volume
+        source: logs
+        target: /logs
     environment:
+      LOGDIR: /logs
       DB_NAME: tom_desc
       DB_HOST: postgres
       DB_USER: postgres
       DB_PASS: fragile
       DB_PORT: 5432
+      MONGOHOST: mongodb
+      MONGODB_ADMIN: mongodb_admin
+      MONGODB_ADMIN_PASSWORD: fragile
+      MONGODB_ALERT_WRITER: mongodb_alert_writer
+      MONGODB_ALERT_WRITER_PASSWORD: writer
+      MONGODB_ALERT_READER: mongdb_alert_reader
+      MONGODB_ALERT_READER_PASSWORD: reader
     entrypoint: [ "tail", "-f", "/etc/issue" ]
-
-  # This won't work right now, there's scary things
-  #   about test data and such
-  # runtests:
-  #   depends_on:
-  #     tom:
-  #       condition: service_started
-  #     kafka-server:
-  #       condition: service_healthy
-  #     fakebroker:
-  #       condition: service_started
-  #     brokerpoll:
-  #       condition: service_started
-  #   image: registry.nersc.gov/m1727/raknop/tom_server_bindmount_dev
-  #   build:
-  #     context: ../
-  #     dockerfile: docker_server/Dockerfile
-  #     target: tom-server-bindmount-dev
-  #   volumes:
-  #     - type: bind
-  #       source: ../secrets
-  #       target: /secrets
-  #     - type: bind
-  #       source: ../tom_desc
-  #       target: /tom_desc
-  #     - type: bind
-  #       source: .
-  #       target: /tests
-  #     - type: bind
-  #       source: ${ELASTICC2_TEST_DATA:-/dev/null}
-  #       target: /elasticc2data
-  #     - type: volume
-  #       source: query_results
-  #       target: /query_results
-  #   working_dir: /tests
-  #   environment:
-  #     DB_NAME: tom_desc
-  #     DB_HOST: postgres
-  #     DB_USER: postgres
-  #     DB_PASS: fragile
-  #     DB_PORT: 5432
-  #   entrypoint: [ "pytest", "-v" ]
 
 volumes:
   query_results:
+  logs:

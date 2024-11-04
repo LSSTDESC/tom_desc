@@ -2,15 +2,15 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: tom-rknop-dev-query-runner
-  namespace: desc-tom
+  name: tom-query-runner
+  namespace: desc-tom-rknop-dev
 spec:
   progressDeadlineSeconds: 600
   replicas: 1
   revisionHistoryLimit: 10
   selector:
     matchLabels:
-      workload.user.cattle.io/workloadselector: deployment-desc-tom-tom-rknop-dev-query-runner
+      workload.user.cattle.io/workloadselector: deployment-desc-tom-rknop-dev-tom-query-runner
   strategy:
     rollingUpdate:
       maxSurge: 1
@@ -22,27 +22,27 @@ spec:
         field.cattle.io/ports: '[[]]'
         nersc.gov/collab_uids: 70268,99896
         nersc.gov/gid: "95089"
-        nersc.gov/gids: 45703,60152,57177,58102,59318,60070,63477,64483,79186,70268,92576,94721,95089,96414,99650
+        nersc.gov/gids: 95089,57177,60152,96414
         nersc.gov/roles: user
         nersc.gov/uid: "95089"
         nersc.gov/username: raknop
       creationTimestamp: null
       labels:
-        workload.user.cattle.io/workloadselector: deployment-desc-tom-tom-rknop-dev-query-runner
+        workload.user.cattle.io/workloadselector: deployment-desc-tom-rknop-dev-tom-query-runner
     spec:
       containers:
       - env:
         - name: DB_HOST
-          value: tom-rknop-dev-postgres
+          value: tom-postgres
         - name: DB_NAME
           value: tom_desc
         - name: DB_PASS
           value: fragile
         - name: DB_USER
           value: postgres
-        image: registry.nersc.gov/m1727/raknop/tom_desc_bindmount:daedalus
+        image: registry.nersc.gov/m1727/raknop/tom_server_bindmount
         imagePullPolicy: Always
-        name: tom-rknop-dev-query-runner
+        name: tom-query-runner
         resources: {}
         securityContext:
           allowPrivilegeEscalation: false
@@ -61,11 +61,11 @@ spec:
         tty: true
         volumeMounts:
         - mountPath: /secrets
-          name: tom-rknop-dev-secrets
+          name: tom-secrets
         - mountPath: /tom_desc
-          name: tom-rknop-dev-deployment
+          name: tom-deployment
         - mountPath: /query_results
-          name: tom-rknop-dev-query-results
+          name: tom-query-results
         command: [ 'python' ]
         args: [ 'manage.py', 'long_query_runner', '-l' ]
       dnsConfig: {}
@@ -78,25 +78,25 @@ spec:
       imagePullSecrets:
         - name: registry-nersc
       volumes:
-      - name: tom-rknop-dev-secrets
+      - name: tom-secrets
         secret:
           defaultMode: 256
           optional: false
-          secretName: tom-rknop-dev-secrets
+          secretName: tom-secrets
       - hostPath:
-          path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/dev/tom_desc/tom_desc
+          path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/rknop_dev/tom_desc/tom_desc
           type: Directory
-        name: tom-rknop-dev-deployment
+        name: tom-deployment
       - hostPath:
-          path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/dev/query_results
+          path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/rknop_dev/query_results
           type: Directory
-        name: tom-rknop-dev-query-results
+        name: tom-query-results
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: tom-rknop-dev-query-runner
-  namespace: desc-tom
+  name: tom-query-runner
+  namespace: desc-tom-rknop-dev
 spec:
   ports:
   - name: default
@@ -104,7 +104,7 @@ spec:
     protocol: TCP
     targetPort: 42
   selector:
-    workload.user.cattle.io/workloadselector: deployment-desc-tom-tom-rknop-dev-query-runner
+    workload.user.cattle.io/workloadselector: deployment-desc-tom-rknop-dev-tom-query-runner
   sessionAffinity: None
   type: ClusterIP
 status:

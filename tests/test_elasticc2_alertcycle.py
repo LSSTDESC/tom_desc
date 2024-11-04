@@ -1,3 +1,14 @@
+# WARNING -- if you run both this test and test_fastdb_dev_alertcycle
+#   within the same docker compose session, but different pytest
+#   sessions, one will fail.  For the reason, see the comments in
+#   alertcyclefixtures.py.  (Basically, the first one you run will load
+#   up both databases, so early tests that expect not-fully-loaded
+#   databases will fail.)
+#
+# Both should all pass if you run them both at once, i.e.
+#
+# pytest -v test_elasticc2_alertcycle.py test_fastdb_dev_alertcycle.py
+
 import os
 import sys
 import datetime
@@ -20,11 +31,7 @@ from alertcyclefixtures import *
 #   the tests below.  See comments in alercyclefixtures.py for the reason for
 #   this.
 
-class TestAlertCycle:
-    def test_hello_world( self ):
-        # This is just here so I can get a timestamp to see how long the next test took
-        assert True
-
+class TestElasticc2AlertCycle:
     def test_ppdb_loaded( self, elasticc2_ppdb ):
         # I should probably have some better tests than just object counts....
         assert elasticc2.models.PPDBDiaObject.objects.count() == 346
@@ -46,20 +53,20 @@ class TestAlertCycle:
         assert classifications_300days_exist
 
 
-    def test_classifications_ingested( self, classifications_300days_ingested ):
-        assert classifications_300days_ingested
+    def test_classifications_ingested( self, classifications_300days_elasticc2_ingested ):
+        assert classifications_300days_elasticc2_ingested
 
 
-    def test_sources_updated( self, update_diasource_300days ):
-        assert update_diasource_300days
+    def test_sources_updated( self, update_elasticc2_diasource_300days ):
+        assert update_elasticc2_diasource_300days
 
 
-    def test_100moredays_classifications_ingested( self, classifications_100daysmore_ingested ):
-        assert classifications_100daysmore_ingested
+    def test_100moredays_classifications_ingested( self, classifications_100daysmore_elasticc2_ingested ):
+        assert classifications_100daysmore_elasticc2_ingested
 
 
-    def test_100moredays_sources_updated( self, update_diasource_100daysmore ):
-        assert update_diasource_100daysmore
+    def test_100moredays_sources_updated( self, update_elasticc2_diasource_100daysmore ):
+        assert update_elasticc2_diasource_100daysmore
 
 
     def test_apibroker_existingsources( self, api_classify_existing_alerts ):
@@ -79,7 +86,7 @@ class TestAlertCycle:
         # The test api broker will add 1300 probabilities
         #   (since it assignes probabilities to two classes).
         # Add that to the 13650 probabilities that
-        #   are in fixture classifications_100daysmore_ingested,
+        #   are in fixture classifications_100daysmore_elasticc2_ingested,
         #   and you get 14950
         for msg in brkmsg.objects.all():
             assert len(msg.classid) == len(msg.probability)
