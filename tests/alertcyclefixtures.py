@@ -507,5 +507,6 @@ __all__ = [ 'alerts_300days',
             'classifications_100daysmore_elasticc2_ingested',
             'classifications_100daysmore_fastdb_dev_ingested',
             'update_fastdb_dev_diasource_100daysmore',
+            'update_elasticc2_diasource_100daysmore',
             'api_classify_existing_alerts',
             'alert_cycle_complete' ]

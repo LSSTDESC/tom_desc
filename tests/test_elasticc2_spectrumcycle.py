@@ -28,7 +28,7 @@ from alertcyclefixtures import *
 class TestSpectrumCycle:
 
     @pytest.fixture( scope='class' )
-    def ask_for_spectra( self, update_diasource_100daysmore, tomclient ):
+    def ask_for_spectra( self, update_elasticc2_diasource_100daysmore, tomclient ):
         objs = elasticc2.models.DiaObject.objects.all().order_by("diaobject_id")
         objs = list( objs )
 
@@ -51,7 +51,7 @@ class TestSpectrumCycle:
 
 
     # TODO : test things other than detected_since_mjd sent to gethottransients
-    def test_hot_sne( self, update_diasource_100daysmore, tomclient ):
+    def test_hot_sne( self, update_elasticc2_diasource_100daysmore, tomclient ):
         # Testing detected_in_last_days is fraught because
         #   the mjds in elasticc2 are what they are, are
         #   in the future (as of this comment writing).
@@ -59,10 +59,10 @@ class TestSpectrumCycle:
 
         res = tomclient.post( 'elasticc2/gethottransients', json={ 'detected_since_mjd': 60660 } )
         sne = res.json()['diaobject']
-        assert len(sne) == 5
+        assert len(sne) == 8
 
         snids = { s['objectid'] for s in sne }
-        assert snids == { 15232, 416626, 1263066, 1286131, 1913410 }
+        assert snids == {15232, 1913410, 2110476, 416626, 1286131, 1684659, 1045654, 1263066}
 
         # Should probably check more than this...
         assert set( sne[0].keys() ) == { 'objectid', 'ra', 'dec', 'photometry', 'zp', 'redshift', 'sncode' }
