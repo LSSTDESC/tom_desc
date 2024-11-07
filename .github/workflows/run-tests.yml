@@ -1,0 +1,35 @@
+name: Unit tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+ test:
+   runs-on: ubuntu-latest
+   defaults:
+     run:
+       working-directory: ./tests
+
+   steps:
+   - uses: actions/checkout@v4
+     with:
+       submodules: 'recursive'
+
+   - name: Unpack test files
+     run: |
+       tar xf elasticc2_alert_test_data.tar.bz2
+
+   - name: Build docker images
+     run: |
+       docker compose build
+   
+   - name: Bring docker environments up
+     run: |
+       docker compose up -d shell
+
+   - name: Run Cycle Tests
+     run: |
+       docker compose exec -it shell /bin/bash -c "python3 -m pytest /tests/test_elasticc2_spectrumcycle.py"
