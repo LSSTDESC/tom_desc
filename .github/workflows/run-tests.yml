@@ -35,7 +35,7 @@ jobs:
         docker compose exec -it shell /bin/bash -c "python3 -m pytest /tests/test_elasticc2_spectrumcycle.py"
     
     - name: Post to a Slack channel
-      if: ${{ failure() && github.event_name != 'workflow_dispatch' }}
+      #if: ${{ failure() && github.event_name != 'workflow_dispatch' }}
       id: slack
       uses: slackapi/slack-github-action@v1.27.0
       with:
