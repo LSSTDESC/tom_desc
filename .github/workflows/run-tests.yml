@@ -39,8 +39,9 @@ jobs:
       id: slack
       uses: slackapi/slack-github-action@v2
       with:
-        channel-id: 'C080P31B1L4' # #lf-resspect-ci channel in LSSTC slack workspace
-	method: method: chat.postMessage
+        # #lf-resspect-ci channel in LSSTC slack workspace
+        channel-id: C080P31B1L4
+        method: chat.postMessage
         token: ${{ secrets.SLACK_BOT_TOKEN }}
         payload: |
           {
