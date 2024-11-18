@@ -37,11 +37,15 @@ jobs:
     - name: Post to a Slack channel
       if: ${{ failure() && github.event_name != 'workflow_dispatch' }}
       id: slack
-      uses: slackapi/slack-github-action@v1.27.0
+      uses: slackapi/slack-github-action@v2
       with:
-        channel-id: 'C080P31B1L4' # #lf-resspect-ci channel in LSSTC slack workspace
+        # #lf-resspect-ci channel in LSSTC slack workspace
+        method: chat.postMessage
+        token: ${{ secrets.SLACK_BOT_TOKEN }}
         payload: |
           {
+            "channel": "C080P31B1L4",
+            "text": "GitHub Action build result: *${{ job.status }}* :${{ job.status }}:",
             "blocks": [
               {
                 "type": "header",
