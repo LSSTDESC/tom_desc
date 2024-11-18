@@ -40,6 +40,7 @@ jobs:
       uses: slackapi/slack-github-action@v1.27.0
       with:
         channel-id: 'C080P31B1L4' # #lf-resspect-ci channel in LSSTC slack workspace
+        token: ${{ secrets.SLACK_BOT_TOKEN }}
         payload: |
           {
             "blocks": [
