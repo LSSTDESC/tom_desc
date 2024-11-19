@@ -44,8 +44,8 @@ jobs:
         token: ${{ secrets.SLACK_BOT_TOKEN }}
         payload: |
           {
-            "channel": "C080P31B1L4"
-            "text": "GitHub Action build result: *${{ job.status }}* :${{ job.status }}:"
+            "channel": "C080P31B1L4",
+            "text": "GitHub Action build result: *${{ job.status }}* :${{ job.status }}:",
             "blocks": [
               {
                 "type": "header",
