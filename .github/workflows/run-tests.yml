@@ -40,11 +40,12 @@ jobs:
       uses: slackapi/slack-github-action@v2
       with:
         # #lf-resspect-ci channel in LSSTC slack workspace
-        channel: C080P31B1L4
         method: chat.postMessage
         token: ${{ secrets.SLACK_BOT_TOKEN }}
         payload: |
           {
+            "channel": "C080P31B1L4"
+            "text": "GitHub Action build result: *${{ job.status }}* :${{ job.status }}:"
             "blocks": [
               {
                 "type": "header",
