@@ -131,16 +131,35 @@ class Createable(models.Model):
     # This version uses postgres COPY and tries to be faster than mucking
     # about with ORM constructs.
     @classmethod
-    def bulk_insert_onlynew( cls, data, kwmap=None ):
-        """Insert a bunch of data into the database.  Ignores records that conflict with things present.
+    def bulk_insert_or_upsert( cls, data, kwmap=None, upsert=False ):
+        """Try to efficiently insert a bunch of data into the database.
 
-        data can be:
-          * a dict of { kw: iterable }.  All of the iterables must have the same length,
-            and must be something that pandas.DataFrame could handle
-          * a list of dicts.  The keys in all dicts must be the same
-        data and kwmap will be run through data_to_createdict
+        Parameters
+        ----------
+           data: dict or list
+             Data can be:
+              * a dict of { kw: iterable }.  All of the iterables must
+                have the same length, and must be something that
+                pandas.DataFrame could handle
+              * a list of dicts.  The keys in all dicts must be the same
 
-        Returns the number of rows actually inserted (which may be less than len(data)).
+           kwmap: dict, default None
+             A map of { dict_keyword : model_keyword } of conversions
+             from data to the class model.  (See data_to_createdict().)
+             Defaults to the _create_kws_map property of the object.
+
+           upsert: bool, default False
+             If False, then objects whose primary key is already in the
+             database will be ignored.  If True, then objects whose
+             primary key is already in the database will be updated with
+             the values in dict.  (SQL will have ON CONFLICT DO NOTHING
+             if False, ON CONFLICT DO UPDATE if True.)
+
+
+        Returns
+        -------
+           inserted: int
+             The number of rows actually inserted (which may be less than len(data)).
 
         """
         conn = None
@@ -175,7 +194,8 @@ class Createable(models.Model):
             # columns = [ f'"{c}"' for c in df.columns.values ]
             columns = df.columns.values
             cursor.copy_from( strio, "bulk_upsert", columns=columns, size=1048576 )
-            q = f"INSERT INTO {cls._meta.db_table} SELECT * FROM bulk_upsert ON CONFLICT DO NOTHING"
+            conflict = "DO UPDATE" if upsert else "DO NOTHING"
+            q = f"INSERT INTO {cls._meta.db_table} SELECT * FROM bulk_upsert ON CONFLICT {conflict}"
             cursor.execute( q )
             ninserted = cursor.rowcount
             # I don't think I should have to do this; shouldn't it happen automatically

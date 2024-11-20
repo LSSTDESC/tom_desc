@@ -1,12 +1,29 @@
-# IMPORTANT -- running any tests that depend on fixtures in this file
-# OTHER than alert_cycle_complete requires a completely fresh
-# environment.  After any run of "pytest ...", if you want to run tests
-# (e.g. in test_alert_cycle.py) that use these fixtures, you have to
-# completely tear down and rebuild the docker compose environment.  This
-# is because, as noted below, we can't easily clean up the kafka
-# server's state, so on a rerun, the server state will be wrong.  (We
-# also use that as a reason to be lazy and not clean up the database;
-# see the long comment below.)
+# NOTES ABOUT TEST INTEROPERABILITY
+#
+# These tests depend a lot on absolute state.  Their results are tested
+# in test_elassticc2_alertcycle.py and test_fastdb_dev_alertcycle.py.
+# Any other test should ONLY depend on the session fixture
+# alert_cycle_complete from this test; that fixture will ensure that the
+# PPDB, elasticc2 and fastdb_dev diaObject, diaSource, and
+# diaForcedSource are all loaded, as well as all broker classifications
+# for both elasticc2 and fastdb_dev.  (This fixture is used, for example,
+# in test_elasticc2_spectrumcycle.py.)
+#
+# These fixtures count on absolute numbers of objects in the following models and databse tables:
+#   ...
+# No tests that put anything into any of those storage locations should
+# be run in the same pytest call as tests that depend on these fixtures.
+
+
+# The fixtures in this file test the full alert cycle of sending alerts
+# from the simulated PPDB (using the django management command
+# send_elasticc2_alerts), a fake broker classifying those alerts (see
+# "def fakebroker" below), those classifications getting ingested by
+# both elasticc2 and fastdb_dev (using management commands brokerpoll2
+# and fastdb_dev_brokerpoll, both running as a continuous loop in the
+# background), and classifications prompting the popualtion the
+# diaObject, diaSource, and diaForce tables (using django management
+# commands update_elasticc2_sources and load_fastdb).
 
 import sys
 import os
@@ -16,9 +33,9 @@ import time
 import pytz
 import random
 import subprocess
+import multiprocessing
 import pytest
-
-from pymongo import MongoClient
+import logging
 
 sys.path.insert( 0, "/tom_desc" )
 os.environ["DJANGO_SETTINGS_MODULE"] = "tom_desc.settings"
@@ -30,7 +47,11 @@ import fastdb_dev.models
 import tom_targets.models
 
 from tom_client import TomClient
-from msgconsumer import MsgConsumer
+sys.stderr.write( "ALERTCYCLEFIXTURES IMPORTING testmsgconsumer\n" )
+from testmsgconsumer import MsgConsumer
+
+sys.path.insert( 0, pathlib.Path(__file__).parent )
+from fakebroker import FakeBroker
 
 # NOTE -- in many of the fixtures below there are lots of tests that
 # would normally be in the tests_* file that use the fixtures.  The
@@ -60,6 +81,17 @@ from msgconsumer import MsgConsumer
 # have already been run once in a given docker compose environment, the
 # database will be changed, and the fixtures will fail.
 
+_logger = logging.getLogger( "alertcyclefixtures" )
+_logger.propagate = False
+_logout = logging.StreamHandler( sys.stderr )
+_logger.addHandler( _logout )
+_formatter = logging.Formatter( f'[%(asctime)s - alertcyclefixtures - %(levelname)s] - %(message)s',
+                                datefmt='%Y-%m-%d %H:%M:%S' )
+_logout.setFormatter( _formatter )
+_logger.setLevel( logging.INFO )
+
+
+
 # The numbers in these tests are based on the SNANA files in the
 # directory elasticc2_alert_test_data under tests, which should
 # be unpacked from elasticc2_alert_test_data.tar.bz2.
@@ -72,21 +104,98 @@ class AlertCounter:
         self._test_alerts_exist_count += len(msgs)
 
 
+# It's not really possible to clean up messages off of the kafka server.
+# So, to have a "fresh" environment, we randomly generate topics each time
+# we start a new session, so those topics will begin empty.
 @pytest.fixture( scope="session" )
-def alerts_300days( elasticc2_ppdb ):
+def topic_barf():
+    return "".join( random.choices( "abcdefghijklmnopqrstuvwxyz", k=10 ) )
+
+
+@pytest.fixture( scope="session" )
+def fakebroker( topic_barf ):
+    broker = FakeBroker( "kafka-server:9092",
+                         [ f"alerts-wfd-{topic_barf}", f"alerts-ddf-full-{topic_barf}" ],
+                         "kafka-server:9092",
+                         f"classifications-{topic_barf}" )
+    proc = multiprocessing.Process( target=broker, args=[], daemon=True )
+    proc.start()
+
+    yield True
+
+    proc.terminate()
+    proc.join()
+
+
+@pytest.fixture( scope="session" )
+def brokerpoll_elasticc2( topic_barf ):
+    def run_brokerpoll( topic_barf ):
+        # Instead of using subprocess, use os.execvp so that signals we
+        #   send to this process properly get to the command we're
+        #   launching.  (The brokerpoll2 management command loops
+        #   forever, but captures SIGINT, SIGKILL, and SIGUSR1,
+        #   and shuts itself down upon receiving any of those signals.)
+        #   (That's the intention, anyway....)
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os.chdir( "/tom_desc" )
+        args = [ "python", "manage.py", "brokerpoll2",
+                 "--do-test",
+                 "--grouptag", "elasticc2",
+                 "--test-topic", f"classifications-{topic_barf}" ]
+        os.execvp( args[0], args )
+
+    proc = multiprocessing.Process( target=run_brokerpoll, args=(topic_barf,), daemon=True )
+    proc.start()
+
+    yield True
+
+    proc.terminate()
+    proc.join()
+
+
+@pytest.fixture( scope="session" )
+def brokerpoll_fastdb_dev( topic_barf ):
+    def run_brokerpoll( topic_barf ):
+        # See comments in brokerpoll_elasticc2
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os.chdir( "/tom_desc" )
+        args = [ "python", "manage.py", "fastdb_dev_brokerpoll",
+                 "--do-test",
+                 "--grouptag", "fastdb_dev",
+                 "--test-topic", f"classifications-{topic_barf}" ]
+        os.execvp( args[0], args )
+
+    proc = multiprocessing.Process( target=run_brokerpoll, args=(topic_barf,), daemon=True )
+    proc.start()
+
+    yield True
+
+    proc.terminate()
+    proc.join()
+
+
+@pytest.fixture( scope="session" )
+def alerts_300days( elasticc2_ppdb, topic_barf ):
     result = subprocess.run( [ "python", "manage.py", "send_elasticc2_alerts", "-d", "60578",
                                "-k", "kafka-server:9092",
-                               "--wfd-topic", "alerts-wfd", "--ddf-full-topic", "alerts-ddf-full",
-                               "--ddf-limited-topic", "alerts-ddf-limited",
+                               "--wfd-topic", f"alerts-wfd-{topic_barf}",
+                               "--ddf-full-topic", f"alerts-ddf-full-{topic_barf}",
+                               "--ddf-limited-topic", f"alerts-ddf-limited-{topic_barf}",
                                "-s", "/tests/schema/elasticc.v0_9_1.alert.avsc",
-                               "-r", "sending_alerts_runningfile", "--do" ],
+                               "-r", "sending_alerts_runningfile",
+                               "--do" ],
                                cwd="/tom_desc", capture_output=True )
     sys.stderr.write( result.stderr.decode( 'utf-8' ) )
     assert result.returncode == 0
 
-    consumer = MsgConsumer( 'kafka-server:9092', 'test_send_alerts', [ 'alerts-wfd', 'alerts-ddf-full' ],
+    consumer = MsgConsumer( 'kafka-server:9092',
+                            'test_send_alerts',
+                            [ f'alerts-wfd-{topic_barf}', f'alerts-ddf-full-{topic_barf}' ],
                             '/tests/schema/elasticc.v0_9_1.alert.avsc',
-                            consume_nmsgs=100 )
+                            consume_nmsgs=100,
+                            logger=_logger )
     counter = AlertCounter()
     consumer.poll_loop( counter.handle_test_alerts_exist, timeout=10, stopafter=datetime.timedelta(seconds=10) )
     # I don't understand why this is 546.  545 were sent.
@@ -98,13 +207,16 @@ def alerts_300days( elasticc2_ppdb ):
 
 
 @pytest.fixture( scope="session" )
-def classifications_300days_exist( alerts_300days ):
+def classifications_300days_exist( alerts_300days, topic_barf, fakebroker ):
 
     counter = AlertCounter()
-    consumer = MsgConsumer( 'kafka-server:9092', 'test_classifications_exist', 'classifications',
+    consumer = MsgConsumer( 'kafka-server:9092',
+                            'test_classifications_exist',
+                            f'classifications-{topic_barf}',
                             '/tests/schema/elasticc.v0_9_1.brokerClassification.avsc',
-                            consume_nmsgs=100 )
-    consumer.reset_to_start( 'classifications' )
+                            consume_nmsgs=100,
+                            logger=_logger )
+    consumer.reset_to_start( f'classifications-{topic_barf}' )
 
     # fake broker has a 10s sleep loop, so we can't
     # assume things will be there instantly; thus, the 16s timeout.
@@ -120,7 +232,7 @@ def classifications_300days_exist( alerts_300days ):
 
 
 @pytest.fixture( scope="session" )
-def classifications_300days_elasticc2_ingested( classifications_300days_exist ):
+def classifications_300days_elasticc2_ingested( classifications_300days_exist, brokerpoll_elasticc2 ):
     # Have to have an additional sleep after the classifications exist,
     # because brokerpoll itself has a 10s sleep loop
     time.sleep( 11 )
@@ -157,7 +269,7 @@ def classifications_300days_elasticc2_ingested( classifications_300days_exist ):
 
 
 @pytest.fixture( scope="session" )
-def classifications_300days_fastdb_dev_ingested( classifications_300days_exist ):
+def classifications_300days_fastdb_dev_ingested( classifications_300days_exist, brokerpoll_fastdb_dev, mongoclient ):
     # Have to have an additional sleep after the classifications exist,
     # because brokerpoll itself has a 10s sleep loop
     time.sleep( 11 )
@@ -167,11 +279,7 @@ def classifications_300days_fastdb_dev_ingested( classifications_300days_exist )
     # later fixtures have run, the tests below would fail, and these
     # fixtures may be used in more than one test.
 
-    host = os.getenv( 'MONGOHOST' )
-    username = os.getenv( 'MONGODB_ALERT_READER' )
-    password = os.getenv( 'MONGODB_ALERT_READER_PASSWORD' )
-    client = MongoClient( f"mongodb://{username}:{password}@{host}:27017/?authSource=alerts" )
-    db = client.alerts
+    db = mongoclient.alerts
 
     assert 'fakebroker' in db.list_collection_names()
 
@@ -262,18 +370,21 @@ def update_fastdb_dev_diasource_300days( classifications_300days_fastdb_dev_inge
     yield True
 
 @pytest.fixture( scope="session" )
-def alerts_100daysmore( alerts_300days ):
+def alerts_100daysmore( alerts_300days, topic_barf, fakebroker ):
     # This will send alerts up through mjd 60676.  Why not 60678, since the previous
     #   sent through 60578?  There were no alerts between 60675 and 60679, so the last
     #   alert sent will have been a source from mjd 60675.  That's what the 100 days
     #   are added to.
     # This is an additional 105 alerts, for a total of 650 (coming from 131 objects).
-    result = subprocess.run( [ "python", "manage.py", "send_elasticc2_alerts", "-a", "100",
+    result = subprocess.run( [ "python", "manage.py", "send_elasticc2_alerts",
+                               "-a", "100",
                                "-k", "kafka-server:9092",
-                               "--wfd-topic", "alerts-wfd", "--ddf-full-topic", "alerts-ddf-full",
-                               "--ddf-limited-topic", "alerts-ddf-limited",
+                               "--wfd-topic", f"alerts-wfd-{topic_barf}",
+                               "--ddf-full-topic", f"alerts-ddf-full-{topic_barf}",
+                               "--ddf-limited-topic", f"alerts-ddf-limited-{topic_barf}",
                                "-s", "/tests/schema/elasticc.v0_9_1.alert.avsc",
-                               "-r", "sending_alerts_runningfile", "--do" ],
+                               "-r", "sending_alerts_runningfile",
+                               "--do" ],
                                cwd="/tom_desc", capture_output=True )
     sys.stderr.write( result.stderr.decode( 'utf-8' ) )
     assert result.returncode == 0
@@ -283,7 +394,7 @@ def alerts_100daysmore( alerts_300days ):
     # Same issue as alerts_300days about not cleaning up
 
 @pytest.fixture( scope="session" )
-def classifications_100daysmore_elasticc2_ingested( alerts_100daysmore ):
+def classifications_100daysmore_elasticc2_ingested( alerts_100daysmore, brokerpoll_elasticc2 ):
     # This time we need to allow for both the 10s sleep cycle timeout of
     # brokerpoll and fakebroker (since we're not checking
     # classifications exist separately from ingested)
@@ -313,7 +424,7 @@ def classifications_100daysmore_elasticc2_ingested( alerts_100daysmore ):
 
 
 @pytest.fixture( scope="session" )
-def classifications_100daysmore_fastdb_dev_ingested( alerts_100daysmore ):
+def classifications_100daysmore_fastdb_dev_ingested( alerts_100daysmore, brokerpoll_fastdb_dev, mongoclient ):
     # This time we need to allow for both the 10s sleep cycle timeout of
     # brokerpoll and fakebroker (since we're not checking
     # classifications exist separately from ingested)
@@ -321,11 +432,7 @@ def classifications_100daysmore_fastdb_dev_ingested( alerts_100daysmore ):
 
     # Tests here because of hysteresis
 
-    host = os.getenv( 'MONGOHOST' )
-    username = os.getenv( 'MONGODB_ALERT_READER' )
-    password = os.getenv( 'MONGODB_ALERT_READER_PASSWORD' )
-    client = MongoClient( f"mongodb://{username}:{password}@{host}:27017/?authSource=alerts" )
-    db = client.alerts
+    db = mongoclient.alerts
 
     assert 'fakebroker' in db.list_collection_names()
 
@@ -417,12 +524,17 @@ def update_fastdb_dev_diasource_100daysmore( classifications_100daysmore_fastdb_
     yield True
 
 @pytest.fixture( scope="session" )
-def api_classify_existing_alerts( alerts_100daysmore, apibroker_client ):
-    result = subprocess.run( [ "python", "apiclassifier.py", "--source", "kafka-server:9092",
-                               "-t", "alerts-wfd", "alerts-ddf-full",
-                               "-g", "apibroker", "-u", "apibroker", "-p", "testing", "-s", "2",
+def api_classify_existing_alerts( alerts_100daysmore, apibroker_client, topic_barf ):
+    result = subprocess.run( [ "python", "apiclassifier.py",
+                               "--source", "kafka-server:9092",
+                               "-t", f"alerts-wfd-{topic_barf}", f"alerts-ddf-full-{topic_barf}",
+                               "-g", "apibroker",
+                               "-u", "apibroker",
+                               "-p", "testing",
+                               "-s", "2",
                                "-a", "/tests/schema/elasticc.v0_9_1.alert.avsc",
-                               "-b", "/tests/schema/elasticc.v0_9_1.brokerClassification.avsc"],
+                               "-b", "/tests/schema/elasticc.v0_9_1.brokerClassification.avsc"
+                              ],
                              cwd="/tests", capture_output=True )
     sys.stderr.write( result.stderr.decode( 'utf-8' ) )
     assert result.returncode == 0
@@ -485,7 +597,7 @@ def random_broker_classifications():
 
 
 @pytest.fixture( scope="session" )
-def alert_cycle_complete( request, tomclient ):
+def alert_cycle_complete( request, tomclient, mongoclient ):
     res = tomclient.post( 'db/runsqlquery/',
                           json={ 'query': 'SELECT COUNT(*) AS count FROM elasticc2_brokermessage' } )
     rows = res.json()[ 'rows' ]
@@ -496,16 +608,26 @@ def alert_cycle_complete( request, tomclient ):
 
     yield True
 
+    # Clean up the database.
+    # This is potentially antisocial, since other fixtures may have
+    #   added things to these tables.  However, since this is as session
+    #   fixture, it shouldn't be too bad.  But, in any event, there are
+    #   problems running this fixture with any tests other than those in
+    #   test_elasticc2_alertcycle and test_fastdb_dev_alertcycle that
+    #   want to look at any of these tables; see top of file.
 
-__all__ = [ 'alerts_300days',
-            'classifications_300days_exist',
-            'classifications_300days_elasticc2_ingested',
-            'classifications_300days_fastdb_dev_ingested',
-            'update_elasticc2_diasource_300days',
-            'update_fastdb_dev_diasource_300days',
-            'alerts_100daysmore',
-            'classifications_100daysmore_elasticc2_ingested',
-            'classifications_100daysmore_fastdb_dev_ingested',
-            'update_fastdb_dev_diasource_100daysmore',
-            'api_classify_existing_alerts',
-            'alert_cycle_complete' ]
+    elasticc2.models.BrokerMessage.objects.all().delete()
+    elasticc2.models.BrokerClassifier.objects.all().delete()
+    elasticc2.models.BrokerSourceIds.objects.all().delete()
+    elasticc2.models.DiaObjectOfTarget.objects.all().delete()
+    tom_targets.models.Target.objects.all().delete()
+    elasticc2.models.DiaForcedSource.objects.all().delete()
+    elasticc2.models.DiaSource.objects.all().delete()
+    elasticc2.models.DiaObject.objects.all().delete()
+
+    db = mongoclient.alerts
+
+    if 'fakebroker' in db.list_collection_names():
+        coll = db.fakebroker
+        coll.drop()
+    assert 'fakebroker' not in db.list_collection_names()

@@ -8,6 +8,8 @@ import random
 import subprocess
 import pytest
 
+from pymongo import MongoClient
+
 sys.path.insert( 0, "/tom_desc" )
 os.environ["DJANGO_SETTINGS_MODULE"] = "tom_desc.settings"
 import django
@@ -16,9 +18,22 @@ django.setup()
 import elasticc2.models
 from tom_client import TomClient
 
+# Additional fixtures
+sys.path.insert( 0, os.getenv("PWD") )
+pytest_plugins = [ 'alertcyclefixtures' ]
+
+
 @pytest.fixture( scope="session" )
 def tomclient():
     return TomClient( "http://tom:8080", username="root", password="testing" )
+
+@pytest.fixture( scope="session" )
+def mongoclient():
+    host = os.getenv( 'MONGOHOST' )
+    username = os.getenv( 'MONGODB_ALERT_READER' )
+    password = os.getenv( 'MONGODB_ALERT_READER_PASSWORD' )
+    client = MongoClient( f"mongodb://{username}:{password}@{host}:27017/?authSource=alerts" )
+    return client
 
 @pytest.fixture( scope="session" )
 def apibroker_client():

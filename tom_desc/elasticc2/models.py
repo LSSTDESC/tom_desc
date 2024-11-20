@@ -54,7 +54,7 @@ from db.models import q3c_ang2ipix, LongNameBTreeIndex, Createable, Float32Field
 # Link to tom targets
 import tom_targets.models
 
-_logger = logging.getLogger(__name__)
+_logger = logging.getLogger( "elasticc2/models" )
 _logout = logging.StreamHandler( sys.stderr )
 _formatter = logging.Formatter( f'[%(asctime)s - %(levelname)s] - %(message)s' )
 _logout.setFormatter( _formatter )

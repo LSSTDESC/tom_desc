@@ -39,7 +39,7 @@ from elasticc2.serializers import PPDBDiaObjectSerializer, PPDBDiaSourceSerializ
 #  doesn't seem to have the formatting built in;
 #  I guess djano makes its own formatting instead
 #  of using logging's.  Sigh.
-_logger = logging.getLogger(__name__)
+_logger = logging.getLogger( "elasticc2/views" )
 _logout = logging.StreamHandler( sys.stderr )
 _formatter = logging.Formatter( f'[%(asctime)s - %(levelname)s] - %(message)s' )
 _logout.setFormatter( _formatter )

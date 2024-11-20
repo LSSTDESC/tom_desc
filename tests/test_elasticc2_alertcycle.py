@@ -18,14 +18,7 @@ sys.path.insert( 0, "/tom_desc" )
 
 import elasticc2.models
 
-from msgconsumer import MsgConsumer
-
-# pytest is mysterious.  I tried importing just the fixtures I was using
-# form alertcyclefixtures, but the a fixture there that used another
-# fixture from alertcyclefixtures that I did *not* import here couldn't
-# find that other fixture.  So, I import *, and use an __all__ in
-# alertcyclefixtures.
-from alertcyclefixtures import *
+# from msgconsumer import MsgConsumer
 
 # NOTE -- many of the actual tests are run in the fixtures rather than
 #   the tests below.  See comments in alercyclefixtures.py for the reason for

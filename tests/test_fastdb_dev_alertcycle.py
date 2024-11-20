@@ -18,7 +18,7 @@ sys.path.insert( 0, "/tom_desc" )
 
 import elasticc2.models
 
-from msgconsumer import MsgConsumer
+from testmsgconsumer import MsgConsumer
 
 # pytest is mysterious.  I tried importing just the fixtures I was using
 # form alertcyclefixtures, but the a fixture there that used another

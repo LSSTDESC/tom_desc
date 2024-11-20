@@ -69,7 +69,7 @@ class Command(BaseCommand):
         parser.add_argument( '--pitt-project', default=None, help="Project name for PITT-Google" )
         parser.add_argument( '--do-test', action='store_true', default=False,
                              help="Poll from kafka-server:9092 (for testing purposes)" )
-        parser.add_argument( '---test-topic', default='classifications',
+        parser.add_argument( '--test-topic', default='classifications',
                              help="Topic to poll from on kafka-server:9092" )
         parser.add_argument( '-g', '--grouptag', default=None, help="Tag to add to end of kafka group ids" )
         parser.add_argument( '-r', '--reset', default=False, action='store_true',
