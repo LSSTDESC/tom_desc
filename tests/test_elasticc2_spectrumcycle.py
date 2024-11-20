@@ -49,7 +49,7 @@ class TestSpectrumCycle:
 
 
     # TODO : test things other than detected_since_mjd sent to gethottransients
-    def test_hot_sne( self, update_diasource_100daysmore, tomclient ):
+    def test_hot_sne( self, alert_cycle_complete, tomclient ):
         # Testing detected_in_last_days is fraught because
         #   the mjds in elasticc2 are what they are, are
         #   in the future (as of this comment writing).
@@ -57,10 +57,10 @@ class TestSpectrumCycle:
 
         res = tomclient.post( 'elasticc2/gethottransients', json={ 'detected_since_mjd': 60660 } )
         sne = res.json()['diaobject']
-        assert len(sne) == 5
+        assert len(sne) == 8
 
         snids = { s['objectid'] for s in sne }
-        assert snids == { 15232, 416626, 1263066, 1286131, 1913410 }
+        assert snids == { 15232, 1913410, 2110476, 416626, 1286131, 1684659, 1045654, 1263066 }
 
         # Should probably check more than this...
         assert set( sne[0].keys() ) == { 'objectid', 'ra', 'dec', 'photometry', 'zp', 'redshift', 'sncode' }
@@ -75,6 +75,29 @@ class TestSpectrumCycle:
             assert wnt.diaobject_id == obj
             assert wnt.requester == "tests"
             assert wnt.priority == prio
+
+        # Verify that if we ask again for a spectrum, it overwrites the previous request
+        lstobj = objs[-1]
+        lstprio = prios[-1]
+        newprio = lstprio + 1 if lstprio < 5 else 1
+
+        oldn = elasticc2.models.WantedSpectra.objects.count()
+        old_dbobj = elasticc2.models.WantedSpectra.objects.filter( requester='tests',
+                                                                   diaobject_id=lstobj )[0]
+        assert old_dbobj.priority == lstprio
+
+        res = tomclient.post( 'elasticc2/askforspectrum', json={ 'requester': 'tests',
+                                                                 'objectids': [ lstobj ],
+                                                                 'priorities': [ newprio ] } )
+        assert res.status_code == 200
+
+        assert elasticc2.models.WantedSpectra.objects.count() == oldn
+        dbobjs = elasticc2.models.WantedSpectra.objects.filter( requester='tests',
+                                                                diaobject_id=lstobj )
+        import pdb; pdb.set_trace()
+        assert len( dbobjs ) == 1
+        assert dbobjs[0].wanttime > old_dbobj.wanttime
+        assert dbobjs[0].priority == newprio
 
 
     def test_what_are_wanted_initial( self, ask_for_spectra, tomclient ):
@@ -285,3 +308,10 @@ class TestSpectrumCycle:
         assert data['spectra'][0]['mjd'] == pytest.approx( 65536., abs=0.01 )
         assert data['spectra'][0]['z'] == pytest.approx( 0.25, abs=0.01 )
         assert data['spectra'][0]['classid'] == 2222
+
+
+    def test_cleanup( self ):
+        # Lots of previous tests left stuff in the database.  Clean it out.
+        elasticc2.models.SpectrumInfo.objects.all().delete()
+        elasticc2.models.WantedSpectra.objects.all().delete()
+        elasticc2.models.PlannedSpectra.objects.all().delete()

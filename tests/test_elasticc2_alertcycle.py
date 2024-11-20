@@ -21,10 +21,6 @@ class TestElasticc2AlertCycle:
         assert elasticc2.models.DiaObjectTruth.objects.count() == elasticc2.models.PPDBDiaObject.objects.count()
 
 
-    # def handle_test_send_alerts( self, msgs ):
-    #     self._test_send_alerts_count += len(msgs)
-
-
     def test_send_alerts( self, alerts_300days ):
         assert alerts_300days
 
@@ -33,16 +29,16 @@ class TestElasticc2AlertCycle:
         assert classifications_300days_exist
 
 
-    def test_classifications_ingested( self, classifications_300days_elasticc2_ingested ):
-        assert classifications_300days_elasticc2_ingested
+    def test_classifications_ingested( self, classifications_300days_ingested ):
+        assert classifications_300days_ingested
 
 
     def test_sources_updated( self, update_elasticc2_diasource_300days ):
         assert update_elasticc2_diasource_300days
 
 
-    def test_100moredays_classifications_ingested( self, classifications_100daysmore_elasticc2_ingested ):
-        assert classifications_100daysmore_elasticc2_ingested
+    def test_100moredays_classifications_ingested( self, classifications_100daysmore_ingested ):
+        assert classifications_100daysmore_ingested
 
 
     def test_100moredays_sources_updated( self, update_elasticc2_diasource_100daysmore ):
@@ -51,8 +47,6 @@ class TestElasticc2AlertCycle:
 
     def test_apibroker_existingsources( self, api_classify_existing_alerts ):
         cfer = elasticc2.models.BrokerClassifier
-        # brkmsgsrc = elasticc2.models.CassBrokerMessageBySource
-        # brkmsgtim = elasticc2.models.CassBrokerMessageByTime
         brkmsg = elasticc2.models.BrokerMessage
 
         assert cfer.objects.count() == 3
@@ -66,7 +60,7 @@ class TestElasticc2AlertCycle:
         # The test api broker will add 1300 probabilities
         #   (since it assignes probabilities to two classes).
         # Add that to the 13650 probabilities that
-        #   are in fixture classifications_100daysmore_elasticc2_ingested,
+        #   are in fixture classifications_100daysmore_ingested,
         #   and you get 14950
         for msg in brkmsg.objects.all():
             assert len(msg.classid) == len(msg.probability)

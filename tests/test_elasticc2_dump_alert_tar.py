@@ -29,8 +29,6 @@ class TestDumpAlertTar:
                                   cwd="/tom_desc", capture_output=True )
             assert res.returncode == 0
 
-            import pdb; pdb.set_trace()
-
             # Check that the expected tar files exist, and spot-check one
             assert all( pathlib.Path( f"/tests/{i}.tar" ).is_file()
                         for i in [ 60278, 60279, 60281, 60282, 60283, 60286 ] )

@@ -230,9 +230,8 @@ def classifications_300days_exist( alerts_300days, topic_barf, fakebroker ):
 
     yield True
 
-
 @pytest.fixture( scope="session" )
-def classifications_300days_elasticc2_ingested( classifications_300days_exist, brokerpoll_elasticc2 ):
+def classifications_300days_ingested( classifications_300days_exist, brokerpoll_elasticc2, mongoclient ):
     # Have to have an additional sleep after the classifications exist,
     # because brokerpoll itself has a 10s sleep loop
     time.sleep( 11 )
@@ -241,6 +240,8 @@ def classifications_300days_elasticc2_ingested( classifications_300days_exist, b
     # file because I can't clean up, and there is hysteresis.  Once
     # later fixtures have run, the tests below would fail, and these
     # fixtures may be used in more than one test.
+
+    # elasticc2
 
     brkmsg = elasticc2.models.BrokerMessage
     cfer = elasticc2.models.BrokerClassifier
@@ -258,26 +259,10 @@ def classifications_300days_elasticc2_ingested( classifications_300days_exist, b
     # 545 from NugentClassifier plus 20*545 for RandomSNType
     assert numprobs == 11445
 
-    # TODO : check that the data is identical for
-    # corresponding entries in the two cassbroker
-    # tables
-
     assert ( set( [ i.classifiername for i in cfer.objects.all() ] )
              == set( [ "NugentClassifier", "RandomSNType" ] ) )
 
-    yield True
-
-
-@pytest.fixture( scope="session" )
-def classifications_300days_fastdb_dev_ingested( classifications_300days_exist, brokerpoll_fastdb_dev, mongoclient ):
-    # Have to have an additional sleep after the classifications exist,
-    # because brokerpoll itself has a 10s sleep loop
-    time.sleep( 11 )
-
-    # Have to have these tests here rather than in the actual test_*
-    # file because I can't clean up, and there is hysteresis.  Once
-    # later fixtures have run, the tests below would fail, and these
-    # fixtures may be used in more than one test.
+    # fastdb_dev
 
     db = mongoclient.alerts
 
@@ -300,8 +285,9 @@ def classifications_300days_fastdb_dev_ingested( classifications_300days_exist, 
 
     yield True
 
+
 @pytest.fixture( scope="session" )
-def update_elasticc2_diasource_300days( classifications_300days_elasticc2_ingested ):
+def update_elasticc2_diasource_300days( classifications_300days_ingested ):
     result = subprocess.run( [ "python", "manage.py", "update_elasticc2_sources" ],
                              cwd="/tom_desc", capture_output=True )
     assert result.returncode == 0
@@ -326,7 +312,7 @@ def update_elasticc2_diasource_300days( classifications_300days_elasticc2_ingest
 
 
 @pytest.fixture( scope="session" )
-def update_fastdb_dev_diasource_300days( classifications_300days_fastdb_dev_ingested ):
+def update_fastdb_dev_diasource_300days( classifications_300days_ingested ):
     result = subprocess.run( [ "python", "manage.py", "load_fastdb",
                                "--pv", "test_pv", "--snapshot", "test_ss",
                                "--tag", "test_ss_tag",
@@ -402,11 +388,13 @@ def alerts_100daysmore( alerts_300days, topic_barf, fakebroker,
     # Same issue as alerts_300days about not cleaning up
 
 @pytest.fixture( scope="session" )
-def classifications_100daysmore_elasticc2_ingested( alerts_100daysmore, brokerpoll_elasticc2 ):
+def classifications_100daysmore_ingested( alerts_100daysmore, brokerpoll_elasticc2, mongoclient ):
     # This time we need to allow for both the 10s sleep cycle timeout of
     # brokerpoll and fakebroker (since we're not checking
     # classifications exist separately from ingested)
     time.sleep( 22 )
+
+    # elasticc2
 
     # Tests here because of hysteresis
 
@@ -428,17 +416,8 @@ def classifications_100daysmore_elasticc2_ingested( alerts_100daysmore, brokerpo
     assert ( set( [ i.classifiername for i in cfer.objects.all() ] )
              == set( [ "NugentClassifier", "RandomSNType" ] ) )
 
-    yield True
 
-
-@pytest.fixture( scope="session" )
-def classifications_100daysmore_fastdb_dev_ingested( alerts_100daysmore, brokerpoll_fastdb_dev, mongoclient ):
-    # This time we need to allow for both the 10s sleep cycle timeout of
-    # brokerpoll and fakebroker (since we're not checking
-    # classifications exist separately from ingested)
-    time.sleep( 22 )
-
-    # Tests here because of hysteresis
+    # fastdb_dev
 
     db = mongoclient.alerts
 
@@ -463,7 +442,7 @@ def classifications_100daysmore_fastdb_dev_ingested( alerts_100daysmore, brokerp
 
 
 @pytest.fixture( scope="session" )
-def update_elasticc2_diasource_100daysmore( classifications_100daysmore_elasticc2_ingested ):
+def update_elasticc2_diasource_100daysmore( classifications_100daysmore_ingested ):
     result = subprocess.run( [ "python", "manage.py", "update_elasticc2_sources" ],
                              cwd="/tom_desc", capture_output=True )
     assert result.returncode == 0

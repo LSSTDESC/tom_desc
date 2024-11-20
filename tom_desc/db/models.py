@@ -194,7 +194,10 @@ class Createable(models.Model):
             # columns = [ f'"{c}"' for c in df.columns.values ]
             columns = df.columns.values
             cursor.copy_from( strio, "bulk_upsert", columns=columns, size=1048576 )
-            conflict = "DO UPDATE" if upsert else "DO NOTHING"
+            if not upsert:
+                conflict = "DO NOTHING"
+            else:
+                conflict = "DO UPDATE SET " + ",".join( f"{c}=EXCLUDED.{c}" for c in columns )
             q = f"INSERT INTO {cls._meta.db_table} SELECT * FROM bulk_upsert ON CONFLICT {conflict}"
             cursor.execute( q )
             ninserted = cursor.rowcount

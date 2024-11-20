@@ -18,11 +18,11 @@ sys.path.insert( 0, "/tom_desc" )
 
 import db.models
 
-# Use the last alertcycle fixture api_classify_existing_alerts to get
+# Use the last alertcycle fixture api_alertcycle_complete to get
 # the database into a known state.  This is kind of slow, due to all the
-# delays in the various polling servers, so it means a ~1 min delay on
-# the tests here actually running, but what can you do.
-from alertcyclefixtures import *
+# delays in the various polling servers, so it means a few min delay on
+# the tests here actually running, but what can you do.  (At least it's
+# a session fixture.)
 
 class TestSQLWebInterface:
 

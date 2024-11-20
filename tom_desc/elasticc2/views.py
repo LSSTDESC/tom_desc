@@ -1174,7 +1174,7 @@ class AskForSpectrumView(PermissionRequiredMixin, django.views.View):
                        for i in range(len(data['objectids'])) ]
 
         try:
-            objs = WantedSpectra.bulk_load_or_create( tocreate )
+            objs = WantedSpectra.bulk_insert_or_upsert( tocreate, upsert=True )
         except Exception as ex:
             return HttpResponse( str(ex), status=500, content_type='text/plain; charset=utf-8' )
 

@@ -21,10 +21,6 @@ class TestFastDBDevAlertCycle:
         assert elasticc2.models.DiaObjectTruth.objects.count() == elasticc2.models.PPDBDiaObject.objects.count()
 
 
-    # def handle_test_send_alerts( self, msgs ):
-    #     self._test_send_alerts_count += len(msgs)
-
-
     def test_send_alerts( self, alerts_300days ):
         assert alerts_300days
 
@@ -33,16 +29,16 @@ class TestFastDBDevAlertCycle:
         assert classifications_300days_exist
 
 
-    def test_classifications_ingested( self, classifications_300days_fastdb_dev_ingested ):
-        assert classifications_300days_fastdb_dev_ingested
+    def test_classifications_ingested( self, classifications_300days_ingested ):
+        assert classifications_300days_ingested
 
 
     def test_sources_updated( self, update_fastdb_dev_diasource_300days ):
         assert update_fastdb_dev_diasource_300days
 
 
-    def test_100moredays_classifications_ingested( self, classifications_100daysmore_fastdb_dev_ingested ):
-        assert classifications_100daysmore_fastdb_dev_ingested
+    def test_100moredays_classifications_ingested( self, classifications_100daysmore_ingested ):
+        assert classifications_100daysmore_ingested
 
 
     def test_100moredays_sources_updated( self, update_fastdb_dev_diasource_100daysmore ):
