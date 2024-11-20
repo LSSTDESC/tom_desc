@@ -19,8 +19,6 @@ django.setup()
 import elasticc2.models
 from tom_client import TomClient
 
-from alertcyclefixtures import *
-
 # I'm abusing pytest here by having tests depend on previous
 #  tests, rather than making all dependencies fixtures.
 # I may fix that at some point.
@@ -28,7 +26,7 @@ from alertcyclefixtures import *
 class TestSpectrumCycle:
 
     @pytest.fixture( scope='class' )
-    def ask_for_spectra( self, update_diasource_100daysmore, tomclient ):
+    def ask_for_spectra( self, alert_cycle_complete, tomclient ):
         objs = elasticc2.models.DiaObject.objects.all().order_by("diaobject_id")
         objs = list( objs )
 

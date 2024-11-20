@@ -24,15 +24,6 @@ services:
       retries: 5
     entrypoint: [ "bin/kafka-server-start.sh", "config/server.properties" ]
 
-  # fakebroker:
-  #   depends_on:
-  #     kafka-server:
-  #       condition: service_healthy
-  #   image: ${TOM_DOCKER_ARCHIVE:-ghcr.io/lsstdesc/tom_desc}/fakebroker:${TOM_DOCKER_VERSION:-latest}
-  #   build:
-  #     context: .
-  #     dockerfile: Dockerfile.fakebroker
-
   postgres:
     image: ${TOM_DOCKER_ARCHIVE:-ghcr.io/lsstdesc/tom_desc}/tom-postgres:${TOM_DOCKER_VERSION:-latest}
     build:
@@ -152,81 +143,6 @@ services:
       MONGODB_ALERT_WRITER_PASSWORD: writer
       MONGODB_ALERT_READER: mongdb_alert_reader
       MONGODB_ALERT_READER_PASSWORD: reader
-
-
-  # brokerpoll:
-  #   depends_on:
-  #     createdb:
-  #       condition: service_completed_successfully
-  #     tom:
-  #       condition: service_started
-  #     # fakebroker:
-  #     #   condition: service_started
-  #   image: ${TOM_DOCKER_ARCHIVE:-ghcr.io/lsstdesc/tom_desc}/tom_desc_bindmount:${TOM_DOCKER_VERSION:-latest}
-  #   build:
-  #     context: ../
-  #     dockerfile: docker_server/Dockerfile
-  #     target: tom-server-bindmount
-  #   volumes:
-  #     - type: bind
-  #       source: ../secrets
-  #       target: /secrets
-  #     - type: bind
-  #       source: ../tom_desc
-  #       target: /tom_desc
-  #     - type: volume
-  #       source: logs
-  #       target: /logs
-  #   environment:
-  #     LOGDIR: /logs
-  #     DB_NAME: tom_desc
-  #     DB_HOST: postgres
-  #     DB_USER: postgres
-  #     DB_PASS: fragile
-  #     DB_PORT: 5432
-  #   entrypoint: [ "python", "manage.py", "brokerpoll2", "--do-test", "--grouptag", "elasticc2" ]
-
-
-  # brokerpoll_fastdb_dev:
-  #   depends_on:
-  #     createdb:
-  #       condition: service_completed_successfully
-  #     tom:
-  #       condition: service_started
-  #     kafka-server:
-  #       condition: service_healthy
-  #     # fakebroker:
-  #     #   condition: service_started
-  #   image: ${TOM_DOCKER_ARCHIVE:-ghcr.io/lsstdesc/tom_desc}/tom_desc_bindmount:${TOM_DOCKER_VERSION:-latest}
-  #   build:
-  #     context: ../
-  #     dockerfile: docker_server/Dockerfile
-  #     target: tom-server-bindmount
-  #   volumes:
-  #     - type: bind
-  #       source: ../secrets
-  #       target: /secrets
-  #     - type: bind
-  #       source: ../tom_desc
-  #       target: /tom_desc
-  #     - type: volume
-  #       source: logs
-  #       target: /logs
-  #   environment:
-  #     LOGDIR: /logs
-  #     MONGOHOST: mongodb
-  #     MONGODB_ADMIN: mongodb_admin
-  #     MONGODB_ADMIN_PASSWORD: fragile
-  #     MONGODB_ALERT_WRITER: mongodb_alert_writer
-  #     MONGODB_ALERT_WRITER_PASSWORD: writer
-  #     MONGODB_ALERT_READER: mongdb_alert_reader
-  #     MONGODB_ALERT_READER_PASSWORD: reader
-  #     DB_NAME: tom_desc
-  #     DB_HOST: postgres
-  #     DB_USER: postgres
-  #     DB_PASS: fragile
-  #     DB_PORT: 5432
-  #   entrypoint: [ "python", "manage.py", "fastdb_dev_brokerpoll", "--do-test", "--grouptag", "fastdb_dev" ]
 
 
   # Thought required: want to make this dependent on

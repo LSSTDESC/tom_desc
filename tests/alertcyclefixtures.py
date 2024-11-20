@@ -71,7 +71,8 @@ from fakebroker import FakeBroker
 # they could.  In fact, they deliberately choose not to clean up,
 # so that the database will be in the state it is at the end of the
 # full alert cycle; the alert_cycle_complete fixture then detects that
-# and runs the slow fixtures or not as necessary.
+# and runs the slow fixtures or not as necessary.  (That last fixture
+# then actually cleans up the database.)
 
 # Any tests that use these fixtures and are going to test actual numbers
 # in the database should only depend on alert_cycle_complete.  Once all
@@ -208,7 +209,6 @@ def alerts_300days( elasticc2_ppdb, topic_barf ):
 
 @pytest.fixture( scope="session" )
 def classifications_300days_exist( alerts_300days, topic_barf, fakebroker ):
-
     counter = AlertCounter()
     consumer = MsgConsumer( 'kafka-server:9092',
                             'test_classifications_exist',
@@ -370,12 +370,20 @@ def update_fastdb_dev_diasource_300days( classifications_300days_fastdb_dev_inge
     yield True
 
 @pytest.fixture( scope="session" )
-def alerts_100daysmore( alerts_300days, topic_barf, fakebroker ):
+def alerts_100daysmore( alerts_300days, topic_barf, fakebroker,
+                        update_elasticc2_diasource_300days,
+                        update_fastdb_dev_diasource_300days ):
     # This will send alerts up through mjd 60676.  Why not 60678, since the previous
     #   sent through 60578?  There were no alerts between 60675 and 60679, so the last
     #   alert sent will have been a source from mjd 60675.  That's what the 100 days
     #   are added to.
     # This is an additional 105 alerts, for a total of 650 (coming from 131 objects).
+    # (Note that we have to make sure the udpate_*_diasource_300days
+    #   fixtures have run before this fixture runs, because this fixture
+    #   is going to add more alerts, leading the running fakebroker to
+    #   add more classifications, and then there will be more
+    #   classifications sitting on the kafka server than those fixtures
+    #   (and their prerequisites) are expecting.)
     result = subprocess.run( [ "python", "manage.py", "send_elasticc2_alerts",
                                "-a", "100",
                                "-k", "kafka-server:9092",
@@ -597,25 +605,31 @@ def random_broker_classifications():
 
 
 @pytest.fixture( scope="session" )
-def alert_cycle_complete( request, tomclient, mongoclient ):
-    res = tomclient.post( 'db/runsqlquery/',
-                          json={ 'query': 'SELECT COUNT(*) AS count FROM elasticc2_brokermessage' } )
-    rows = res.json()[ 'rows' ]
-    if rows[0]['count'] == 0:
-        request.getfixturevalue( "update_elasticc2_diasource_100daysmore" )
-        request.getfixturevalue( "update_fastdb_dev_diasource_100daysmore" )
-        request.getfixturevalue( "api_classify_existing_alerts" )
+def alert_cycle_complete( # request, tomclient, mongoadmin ):
+                          mongoadmin,
+                          update_elasticc2_diasource_100daysmore,
+                          update_fastdb_dev_diasource_100daysmore,
+                          api_classify_existing_alerts ):
+    # res = tomclient.post( 'db/runsqlquery/',
+    #                       json={ 'query': 'SELECT COUNT(*) AS count FROM elasticc2_brokermessage' } )
+    # rows = res.json()[ 'rows' ]
+    # if rows[0]['count'] == 0:
+    #     request.getfixturevalue( "update_elasticc2_diasource_100daysmore" )
+    #     request.getfixturevalue( "update_fastdb_dev_diasource_100daysmore" )
+    #     request.getfixturevalue( "api_classify_existing_alerts" )
 
     yield True
 
     # Clean up the database.
     # This is potentially antisocial, since other fixtures may have
     #   added things to these tables.  However, since this is as session
-    #   fixture, it shouldn't be too bad.  But, in any event, there are
-    #   problems running this fixture with any tests other than those in
-    #   test_elasticc2_alertcycle and test_fastdb_dev_alertcycle that
-    #   want to look at any of these tables; see top of file.
+    #   fixture, it shouldn't be too bad.  In any event, there are other
+    #   problems running this file's fixtures with any tests other than
+    #   those in test_elasticc2_alertcycle and
+    #   test_fastdb_dev_alertcycle that want to look at any of these
+    #   tables; see top of file.
 
+    _logger.info( "Cleaning up alertcycle database entries" )
     elasticc2.models.BrokerMessage.objects.all().delete()
     elasticc2.models.BrokerClassifier.objects.all().delete()
     elasticc2.models.BrokerSourceIds.objects.all().delete()
@@ -624,9 +638,17 @@ def alert_cycle_complete( request, tomclient, mongoclient ):
     elasticc2.models.DiaForcedSource.objects.all().delete()
     elasticc2.models.DiaSource.objects.all().delete()
     elasticc2.models.DiaObject.objects.all().delete()
+    fastdb_dev.models.BrokerClassification.objects.all().delete()
+    fastdb_dev.models.BrokerClassifier.objects.all().delete()
+    fastdb_dev.models.DiaForcedSource.objects.all().delete()
+    fastdb_dev.models.DiaSource.objects.all().delete()
+    fastdb_dev.models.DiaObject.objects.all().delete()
+    fastdb_dev.models.DStoPVtoSS.objects.all().delete()
+    fastdb_dev.models.DFStoPVtoSS.objects.all().delete()
+    fastdb_dev.models.Snapshots.objects.all().delete()
+    fastdb_dev.models.ProcessingVersions.objects.all().delete()
 
-    db = mongoclient.alerts
-
+    db = mongoadmin.alerts
     if 'fakebroker' in db.list_collection_names():
         coll = db.fakebroker
         coll.drop()

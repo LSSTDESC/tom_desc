@@ -1,14 +1,3 @@
-# WARNING -- if you run both this test and test_fastdb_dev_alertcycle
-#   within the same docker compose session, but different pytest
-#   sessions, one will fail.  For the reason, see the comments in
-#   alertcyclefixtures.py.  (Basically, the first one you run will load
-#   up both databases, so early tests that expect not-fully-loaded
-#   databases will fail.)
-#
-# Both should all pass if you run them both at once, i.e.
-#
-# pytest -v test_elasticc2_alertcycle.py test_fastdb_dev_alertcycle.py
-
 import os
 import sys
 import datetime
@@ -17,8 +6,6 @@ import time
 sys.path.insert( 0, "/tom_desc" )
 
 import elasticc2.models
-
-# from msgconsumer import MsgConsumer
 
 # NOTE -- many of the actual tests are run in the fixtures rather than
 #   the tests below.  See comments in alercyclefixtures.py for the reason for
@@ -34,8 +21,8 @@ class TestElasticc2AlertCycle:
         assert elasticc2.models.DiaObjectTruth.objects.count() == elasticc2.models.PPDBDiaObject.objects.count()
 
 
-    def handle_test_send_alerts( self, msgs ):
-        self._test_send_alerts_count += len(msgs)
+    # def handle_test_send_alerts( self, msgs ):
+    #     self._test_send_alerts_count += len(msgs)
 
 
     def test_send_alerts( self, alerts_300days ):
@@ -101,3 +88,7 @@ class TestElasticc2AlertCycle:
         assert onemsg.msghdrtimestamp - onemsg.brokeringesttimestamp < datetime.timedelta(seconds=5)
         assert onemsg.descingesttimestamp - onemsg.msghdrtimestamp < datetime.timedelta(seconds=5)
 
+    def test_cleanup( self, alert_cycle_complete ):
+        # This is just here to make sure that the cleanup in the
+        #   alert_cycle_complete session fixture gets run.
+        pass
