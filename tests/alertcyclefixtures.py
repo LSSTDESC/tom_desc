@@ -231,7 +231,8 @@ def classifications_300days_exist( alerts_300days, topic_barf, fakebroker ):
     yield True
 
 @pytest.fixture( scope="session" )
-def classifications_300days_ingested( classifications_300days_exist, brokerpoll_elasticc2, mongoclient ):
+def classifications_300days_ingested( classifications_300days_exist, mongoclient,
+                                      brokerpoll_elasticc2, brokerpoll_fastdb_dev ):
     # Have to have an additional sleep after the classifications exist,
     # because brokerpoll itself has a 10s sleep loop
     time.sleep( 11 )
@@ -388,7 +389,8 @@ def alerts_100daysmore( alerts_300days, topic_barf, fakebroker,
     # Same issue as alerts_300days about not cleaning up
 
 @pytest.fixture( scope="session" )
-def classifications_100daysmore_ingested( alerts_100daysmore, brokerpoll_elasticc2, mongoclient ):
+def classifications_100daysmore_ingested( alerts_100daysmore, mongoclient,
+                                          brokerpoll_elasticc2, brokerpoll_fastdb_dev ):
     # This time we need to allow for both the 10s sleep cycle timeout of
     # brokerpoll and fakebroker (since we're not checking
     # classifications exist separately from ingested)
@@ -466,7 +468,7 @@ def update_elasticc2_diasource_100daysmore( classifications_100daysmore_ingested
 
 
 @pytest.fixture( scope="session" )
-def update_fastdb_dev_diasource_100daysmore( classifications_100daysmore_fastdb_dev_ingested ):
+def update_fastdb_dev_diasource_100daysmore( classifications_100daysmore_ingested ):
     # SEE COMMENTS IN update_fastdb_dev_diasource_300days
 
     result = subprocess.run( [ "python", "manage.py", "load_fastdb",
