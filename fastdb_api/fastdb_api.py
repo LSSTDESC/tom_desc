@@ -6,41 +6,41 @@ import os
 import os.path
 import configparser
 
-URL =  'https://desc-tom-fastdb-dev.lbl.gov/fastdb_dev/'
+URL =  'https://desc-tom-fastdb-dev.lbl.gov/'
 #URL = 'http://tom-app.desc-tom-buckley-dev.production.svc.spin.nersc.org/fastdb_dev/'
-LOGIN_URL = URL + 'acquire_token'
-TOKEN_URL = URL + 'api-token-auth/'
-SUBMIT_LONG_QUERY_URL = URL + 'submit_long_query'
-SUBMIT_SHORT_QUERY_URL = URL + 'submit_short_query'
-CHECK_LONG_SQL_QUERY_URL = URL + 'check_long_sql_query'
-GET_LONG_SQL_QUERY_URL = URL + 'get_long_sql_query'
-DIA_SOURCE_URL = URL + 'bulk_create_dia_source_data'
-DS_PV_SS_URL = URL + 'bulk_create_ds_pv_ss_data'
-UPDATE_DS_PV_SS_URL = URL + 'bulk_update_ds_pv_ss_valid_flag'
-UPDATE_DIA_SOURCE_URL = URL + 'bulk_update_dia_source_valid_flag'
-AUTHENTICATE_USER = URL + 'authenticate_user'
+LOGIN_URL = URL + 'accounts/login/'
+SUBMIT_LONG_QUERY_URL = URL + 'db/submitsqlquery/'
+SUBMIT_SHORT_QUERY_URL = URL + 'db/runsqlquery/'
+CHECK_LONG_SQL_QUERY_URL = URL + 'db/checksqlquery/'
+GET_LONG_SQL_QUERY_URL = URL + 'db/getsqlqueryresults/'
+DIA_SOURCE_URL = URL + 'fastdb_dev/create_dia_source'
+DS_PV_SS_URL = URL + 'fastdb_dev/create_ds_pv_ss'
+UPDATE_DS_PV_SS_URL = URL + 'fastdb_dev/update_ds_pv_ss_valid_flag'
+UPDATE_DIA_SOURCE_URL = URL + 'fastdb_dev/update_dia_source_valid_flag'
 
-class FASTDBDataAccess(object):
+class FASTDB(object):
 
     def __init__(self):
 
-        session = Session()
+        self.session = Session()
         fastdbservices = os.environ['HOME'] + '/.fastdbservices.ini'
         if os.path.exists(fastdbservices):
             config = configparser.ConfigParser()
             config.read(fastdbservices)
             username = config['fastdb']['user']
             password = config['fastdb']['passwd']
-            req = session.get(LOGIN_URL)
-            self.csrf_token = req.cookies['csrftoken']
+            req = self.session.get(LOGIN_URL)
+            if req.status_code != 200:
+                raise RuntimeError( f"Got status {req.status_code} from first attempt to connect to {LOGIN_URL}" )
 
-            login_data = {'username':username, 'password':password, 'csrfmiddlewaretoken': self.csrf_token}
-            req = session.post(TOKEN_URL, data=login_data)
-            token = json.loads(req.text).get('token')
+            login_data = {'username':username, 'password':password, 'csrfmiddlewaretoken':  self.session.cookies['csrftoken']}
+            req = self.session.post(LOGIN_URL, data=login_data)
 
-            if token:
-                token = f"Token {token}"
-                self.headers = {"Authorization": token}
+            if req.status_code != 200:
+                raise RuntimeError( f"Failed to log in; http status: {req.status_code}" )
+
+            self.session.headers.update( { 'X-CSRFToken': self.session.cookies['csrftoken'] } )
+
         else:
             print('Cannot find %s. Failed to authenticate' % fastdbservices)
             
@@ -50,12 +50,9 @@ class FASTDBDataAccess(object):
         queryid = None
         self.format = format
         
-        query = json.dumps([{'csrfmiddlewaretoken': self.csrf_token},{'query':q},{'format':self.format}])
-        print(query)
-        if isinstance(query,str):
-            print('string')
+        query = {'query':q, 'format':self.format}
 
-        res = requests.post(SUBMIT_LONG_QUERY_URL, json=query, headers=self.headers)
+        res = self.session.post(SUBMIT_LONG_QUERY_URL, json=query)
         if res.status_code != 200:
             sys.stderr.write( f"ERROR, got status {res.status_code}\n" )
         elif res.headers['Content-Type'][:16] != 'application/json':
@@ -79,10 +76,11 @@ class FASTDBDataAccess(object):
 
         
         if subdict is not None:
-            query = json.dumps([{'csrfmiddlewaretoken': self.csrf_token},{'query':query},{'subdict':subdict},])
+            query = {'query':query,'subdict':subdict}
         else:
-            query = json.dumps([{'csrfmiddlewaretoken': self.csrf_token},{'query':query},])
-        res = requests.post(SUBMIT_SHORT_QUERY_URL, json=query, headers=self.headers)
+            query = {'query':query}
+
+        res = self.session.post(SUBMIT_SHORT_QUERY_URL, json=query)
         if res.status_code != 200:
             sys.stderr.write( f"ERROR, got status {res.status_code}\n" )
         elif res.headers['Content-Type'][:16] != 'application/json':
@@ -96,78 +94,53 @@ class FASTDBDataAccess(object):
             elif data['status'] != 'ok':
                 sys.stderr.write( f"status is {data['status']} and I don't know how to cope.\n" )
             else:
-                return data['data']
+                return data['rows']
             
 
     def check_long_sql_query(self, queryid):
 
-        query = json.dumps([{'csrfmiddlewaretoken': self.csrf_token},{'queryid':queryid},])
 
-        r = requests.post(CHECK_LONG_SQL_QUERY_URL, json=query, headers=self.headers)
+        url = CHECK_LONG_SQL_QUERY_URL + queryid +'/'
+        r = self.session.post(url)
         print(r.status_code)
         if r.status_code == requests.codes.ok:
             return r.json()
         else:
-            print("Failed to authenticate")
+            sys.stderr.write( f"Got an error: {r.status_code}\n" )
 
 
     def get_long_sql_query(self, queryid):
 
-        query = json.dumps([{'csrfmiddlewaretoken': self.csrf_token},{'queryid':queryid},])
-
-        r = requests.post(GET_LONG_SQL_QUERY_URL, json=query, headers=self.headers)
+        url = GET_LONG_SQL_QUERY_URL + queryid +'/'
+        r = self.session.post(url)
         print(r.status_code)
+        ctype = r.headers['content-type']
         if r.status_code == requests.codes.ok:
-            return r.text
+            if ctype == 'text/csv':
+                return r.text
+            elif ctype == 'application/octet-stream':
+                return r.content
         else:
-            print("Failed to authenticate")
+            sys.stderr.write( f"Got an error: {r.status_code}\n" )
+
             
-class FASTDBDataStore(object):
-
-    def __init__(self):
-
-        session = Session()
-        fastdbservices = os.environ['HOME'] + '/.fastdbservices.ini'
-        if os.path.exists(fastdbservices):
-            config = configparser.ConfigParser()
-            config.read(fastdbservices)
-            username = config['fastdb']['user']
-            password = config['fastdb']['passwd']
-            req = session.get(LOGIN_URL)
-            self.csrf_token = req.cookies['csrftoken']
-
-            login_data = {'username':username, 'password':password, 'csrfmiddlewaretoken': self.csrf_token}
-            req = session.post(TOKEN_URL, data=login_data)
-            token = json.loads(req.text).get('token')
-            
-            if token:
-                token = f"Token {token}"
-                self.headers = {"Authorization": token}
-        else:
-            print('Cannot find %s. Failed to authenticate' % fastdbservices)
-
-
     def data_insert(self,table,data):
 
-        query = json.dumps([{'csrfmiddlewaretoken': self.csrf_token},
-                        {'insert':data},
-        ])
+        query = {'insert':data}
         if table == 'dia_source':
-            r = requests.post(DIA_SOURCE_URL, json=query, headers=self.headers)
+            r = self.session.post(DIA_SOURCE_URL, json=query)
         if table == 'ds_to_pv_to_ss':
-            r = requests.post(DS_PV_SS_URL, json=query, headers=self.headers)
+            r = self.session.post(DS_PV_SS_URL, json=query)
             
         return r.json()
 
     def data_update(self,table,data):
 
-        query = json.dumps([{'csrfmiddlewaretoken': self.csrf_token},
-                        {'update':data},
-        ])
+        query = {'update':data}
         if table == 'dia_source':
-            r = requests.post(UPDATE_DIA_SOURCE_URL, json=query, headers=self.headers)
+            r = self.session.post(UPDATE_DIA_SOURCE_URL, json=query)
         if table == 'ds_to_pv_to_ss':
-            r = requests.post(UPDATE_DS_PV_SS_URL, json=query, headers=self.headers)
+            r = self.session.post(UPDATE_DS_PV_SS_URL, json=query)
             
         return r.json()
         
