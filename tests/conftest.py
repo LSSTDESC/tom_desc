@@ -69,3 +69,39 @@ def elasticc2_ppdb( tomclient ):
     elasticc2.models.PPDBDiaObject.objects.all().delete()
 
 
+@pytest.fixture
+def load_elasticc2_database_snapshot():
+    # Make sure that the database is in a state where this won't be a disaster
+    models = [ elasticc2.models.BrokerClassifier,
+               elasticc2.models.BrokerMessage,
+               elasticc2.models.DiaForcedSource,
+               elasticc2.models.DiaObject,
+               elasticc2.models.DiaObjectTruth,
+               elasticc2.models.DiaSource,
+               elasticc2.models.PPDBAlert,
+               elasticc2.models.PPDBDiaForcedSource,
+               elasticc2.models.PPDBDiaObject,
+               elasticc2.models.PPDBDiaSource,
+               elasticc2.models.DiaObjectInfo,
+               elasticc2.models.BrokerSourceIds ]
+
+    for m in models:
+        assert m.objects.count() == 0
+
+    # Load
+    res = subprocess.run( [ "pg_restore",
+                            "--data-only",
+                            "-h", "postgres",
+                            "-U", "postgres",
+                            "-d", "tom_desc",
+                            "elasticc2_alertcycle_complete.psqlc" ],
+                          cwd="/tests",
+                          env={ 'PGPASSWORD': 'fragile' },
+                          capture_output=True )
+    assert res.returncode == 0
+
+    yield True
+
+    # Unload
+    for m in models:
+        m.objects.all().delete()
