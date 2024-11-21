@@ -3,14 +3,14 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: mongodb
-  namespace: desc-tom
+  namespace: desc-tom-rknop-dev
 spec:
   progressDeadlineSeconds: 600
   replicas: 1
   revisionHistoryLimit: 10
   selector:
     matchLabels:
-      workload.user.cattle.io/workloadselector: deployment-desc-tom-mongodb
+      workload.user.cattle.io/workloadselector: deployment-desc-tom-rknop-dev-mongodb
   strategy:
     rollingUpdate:
       maxSurge: 1
@@ -28,7 +28,7 @@ spec:
         nersc.gov/username: raknop
       creationTimestamp: null
       labels:
-        workload.user.cattle.io/workloadselector: deployment-desc-tom-mongodb
+        workload.user.cattle.io/workloadselector: deployment-desc-tom-rknop-dev-mongodb
     spec:
       initContainers:
       - args:
@@ -118,13 +118,13 @@ spec:
       volumes:
       - name: mongodb-datadir
         persistentVolumeClaim:
-          claimName: mongodb-pvc-20241030
+          claimName: rknop-dev-mongodb-pvc-20241030
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: mongodb-service
-  namespace: desc-tom
+  name: mongodb
+  namespace: desc-tom-rknop-dev
 spec:
   clusterIP: None
   clusterIPs:
@@ -135,7 +135,7 @@ spec:
     protocol: TCP
     targetPort: 42
   selector:
-    workload.user.cattle.io/workloadselector: deployment-desc-tom-mongodb
+    workload.user.cattle.io/workloadselector: deployment-desc-tom-rknop-dev-mongodb
   sessionAffinity: None
   type: ClusterIP
 status:

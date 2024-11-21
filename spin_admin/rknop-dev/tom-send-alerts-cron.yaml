@@ -1,8 +1,8 @@
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: tom-rknop-dev-query-pruner
-  namespace: desc-tom
+  name: tom-send-alerts
+  namespace: desc-tom-rknop-dev
 spec:
   concurrencyPolicy: Forbid
   failedJobsHistoryLimit: 1
@@ -14,7 +14,7 @@ spec:
             field.cattle.io/ports: '[[]]'
             nersc.gov/collab_uids: "70268"
             nersc.gov/gid: "95089"
-            nersc.gov/gids: 95089,60152,57177
+            nersc.gov/gids: 45703,60152,57177,58102,59318,60070,63477,64483,79186,70268,92576,95089,96414
             nersc.gov/roles: user
             nersc.gov/uid: "95089"
             nersc.gov/username: raknop
@@ -22,19 +22,40 @@ spec:
         spec:
           containers:
           - command: ['python']
-            args: ['manage.py', 'long_query_runner', '-p', '1']
+            args: ['manage.py', 'send_elasticc2_alerts',
+               '-a', '36',
+               '-k', 'public.alerts.ztf.uw.edu:9092',
+               '--wfd-topic', 'elasticc2-2-wfd',
+               '--ddf-full-topic', 'elasticc2-2-ddf-full',
+               '--ddf-limited-topic', 'elasticc2-2-ddf-limited',
+               '--do']
+            # args: ['manage.py', 'send_elasticc2_alerts',
+            #    '-a', '3',
+            #    '-k', 'kafka-server:9092',
+            #    '--wfd-topic', 'alerts-wfd',
+            #    '--ddf-full-topic', 'alerts-ddf-full',
+            #    '--ddf-limited-topic', 'alerts-ddf-limited',
+            #    '--do']
             env:
             - name: DB_HOST
-              value: tom-rknop-dev-postgres
+              value: tom-postgres
             - name: DB_NAME
               value: tom_desc
             - name: DB_PASS
               value: fragile
             - name: DB_USER
               value: postgres
-            image: registry.nersc.gov/m1727/raknop/tom_desc_bindmount:daedalus
+            - name: CASSANDRA_HOST
+              value: tom-cassandra
+            - name: CASSANDRA_DB
+              value: tom_desc
+            - name: CASSANDRA_USER
+              value: cassandra
+            - name: CASSANDRA_PASSWORD
+              value: cassandra
+            image: registry.nersc.gov/m1727/raknop/tom_server_bindmount
             imagePullPolicy: Always
-            name: tom-rknop-dev-query-pruner
+            name: tom-send-alerts
             resources: {}
             securityContext:
               allowPrivilegeEscalation: false
@@ -53,11 +74,9 @@ spec:
             tty: true
             volumeMounts:
             - mountPath: /secrets
-              name: tom-rknop-dev-secrets
+              name: tom-secrets
             - mountPath: /tom_desc
-              name: tom-rknop-dev-deployment
-            - mountPath: /query_results
-              name: tom-rknop-dev-query-results
+              name: tom-deployment
             workingDir: /tom_desc
           dnsPolicy: ClusterFirst
           restartPolicy: Never
@@ -68,19 +87,15 @@ spec:
           imagePullSecrets:
             - name: registry-nersc
           volumes:
-          - name: tom-rknop-dev-secrets
+          - name: tom-secrets
             secret:
               defaultMode: 256
               optional: false
-              secretName: tom-rknop-dev-secrets
+              secretName: tom-secrets
           - hostPath:
-              path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/dev/tom_desc/tom_desc
+              path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/rknop_dev/tom_desc/tom_desc
               type: Directory
-            name: tom-rknop-dev-deployment
-          - hostPath:
-              path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/dev/query_results
-              type: Directory
-            name: tom-rknop-dev-query-results
-  schedule: 15 8 * * *
+            name: tom-deployment
+  schedule: 0 0 * * *
   successfulJobsHistoryLimit: 3
-  suspend: false
+  suspend: true

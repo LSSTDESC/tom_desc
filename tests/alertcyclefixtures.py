@@ -1,10 +1,12 @@
 # IMPORTANT -- running any tests that depend on fixtures in this file
 # OTHER than alert_cycle_complete requires a completely fresh
 # environment.  After any run of "pytest ...", if you want to run tests
-# (e.g. in test_alert_cycle.py) that use these fixtures, kyou have to
+# (e.g. in test_alert_cycle.py) that use these fixtures, you have to
 # completely tear down and rebuild the docker compose environment.  This
 # is because, as noted below, we can't easily clean up the kafka
-# server's state, so on a rerun, the server state will be wrong.
+# server's state, so on a rerun, the server state will be wrong.  (We
+# also use that as a reason to be lazy and not clean up the database;
+# see the long comment below.)
 
 import sys
 import os
@@ -16,12 +18,15 @@ import random
 import subprocess
 import pytest
 
+from pymongo import MongoClient
+
 sys.path.insert( 0, "/tom_desc" )
 os.environ["DJANGO_SETTINGS_MODULE"] = "tom_desc.settings"
 import django
 django.setup()
 
 import elasticc2.models
+import fastdb_dev.models
 import tom_targets.models
 
 from tom_client import TomClient
@@ -115,7 +120,7 @@ def classifications_300days_exist( alerts_300days ):
 
 
 @pytest.fixture( scope="session" )
-def classifications_300days_ingested( classifications_300days_exist ):
+def classifications_300days_elasticc2_ingested( classifications_300days_exist ):
     # Have to have an additional sleep after the classifications exist,
     # because brokerpoll itself has a 10s sleep loop
     time.sleep( 11 )
@@ -124,7 +129,7 @@ def classifications_300days_ingested( classifications_300days_exist ):
     # file because I can't clean up, and there is hysteresis.  Once
     # later fixtures have run, the tests below would fail, and these
     # fixtures may be used in more than one test.
-    
+
     brkmsg = elasticc2.models.BrokerMessage
     cfer = elasticc2.models.BrokerClassifier
     bsid = elasticc2.models.BrokerSourceIds
@@ -147,11 +152,48 @@ def classifications_300days_ingested( classifications_300days_exist ):
 
     assert ( set( [ i.classifiername for i in cfer.objects.all() ] )
              == set( [ "NugentClassifier", "RandomSNType" ] ) )
-    
+
     yield True
-    
+
+
 @pytest.fixture( scope="session" )
-def update_diasource_300days( classifications_300days_ingested ):
+def classifications_300days_fastdb_dev_ingested( classifications_300days_exist ):
+    # Have to have an additional sleep after the classifications exist,
+    # because brokerpoll itself has a 10s sleep loop
+    time.sleep( 11 )
+
+    # Have to have these tests here rather than in the actual test_*
+    # file because I can't clean up, and there is hysteresis.  Once
+    # later fixtures have run, the tests below would fail, and these
+    # fixtures may be used in more than one test.
+
+    host = os.getenv( 'MONGOHOST' )
+    username = os.getenv( 'MONGODB_ALERT_READER' )
+    password = os.getenv( 'MONGODB_ALERT_READER_PASSWORD' )
+    client = MongoClient( f"mongodb://{username}:{password}@{host}:27017/?authSource=alerts" )
+    db = client.alerts
+
+    assert 'fakebroker' in db.list_collection_names()
+
+    coll = db.fakebroker
+    assert coll.count_documents({}) == 1090
+
+    numprobs = 0
+    for msg in coll.find():
+        msg = msg['msg']
+        assert msg['brokerName'] == 'FakeBroker'
+        assert msg['classifierName'] in [ 'RandomSNType', 'NugentClassifier' ]
+        if msg['classifierName'] == 'NugentClassifier':
+            assert len( msg['classifications'] ) == 1
+            assert msg['classifications'][0]['classId'] == 2222
+            assert msg['classifications'][0]['probability'] == 1.0
+        numprobs += len( msg['classifications'] )
+    assert numprobs == 11445
+
+    yield True
+
+@pytest.fixture( scope="session" )
+def update_elasticc2_diasource_300days( classifications_300days_elasticc2_ingested ):
     result = subprocess.run( [ "python", "manage.py", "update_elasticc2_sources" ],
                              cwd="/tom_desc", capture_output=True )
     assert result.returncode == 0
@@ -171,9 +213,53 @@ def update_diasource_300days( classifications_300days_ingested ):
     # assert targ.objects.count() == obj.objects.count()
     assert src.objects.count() == 545
     assert frced.objects.count() == 4242
-    
+
     yield True
 
+
+@pytest.fixture( scope="session" )
+def update_fastdb_dev_diasource_300days( classifications_300days_fastdb_dev_ingested ):
+    result = subprocess.run( [ "python", "manage.py", "load_fastdb",
+                               "--pv", "test_pv", "--snapshot", "test_ss",
+                               "--tag", "test_ss_tag",
+                               "--brokers", "fakebroker" ],
+                             cwd="/tom_desc",
+                             capture_output=True )
+    assert result.returncode == 0
+
+    lut = fastdb_dev.models.LastUpdateTime
+    obj = fastdb_dev.models.DiaObject
+    src = fastdb_dev.models.DiaSource
+    frced = fastdb_dev.models.DiaForcedSource
+    cfer = fastdb_dev.models.BrokerClassifier
+    cification = fastdb_dev.models.BrokerClassification
+    pver = fastdb_dev.models.ProcessingVersions
+    ss = fastdb_dev.models.Snapshots
+    dspvss = fastdb_dev.models.DStoPVtoSS
+    dfspvss = fastdb_dev.models.DFStoPVtoSS
+
+    assert lut.objects.count() == 1
+    assert lut.objects.first().last_update_time > datetime.datetime.fromtimestamp( 0, tz=datetime.timezone.utc )
+    assert lut.objects.first().last_update_time < datetime.datetime.now( tz=datetime.timezone.utc )
+
+    # TODO : right now, load_fastdb.py imports the future -- that is, it imports
+    #   the full ForcedSource lightcure for an object for which we got a source
+    #   the first time that source is seen, and never looks at forcedsources
+    #   again.  Update the tests numbers if/when it simulates not knowing the
+    #   future.
+    # (Really, we should probably creat a whole separate simulated PPDB server with
+    #  an interface that will look something like the real PPDB interface... when
+    #  we actually know what that is.)
+
+    assert obj.objects.count() == 102
+    assert src.objects.count() == 545
+    assert frced.objects.count() == 15760   # 4242
+    assert cfer.objects.count() == 2
+    # assert cification.objects.count() == 831  # ???? WHy is this not 545 * 2 ?   LOOK INTO THIS
+    #                                           # ---> seems to be non-deterministic!
+    # TODO : pver, ss, dpvss, dfspvss
+
+    yield True
 
 @pytest.fixture( scope="session" )
 def alerts_100daysmore( alerts_300days ):
@@ -197,14 +283,14 @@ def alerts_100daysmore( alerts_300days ):
     # Same issue as alerts_300days about not cleaning up
 
 @pytest.fixture( scope="session" )
-def classifications_100daysmore_ingested( alerts_100daysmore ):
+def classifications_100daysmore_elasticc2_ingested( alerts_100daysmore ):
     # This time we need to allow for both the 10s sleep cycle timeout of
     # brokerpoll and fakebroker (since we're not checking
     # classifications exist separately from ingested)
     time.sleep( 22 )
 
     # Tests here because of hysteresis
-    
+
     brkmsg = elasticc2.models.BrokerMessage
     cfer = elasticc2.models.BrokerClassifier
 
@@ -224,10 +310,45 @@ def classifications_100daysmore_ingested( alerts_100daysmore ):
              == set( [ "NugentClassifier", "RandomSNType" ] ) )
 
     yield True
-    
+
 
 @pytest.fixture( scope="session" )
-def update_diasource_100daysmore( classifications_100daysmore_ingested ):
+def classifications_100daysmore_fastdb_dev_ingested( alerts_100daysmore ):
+    # This time we need to allow for both the 10s sleep cycle timeout of
+    # brokerpoll and fakebroker (since we're not checking
+    # classifications exist separately from ingested)
+    time.sleep( 22 )
+
+    # Tests here because of hysteresis
+
+    host = os.getenv( 'MONGOHOST' )
+    username = os.getenv( 'MONGODB_ALERT_READER' )
+    password = os.getenv( 'MONGODB_ALERT_READER_PASSWORD' )
+    client = MongoClient( f"mongodb://{username}:{password}@{host}:27017/?authSource=alerts" )
+    db = client.alerts
+
+    assert 'fakebroker' in db.list_collection_names()
+
+    coll = db.fakebroker
+    assert coll.count_documents({}) == 1300
+
+    numprobs = 0
+    for msg in coll.find():
+        msg = msg['msg']
+        assert msg['brokerName'] == 'FakeBroker'
+        assert msg['classifierName'] in [ 'RandomSNType', 'NugentClassifier' ]
+        if msg['classifierName'] == 'NugentClassifier':
+            assert len( msg['classifications'] ) == 1
+            assert msg['classifications'][0]['classId'] == 2222
+            assert msg['classifications'][0]['probability'] == 1.0
+        numprobs += len( msg['classifications'] )
+    assert numprobs == 13650
+
+    yield True
+
+
+@pytest.fixture( scope="session" )
+def update_elasticc2_diasource_100daysmore( classifications_100daysmore_elasticc2_ingested ):
     result = subprocess.run( [ "python", "manage.py", "update_elasticc2_sources" ],
                              cwd="/tom_desc", capture_output=True )
     assert result.returncode == 0
@@ -248,7 +369,52 @@ def update_diasource_100daysmore( classifications_100daysmore_ingested ):
     assert frced.objects.count() == 5765
 
     yield True
-    
+
+
+@pytest.fixture( scope="session" )
+def update_fastdb_dev_diasource_100daysmore( classifications_100daysmore_fastdb_dev_ingested ):
+    # SEE COMMENTS IN update_fastdb_dev_diasource_300days
+
+    result = subprocess.run( [ "python", "manage.py", "load_fastdb",
+                               "--pv", "test_pv", "--snapshot", "test_ss",
+                               "--tag", "test_ss_tag",
+                               "--brokers", "fakebroker" ],
+                             cwd="/tom_desc",
+                             capture_output=True )
+    assert result.returncode == 0
+
+    lut = fastdb_dev.models.LastUpdateTime
+    obj = fastdb_dev.models.DiaObject
+    src = fastdb_dev.models.DiaSource
+    frced = fastdb_dev.models.DiaForcedSource
+    cfer = fastdb_dev.models.BrokerClassifier
+    cification = fastdb_dev.models.BrokerClassification
+    pver = fastdb_dev.models.ProcessingVersions
+    ss = fastdb_dev.models.Snapshots
+    dspvss = fastdb_dev.models.DStoPVtoSS
+    dfspvss = fastdb_dev.models.DFStoPVtoSS
+
+    assert lut.objects.count() == 1
+    assert lut.objects.first().last_update_time > datetime.datetime.fromtimestamp( 0, tz=datetime.timezone.utc )
+    assert lut.objects.first().last_update_time < datetime.datetime.now( tz=datetime.timezone.utc )
+
+    # TODO : right now, load_fastdb.py imports the future -- that is, it imports
+    #   the full ForcedSource lightcure for an object for which we got a source
+    #   the first time that source is seen, and never looks at forcedsources
+    #   again.  Update the tests numbers if/when it simulates not knowing the
+    #   future.
+    # (Really, we should probably creat a whole separate simulated PPDB server with
+    #  an interface that will look something like the real PPDB interface... when
+    #  we actually know what that is.)
+
+    assert obj.objects.count() == 131
+    assert src.objects.count() == 650
+    assert frced.objects.count() == 20834   # 5765
+    assert cfer.objects.count() == 2
+    # assert cification.objects.count() == ...  # ???? WHy is this not 650 * 2 ?   LOOK INTO THIS
+    # TODO : pver, ss, dpvss, dfspvss
+
+    yield True
 
 @pytest.fixture( scope="session" )
 def api_classify_existing_alerts( alerts_100daysmore, apibroker_client ):
@@ -324,18 +490,22 @@ def alert_cycle_complete( request, tomclient ):
                           json={ 'query': 'SELECT COUNT(*) AS count FROM elasticc2_brokermessage' } )
     rows = res.json()[ 'rows' ]
     if rows[0]['count'] == 0:
-        request.getfixturevalue( "update_diasource_100daysmore" )
+        request.getfixturevalue( "update_elasticc2_diasource_100daysmore" )
+        request.getfixturevalue( "update_fastdb_dev_diasource_100daysmore" )
         request.getfixturevalue( "api_classify_existing_alerts" )
 
     yield True
-    
-    
+
+
 __all__ = [ 'alerts_300days',
             'classifications_300days_exist',
-            'classifications_300days_ingested',
-            'update_diasource_300days',
+            'classifications_300days_elasticc2_ingested',
+            'classifications_300days_fastdb_dev_ingested',
+            'update_elasticc2_diasource_300days',
+            'update_fastdb_dev_diasource_300days',
             'alerts_100daysmore',
-            'classifications_100daysmore_ingested',
-            'update_diasource_100daysmore',
+            'classifications_100daysmore_elasticc2_ingested',
+            'classifications_100daysmore_fastdb_dev_ingested',
+            'update_fastdb_dev_diasource_100daysmore',
             'api_classify_existing_alerts',
             'alert_cycle_complete' ]

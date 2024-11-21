@@ -1,13 +1,13 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: tom-rknop-dev-postgres-pvc
-  namespace: desc-tom
+  name: rknop-dev-mongodb-pvc-20241030
+  namespace: desc-tom-rknop-dev
 spec:
   accessModes:
   - ReadWriteOnce
   resources:
     requests:
-      storage: 200Gi
+      storage: 2048Gi
   storageClassName: nfs-client
   volumeMode: Filesystem

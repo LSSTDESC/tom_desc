@@ -4,6 +4,6 @@ data:
   tls.key: PUT THE RIGHT THING HERE
 kind: Secret
 metadata:
-  name: desc-tom-rknop-dev-cert
-  namespace: desc-tom
+  name: tom-cert
+  namespace: desc-tom-rknop-dev
 type: kubernetes.io/tls

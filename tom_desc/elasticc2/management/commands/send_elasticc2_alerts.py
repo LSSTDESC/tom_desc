@@ -119,14 +119,21 @@ class Command(BaseCommand):
             self.logger.warn( f"{self.runningfile} exists, not starting." )
             return
 
-        starttimefile = pathlib.Path( __file__ ).parent.parent.parent / "static/elasticc2/alertsendstart"
-        finishedtimefile = pathlib.Path( __file__ ).parent.parent.parent / "static/elasticc2/alertsendfinish"
-        flushedupdatetimefile = pathlib.Path( __file__ ).parent.parent.parent / "static/elasticc2/alertssentupdate"
-        flushednumfile = pathlib.Path( __file__ ).parent.parent.parent / "static/elasticc2/alertssent"
+        staticdir = pathlib.Path(__file__).parent.parent.parent / "static/elasticc2"
+        if not staticdir.is_dir():
+            if staticdir.exists():
+                raise FileExistsError( f"{staticdir} exists but is not a directory!" )
+            staticdir.mkdir( exist_ok=True, parents=True )
+        starttimefile = staticdir / "alertsendstart"
+        finishedtimefile = staticdir / "alertsendfinish"
+        flushedupdatetimefile = staticdir / "alertssentupdate"
+        flushednumfile = staticdir / "alertssent"
         
         # ...this doesn't seem to work inside a django management command.
         # The signals are never caught.
         # I hate that.  I wish there was a way to override it.
+        # (The USR1 signal *does* seem to work; see hack in brokerpoll2.py,
+        # and the corresponding dumb-init hack in the tom-brokerpoll.yaml Spin file.)
         # signal.signal( signal.SIGINT, lambda signum, frame: self.interruptor( signum, frame ) )
         # signal.signal( signal.SIGTERM, lambda signum, frame: self.interruptor( signum, frame ) )
 

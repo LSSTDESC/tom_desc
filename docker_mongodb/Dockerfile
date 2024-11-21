@@ -14,6 +14,7 @@ RUN set -eux; \
 		jq \
 		numactl \
 		procps \
+                netcat-openbsd \
 	; \
 	rm -rf /var/lib/apt/lists/*
 
