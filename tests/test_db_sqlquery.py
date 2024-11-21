@@ -18,12 +18,6 @@ sys.path.insert( 0, "/tom_desc" )
 
 import db.models
 
-# Use the last alertcycle fixture api_alertcycle_complete to get
-# the database into a known state.  This is kind of slow, due to all the
-# delays in the various polling servers, so it means a few min delay on
-# the tests here actually running, but what can you do.  (At least it's
-# a session fixture.)
-
 class TestSQLWebInterface:
 
     def test_run_query( self, tomclient ):
@@ -125,7 +119,7 @@ class TestSQLWebInterface:
     # having been run, in order.
         
     @pytest.fixture( scope='class' )
-    def submit_long_query( self, tomclient, alert_cycle_complete ):
+    def submit_long_query( self, tomclient, elasticc2_database_snapshot_class ):
         res = tomclient.post( 'db/submitsqlquery/',
                               json= { 'query': 'SELECT * FROM elasticc2_brokermessage',
                                       'format': 'pandas' } );

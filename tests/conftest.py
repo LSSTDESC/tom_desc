@@ -20,8 +20,8 @@ import elasticc2.models
 from tom_client import TomClient
 
 # Additional fixtures in other files
-sys.path.insert( 0, os.getenv("PWD") )
-pytest_plugins = [ 'alertcyclefixtures' ]
+# sys.path.insert( 0, os.getenv("PWD") )
+# pytest_plugins = [ 'alertcyclefixtures' ]
 
 
 @pytest.fixture( scope="session" )
@@ -35,16 +35,6 @@ def mongoclient():
     password = os.getenv( 'MONGODB_ALERT_READER_PASSWORD' )
     client = MongoClient( f"mongodb://{username}:{password}@{host}:27017/?authSource=alerts" )
     return client
-
-
-@pytest.fixture( scope="session" )
-def mongoadmin():
-    host = os.getenv( 'MONGOHOST' )
-    username = os.getenv( 'MONGODB_ADMIN' )
-    password = os.getenv( 'MONGODB_ADMIN_PASSWORD' )
-    client = MongoClient( f"mongodb://{username}:{password}@{host}:27017/" )
-    return client
-
 
 @pytest.fixture( scope="session" )
 def apibroker_client():
@@ -69,7 +59,6 @@ def elasticc2_ppdb( tomclient ):
     elasticc2.models.PPDBDiaObject.objects.all().delete()
 
 
-@pytest.fixture
 def load_elasticc2_database_snapshot():
     # Make sure that the database is in a state where this won't be a disaster
     models = [ elasticc2.models.BrokerClassifier,
@@ -100,8 +89,76 @@ def load_elasticc2_database_snapshot():
                           capture_output=True )
     assert res.returncode == 0
 
-    yield True
+    return models
 
-    # Unload
+
+@pytest.fixture
+def elasticc2_database_snapshot():
+    models = load_elasticc2_database_snapshot()
+    yield True
     for m in models:
         m.objects.all().delete()
+
+@pytest.fixture( scope='class' )
+def elasticc2_database_snapshot_class():
+    models = load_elasticc2_database_snapshot()
+    yield True
+    for m in models:
+        m.objects.all().delete()
+
+
+
+@pytest.fixture( scope="class" )
+def random_broker_classifications():
+    brokers = {
+        'rbc_test1': {
+            '1.0': {
+                'classifiertest1': [ '1.0' ],
+                'classifiertest2': [ '1.0' ]
+            }
+        },
+        'rbc_test2': {
+            '3.5': {
+                'testing1': [ '42' ],
+                'testing2': [ '23' ]
+            }
+        }
+    }
+
+    minsrc = 10
+    maxsrc = 20
+    mincls = 1
+    maxcls = 20
+
+    msgs = []
+    for brokername, brokerspec in brokers.items():
+        for brokerversion, versionspec in brokerspec.items():
+            for classifiername, clsspec in versionspec.items():
+                for classifierparams in clsspec:
+                    nsrcs = random.randint( minsrc, maxsrc )
+                    for src in range(nsrcs):
+                        ncls = random.randint( mincls, maxcls )
+                        probleft = 1.0
+                        classes = []
+                        probs = []
+                        for cls in range( ncls ):
+                            classes.append( cls )
+                            prob = random.random() * probleft
+                            probleft -= prob
+                            probs.append( prob )
+                        classes.append( ncls )
+                        probs.append( probleft )
+
+                        msgs.append( { 'sourceid': src,
+                                       'brokername': brokername,
+                                       'alertid': src,
+                                       'elasticcpublishtimestamp': datetime.datetime.now( tz=pytz.utc ),
+                                       'brokeringesttimestamp': datetime.datetime.now( tz=pytz.utc ),
+                                       'brokerversion': brokerversion,
+                                       'classifiername': classifiername,
+                                       'classifierparams': classifierparams,
+                                       'classid': classes,
+                                       'probability': probs } )
+
+    yield msgs
+

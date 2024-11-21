@@ -22,11 +22,13 @@ from tom_client import TomClient
 # I'm abusing pytest here by having tests depend on previous
 #  tests, rather than making all dependencies fixtures.
 # I may fix that at some point.
+# (But, truthfully, pytest abuses python so badly that
+# you might as well just embrace it.)
 
 class TestSpectrumCycle:
 
     @pytest.fixture( scope='class' )
-    def ask_for_spectra( self, alert_cycle_complete, tomclient ):
+    def ask_for_spectra( self, elasticc2_database_snapshot_class, tomclient ):
         objs = elasticc2.models.DiaObject.objects.all().order_by("diaobject_id")
         objs = list( objs )
 
@@ -49,7 +51,7 @@ class TestSpectrumCycle:
 
 
     # TODO : test things other than detected_since_mjd sent to gethottransients
-    def test_hot_sne( self, alert_cycle_complete, tomclient ):
+    def test_hot_sne( self, elasticc2_database_snapshot_class, tomclient ):
         # Testing detected_in_last_days is fraught because
         #   the mjds in elasticc2 are what they are, are
         #   in the future (as of this comment writing).
@@ -94,7 +96,6 @@ class TestSpectrumCycle:
         assert elasticc2.models.WantedSpectra.objects.count() == oldn
         dbobjs = elasticc2.models.WantedSpectra.objects.filter( requester='tests',
                                                                 diaobject_id=lstobj )
-        import pdb; pdb.set_trace()
         assert len( dbobjs ) == 1
         assert dbobjs[0].wanttime > old_dbobj.wanttime
         assert dbobjs[0].priority == newprio

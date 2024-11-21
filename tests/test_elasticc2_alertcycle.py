@@ -6,12 +6,27 @@ import time
 sys.path.insert( 0, "/tom_desc" )
 
 import elasticc2.models
+import tom_targets.models
+
+from alertcycle_testbase import AlertCycleTestBase
 
 # NOTE -- many of the actual tests are run in the fixtures rather than
-#   the tests below.  See comments in alercyclefixtures.py for the reason for
+#   the tests below.  See comments in alertcycle_testbase.py for the reason for
 #   this.
 
-class TestElasticc2AlertCycle:
+class TestElasticc2AlertCycle( AlertCycleTestBase ):
+    _models_to_cleanup = [ elasticc2.models.BrokerMessage,
+                           elasticc2.models.BrokerClassifier,
+                           elasticc2.models.BrokerSourceIds,
+                           elasticc2.models.DiaObjectOfTarget,
+                           tom_targets.models.Target,
+                           elasticc2.models.DiaForcedSource,
+                           elasticc2.models.DiaSource,
+                           elasticc2.models.DiaObject ]
+
+    def _cleanup( self ):
+        pass
+
     def test_ppdb_loaded( self, elasticc2_ppdb ):
         # I should probably have some better tests than just object counts....
         assert elasticc2.models.PPDBDiaObject.objects.count() == 346
@@ -29,16 +44,16 @@ class TestElasticc2AlertCycle:
         assert classifications_300days_exist
 
 
-    def test_classifications_ingested( self, classifications_300days_ingested ):
-        assert classifications_300days_ingested
+    def test_classifications_ingested( self, classifications_300days_elasticc2_ingested ):
+        assert classifications_300days_elasticc2_ingested
 
 
     def test_sources_updated( self, update_elasticc2_diasource_300days ):
         assert update_elasticc2_diasource_300days
 
 
-    def test_100moredays_classifications_ingested( self, classifications_100daysmore_ingested ):
-        assert classifications_100daysmore_ingested
+    def test_100moredays_classifications_ingested( self, classifications_100daysmore_elasticc2_ingested ):
+        assert classifications_100daysmore_elasticc2_ingested
 
 
     def test_100moredays_sources_updated( self, update_elasticc2_diasource_100daysmore ):
@@ -60,7 +75,7 @@ class TestElasticc2AlertCycle:
         # The test api broker will add 1300 probabilities
         #   (since it assignes probabilities to two classes).
         # Add that to the 13650 probabilities that
-        #   are in fixture classifications_100daysmore_ingested,
+        #   are in fixture classifications_100daysmore_elasticc2_ingested,
         #   and you get 14950
         for msg in brkmsg.objects.all():
             assert len(msg.classid) == len(msg.probability)
@@ -81,8 +96,3 @@ class TestElasticc2AlertCycle:
         assert onemsg.msghdrtimestamp >= onemsg.brokeringesttimestamp
         assert onemsg.msghdrtimestamp - onemsg.brokeringesttimestamp < datetime.timedelta(seconds=5)
         assert onemsg.descingesttimestamp - onemsg.msghdrtimestamp < datetime.timedelta(seconds=5)
-
-    def test_cleanup( self, alert_cycle_complete ):
-        # This is just here to make sure that the cleanup in the
-        #   alert_cycle_complete session fixture gets run.
-        pass

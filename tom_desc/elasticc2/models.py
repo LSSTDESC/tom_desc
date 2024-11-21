@@ -15,6 +15,7 @@ import pandas
 import django.db
 from django.db import models
 from django.db.models import F
+import django.db.models.functions
 from guardian.shortcuts import assign_perm
 from django.contrib.auth.models import Group
 from django.contrib.postgres.fields import ArrayField
@@ -1030,7 +1031,7 @@ class WantedSpectra(Createable):
     priority = models.IntegerField()
 
     _pk = 'wantspec_id'
-    _create_kws = [ _pk, 'diaobject_id', 'user_id', 'requester', 'priority' ]
+    _create_kws = [ _pk, 'diaobject_id', 'user_id', 'requester', 'priority', 'wanttime' ]
 
 class PlannedSpectra(Createable):
     reqspec_id = models.AutoField( primary_key=True, unique=True, db_index=True )
