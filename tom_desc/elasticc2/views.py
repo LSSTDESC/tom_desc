@@ -9,6 +9,7 @@ import traceback
 
 import numpy
 import astropy.time
+import light_curve
 
 import django.db
 import django.views
