@@ -9,13 +9,12 @@ import json
 import fastavro
 import confluent_kafka
 
-_logger = logging.getLogger(__name__)
-if not _logger.hasHandlers():
-    _logout = logging.StreamHandler( sys.stderr )
-    _logger.addHandler( _logout )
-    _formatter = logging.Formatter( f'[msgconsumer - %(asctime)s - %(levelname)s] - %(message)s',
-                                    datefmt='%Y-%m-%d %H:%M:%S' )
-    _logout.setFormatter( _formatter )
+_logger = logging.getLogger( "db/_consumekafkamsgs" )
+_logout = logging.StreamHandler( sys.stderr )
+_logger.addHandler( _logout )
+_formatter = logging.Formatter( f'[%(asctime)s - db/msgconsumer - %(levelname)s] - %(message)s',
+                                datefmt='%Y-%m-%d %H:%M:%S' )
+_logout.setFormatter( _formatter )
 _logger.setLevel( logging.INFO )
 # _logger.setLevel( logging.DEBUG )
 

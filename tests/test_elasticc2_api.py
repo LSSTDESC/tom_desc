@@ -3,7 +3,7 @@ import elasticc2.models
 
 
 class TestReconstructAlert:
-    def test_reconstruct_alert( self, elasticc2_ppdb ):
+    def test_reconstruct_alert( self, elasticc2_ppdb_class ):
 
         # Get an alert I know is from the first day, make sure that
         #  it doesn't have any previous forced sources
@@ -85,7 +85,7 @@ class TestReconstructAlert:
 
 
 
-    def test_alert_api( self, elasticc2_ppdb, tomclient ):
+    def test_alert_api( self, elasticc2_ppdb_class, tomclient ):
 
         res = tomclient.post( "elasticc2/getalert", json={ 'alertid': 666 } )
         assert res.status_code == 500
@@ -109,7 +109,7 @@ class TestReconstructAlert:
 
 
 class TestLtcv:
-    def test_ltcv_features( self, elasticc2_ppdb, tomclient ):
+    def test_ltcv_features( self, elasticc2_ppdb_class, tomclient ):
 
         # Default features for an object
 

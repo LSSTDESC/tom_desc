@@ -12,9 +12,7 @@ import subprocess
 
 import django.db
 
-from elasticc2.models import ( CassBrokerMessageBySource,
-                               CassBrokerMessageByTime,
-                               BrokerSourceIds,
+from elasticc2.models import ( BrokerSourceIds,
                                BrokerClassifier,
                                BrokerMessage,
                                PPDBDiaObject,
@@ -134,98 +132,6 @@ def lots_of_alerts():
     cur.execute( "TRUNCATE TABLE elasticc2_ppdbdiaobject CASCADE" )
     cur.execute( "TRUNCATE TABLE elasticc2_ppdbdiasource CASCADE" )
     cur.execute( "TRUNCATE TABLE elasticc2_ppdbalert" )
-
-
-class TestCassandra:
-
-    @pytest.fixture(scope='class')
-    def load_cass( self, lots_of_alerts ):
-        tinit = time.perf_counter()
-        t0 = tinit
-        n = 0
-        delta = 2000
-        printevery = 20000
-        nextprint = printevery
-
-        while n < len(lots_of_alerts):
-            n1 = n + delta if n + delta < len(lots_of_alerts) else len(lots_of_alerts)
-            CassBrokerMessageBySource.load_batch( lots_of_alerts[n:n1] )
-            n = n1
-
-            if n >= nextprint:
-                t1 = time.perf_counter()
-                _logger.info( f"Cass: loaded {n} of {len(lots_of_alerts)} alerts "
-                              f"in {t1-tinit:.2f} sec (current rate {printevery/(t1-t0):.0f} s⁻¹)" )
-                nextprint += printevery
-                t0 = t1
-
-        t1 = time.perf_counter()
-        _logger.info( f"Cass: done loading {len(lots_of_alerts)} alerts in {t1-tinit:.2f} sec "
-                      f"({len(lots_of_alerts)/(t1-tinit):.0f} s⁻¹)" )
-
-        yield lots_of_alerts
-
-        cur = django.db.connection.cursor()
-        cur.execute( "TRUNCATE TABLE elasticc2_brokersourceids" )
-        cur.execute( "TRUNCATE TABLE elasticc2_brokerclassifier" )
-        casscur = django.db.connections['cassandra'].connection.cursor()
-        casscur.execute( "TRUNCATE TABLE tom_desc.cass_broker_message_by_time" )
-        casscur.execute( "TRUNCATE TABLE tom_desc.cass_broker_message_by_source" )
-
-    def counter( self, rows ):
-        self.tot += len( rows )
-        if self.future.has_more_pages:
-            self.future.start_fetching_next_page()
-        else:
-            self.done.set()
-
-    def err( self, exc ):
-        self.error = exc
-        self.done.set()
-
-    def test_cass( self, load_cass ):
-        # This doesn't work.  I think we're getting paged or
-        #  something.  The django cassandra interface
-        #  dissapoints me
-        # bysrc = CassBrokerMessageBySource.objects.all()
-        # assert len(bysrc) == len(load_cass)
-        # bytim = CassBrokerMessageByTime.objects.all()
-        # assert len(bytim) == len(load_cass )
-
-        casssession = django.db.connections['cassandra'].connection.session
-
-        self.tot = 0
-        self.error = None
-        self.done = threading.Event()
-        self.future = casssession.execute_async( "SELECT * FROM tom_desc.cass_broker_message_by_source" )
-        self.future.add_callbacks( callback=self.counter, errback=self.err )
-        self.done.wait()
-        if self.error:
-            raise self.error
-        assert self.tot == len(load_cass)
-
-        self.tot = 0
-        self.error = None
-        self.done = threading.Event()
-        self.future = casssession.execute_async( "SELECT * FROM tom_desc.cass_broker_message_by_time" )
-        self.future.add_callbacks( callback=self.counter, errback=self.err )
-        self.done.wait()
-        if self.error:
-            raise self.error
-        assert self.tot == len(load_cass)
-
-    def test_gen_brokerdelay( self, load_cass ):
-        t0 = ( datetime.datetime.now( tz=pytz.utc ) + datetime.timedelta( days=-1 ) ).date().isoformat()
-        t1 = ( datetime.datetime.now( tz=pytz.utc ) + datetime.timedelta( days=2 ) ).date().isoformat()
-        dt = 1
-
-        tstart = time.perf_counter()
-        res = subprocess.run( [ "python", "manage.py", "gen_elasticc2_brokerdelaygraphs",
-                                "--t0", t0, "--t1", t1, "--dt", str(dt) ],
-                              cwd="/tom_desc", capture_output=True )
-        assert res.returncode == 0
-        tend = time.perf_counter()
-        _logger.info( f"gen_elasticc2_brokerdelaygraphs took {tend-tstart:.1f} sec" )
 
 
 class TestPostgres:

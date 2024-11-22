@@ -1,14 +1,3 @@
-# WARNING -- if you run both this test and test_fastdb_dev_alertcycle
-#   within the same docker compose session, but different pytest
-#   sessions, one will fail.  For the reason, see the comments in
-#   alertcyclefixtures.py.  (Basically, the first one you run will load
-#   up both databases, so early tests that expect not-fully-loaded
-#   databases will fail.)
-#
-# Both should all pass if you run them both at once, i.e.
-#
-# pytest -v test_elasticc2_alertcycle.py test_fastdb_dev_alertcycle.py
-
 import os
 import sys
 import datetime
@@ -17,32 +6,34 @@ import time
 sys.path.insert( 0, "/tom_desc" )
 
 import elasticc2.models
+import tom_targets.models
 
-from msgconsumer import MsgConsumer
-
-# pytest is mysterious.  I tried importing just the fixtures I was using
-# form alertcyclefixtures, but the a fixture there that used another
-# fixture from alertcyclefixtures that I did *not* import here couldn't
-# find that other fixture.  So, I import *, and use an __all__ in
-# alertcyclefixtures.
-from alertcyclefixtures import *
+from alertcycle_testbase import AlertCycleTestBase
 
 # NOTE -- many of the actual tests are run in the fixtures rather than
-#   the tests below.  See comments in alercyclefixtures.py for the reason for
+#   the tests below.  See comments in alertcycle_testbase.py for the reason for
 #   this.
 
-class TestElasticc2AlertCycle:
-    def test_ppdb_loaded( self, elasticc2_ppdb ):
+class TestElasticc2AlertCycle( AlertCycleTestBase ):
+    _models_to_cleanup = [ elasticc2.models.BrokerMessage,
+                           elasticc2.models.BrokerClassifier,
+                           elasticc2.models.BrokerSourceIds,
+                           elasticc2.models.DiaObjectOfTarget,
+                           tom_targets.models.Target,
+                           elasticc2.models.DiaForcedSource,
+                           elasticc2.models.DiaSource,
+                           elasticc2.models.DiaObject ]
+
+    def _cleanup( self ):
+        pass
+
+    def test_ppdb_loaded( self, elasticc2_ppdb_class ):
         # I should probably have some better tests than just object counts....
         assert elasticc2.models.PPDBDiaObject.objects.count() == 346
         assert elasticc2.models.PPDBDiaSource.objects.count() == 1862
         assert elasticc2.models.PPDBAlert.objects.count() == elasticc2.models.PPDBDiaSource.objects.count()
         assert elasticc2.models.PPDBDiaForcedSource.objects.count() == 52172
         assert elasticc2.models.DiaObjectTruth.objects.count() == elasticc2.models.PPDBDiaObject.objects.count()
-
-
-    def handle_test_send_alerts( self, msgs ):
-        self._test_send_alerts_count += len(msgs)
 
 
     def test_send_alerts( self, alerts_300days ):
@@ -71,8 +62,6 @@ class TestElasticc2AlertCycle:
 
     def test_apibroker_existingsources( self, api_classify_existing_alerts ):
         cfer = elasticc2.models.BrokerClassifier
-        # brkmsgsrc = elasticc2.models.CassBrokerMessageBySource
-        # brkmsgtim = elasticc2.models.CassBrokerMessageByTime
         brkmsg = elasticc2.models.BrokerMessage
 
         assert cfer.objects.count() == 3
@@ -107,4 +96,3 @@ class TestElasticc2AlertCycle:
         assert onemsg.msghdrtimestamp >= onemsg.brokeringesttimestamp
         assert onemsg.msghdrtimestamp - onemsg.brokeringesttimestamp < datetime.timedelta(seconds=5)
         assert onemsg.descingesttimestamp - onemsg.msghdrtimestamp < datetime.timedelta(seconds=5)
-

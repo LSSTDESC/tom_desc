@@ -15,7 +15,6 @@ import os
 import socket
 import tempfile
 import psqlextra
-# import cassandra
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -37,8 +36,6 @@ ALLOWED_HOSTS = ['*']
 DATA_UPLOAD_MAX_MEMORY_SIZE = 524288000
 
 # Application definition
-# NOTE -- django_cassandra_engine demands to be first
-# Just gotta hope nobody else makes the same claim.
 
 INSTALLED_APPS = [
     'whitenoise.runserver_nostatic',
