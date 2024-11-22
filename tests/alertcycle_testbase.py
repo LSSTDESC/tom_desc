@@ -53,7 +53,7 @@ class AlertCycleTestBase:
     #  in an __init__ function, but it turns out you can't
     #  use __init__ functions in classes that are
     #  pytest classes.
-    
+
     logger = logging.getLogger( "alertcyclefixtures" )
     logger.propagate = False
     _logout = logging.StreamHandler( sys.stderr )
@@ -87,8 +87,8 @@ class AlertCycleTestBase:
             model.objects.all().delete()
 
         self._cleanup()
-            
-    
+
+
 
     # It's not really possible to clean up messages off of the kafka server.
     # So, to have a "fresh" environment, we randomly generate topics each time
@@ -282,7 +282,7 @@ class AlertCycleTestBase:
         assert numprobs == 11445
 
         yield True
-        
+
 
     @pytest.fixture( scope="class" )
     def update_elasticc2_diasource_300days( self, classifications_300days_elasticc2_ingested ):
