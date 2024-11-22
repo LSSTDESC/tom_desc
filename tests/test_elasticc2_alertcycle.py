@@ -27,7 +27,7 @@ class TestElasticc2AlertCycle( AlertCycleTestBase ):
     def _cleanup( self ):
         pass
 
-    def test_ppdb_loaded( self, elasticc2_ppdb ):
+    def test_ppdb_loaded( self, elasticc2_ppdb_class ):
         # I should probably have some better tests than just object counts....
         assert elasticc2.models.PPDBDiaObject.objects.count() == 346
         assert elasticc2.models.PPDBDiaSource.objects.count() == 1862

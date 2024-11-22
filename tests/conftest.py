@@ -40,68 +40,74 @@ def mongoclient():
 def apibroker_client():
     return TomClient( "http://tom:8080", username="apibroker", password="testing" )
 
-@pytest.fixture( scope="session" )
-def elasticc2_ppdb( tomclient ):
-    basedir = pathlib.Path( "/elasticc2data" )
-    dirs = []
-    for subdir in basedir.glob( '*' ):
-        if subdir.is_dir():
-            result = subprocess.run( [ "python", "manage.py", "load_snana_fits", "-d", str(subdir), "--ppdb", "--do" ],
-                                     cwd="/tom_desc", capture_output=True )
-            assert result.returncode == 0
-
-    yield True
-
-    elasticc2.models.DiaObjectTruth.objects.all().delete()
-    elasticc2.models.PPDBAlert.objects.all().delete()
-    elasticc2.models.PPDBDiaForcedSource.objects.all().delete()
-    elasticc2.models.PPDBDiaSource.objects.all().delete()
-    elasticc2.models.PPDBDiaObject.objects.all().delete()
-
-
-def load_elasticc2_database_snapshot():
-    # Make sure that the database is in a state where this won't be a disaster
-    models = [ elasticc2.models.BrokerClassifier,
-               elasticc2.models.BrokerMessage,
-               elasticc2.models.DiaForcedSource,
-               elasticc2.models.DiaObject,
-               elasticc2.models.DiaObjectTruth,
-               elasticc2.models.DiaSource,
-               elasticc2.models.PPDBAlert,
-               elasticc2.models.PPDBDiaForcedSource,
-               elasticc2.models.PPDBDiaObject,
-               elasticc2.models.PPDBDiaSource,
-               elasticc2.models.DiaObjectInfo,
-               elasticc2.models.BrokerSourceIds ]
+def load_elasticc2_database_snapshot( *args ):
+    models = args
 
     for m in models:
         assert m.objects.count() == 0
 
-    # Load
-    res = subprocess.run( [ "pg_restore",
-                            "--data-only",
-                            "-h", "postgres",
-                            "-U", "postgres",
-                            "-d", "tom_desc",
-                            "elasticc2_alertcycle_complete.psqlc" ],
-                          cwd="/tests",
-                          env={ 'PGPASSWORD': 'fragile' },
-                          capture_output=True )
+    tables = [ m._meta.db_table for m in models ]
+    args = [ "pg_restore",
+             "--data-only",
+             "-h", "postgres",
+             "-U", "postgres",
+             "-d", "tom_desc" ]
+    for t in tables:
+        args.append( "-t" )
+        args.append( t )
+    args.append( "elasticc2_alertcycle_complete.psqlc" )
+    res = subprocess.run( args, cwd="/tests", env={ "PGPASSWORD": "fragile" }, capture_output=True )
     assert res.returncode == 0
 
     return models
 
 
 @pytest.fixture
-def elasticc2_database_snapshot():
-    models = load_elasticc2_database_snapshot()
+def elasticc2_ppdb():
+    models = load_elasticc2_database_snapshot( elasticc2.models.PPDBAlert,
+                                               elasticc2.models.PPDBDiaForcedSource,
+                                               elasticc2.models.PPDBDiaObject,
+                                               elasticc2.models.PPDBDiaSource,
+                                               elasticc2.models.DiaObjectTruth )
+    yield True
+    for m in models:
+        m.objects.all().delete()
+
+
+@pytest.fixture( scope="class" )
+def elasticc2_ppdb_class():
+    models = load_elasticc2_database_snapshot( elasticc2.models.PPDBAlert,
+                                               elasticc2.models.PPDBDiaForcedSource,
+                                               elasticc2.models.PPDBDiaObject,
+                                               elasticc2.models.PPDBDiaSource,
+                                               elasticc2.models.DiaObjectTruth )
+    yield True
+    for m in models:
+        m.objects.all().delete()
+
+
+@pytest.fixture
+def elasticc2_database_snapshot( elasticc2_ppdb ):
+    models = load_elasticc2_database_snapshot( elasticc2.models.BrokerClassifier,
+                                               elasticc2.models.BrokerMessage,
+                                               elasticc2.models.DiaForcedSource,
+                                               elasticc2.models.DiaObject,
+                                               elasticc2.models.DiaSource,
+                                               elasticc2.models.DiaObjectInfo,
+                                               elasticc2.models.BrokerSourceIds )
     yield True
     for m in models:
         m.objects.all().delete()
 
 @pytest.fixture( scope='class' )
-def elasticc2_database_snapshot_class():
-    models = load_elasticc2_database_snapshot()
+def elasticc2_database_snapshot_class( elasticc2_ppdb_class ):
+    models = load_elasticc2_database_snapshot( elasticc2.models.BrokerClassifier,
+                                               elasticc2.models.BrokerMessage,
+                                               elasticc2.models.DiaForcedSource,
+                                               elasticc2.models.DiaObject,
+                                               elasticc2.models.DiaSource,
+                                               elasticc2.models.DiaObjectInfo,
+                                               elasticc2.models.BrokerSourceIds )
     yield True
     for m in models:
         m.objects.all().delete()

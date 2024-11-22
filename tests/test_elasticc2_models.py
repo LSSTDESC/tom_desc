@@ -61,9 +61,6 @@ class TestElasticc2Models:
         # This is just here so I can get a timestamp to see how long the next test took
         assert True
 
-    # def test_alert_reconstruct( self, elasticc2_ppdb ):
-    #     pass
-
     def test_brokermessage_bulk( self, loaded_broker_classifications ):
         assert BrokerMessage.objects.count() >= loaded_broker_classifications[ 'addedmsgs' ]
         cfers = BrokerClassifier.objects.filter( brokername__in=[ 'rbc_test1', 'rbc_test2' ] )

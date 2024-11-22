@@ -15,7 +15,26 @@ import elasticc2.models as m
 
 class TestLoadSnanaFits:
 
-    def test_ppdb_loaded( self, elasticc2_ppdb ):
+    @pytest.fixture( scope="class" )
+    def snana_loaded_elasticc2_ppdb( tomclient ):
+        basedir = pathlib.Path( "/elasticc2data" )
+        dirs = []
+        for subdir in basedir.glob( '*' ):
+            if subdir.is_dir():
+                result = subprocess.run( [ "python", "manage.py", "load_snana_fits",
+                                           "-d", str(subdir), "--ppdb", "--do" ],
+                                         cwd="/tom_desc", capture_output=True )
+                assert result.returncode == 0
+
+        yield True
+
+        m.DiaObjectTruth.objects.all().delete()
+        m.PPDBAlert.objects.all().delete()
+        m.PPDBDiaForcedSource.objects.all().delete()
+        m.PPDBDiaSource.objects.all().delete()
+        m.PPDBDiaObject.objects.all().delete()
+
+    def test_ppdb_loaded( self, snana_loaded_elasticc2_ppdb ):
         # I should probably have some better tests than just object counts....
         assert m.PPDBDiaObject.objects.count() == 346
         assert m.PPDBDiaSource.objects.count() == 1862

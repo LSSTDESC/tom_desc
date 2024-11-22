@@ -11,7 +11,7 @@ import elasticc2.models
 from alertcyclefixtures import *
 
 class TestDumpAlertTar:
-    def test_dump_tar( self, elasticc2_ppdb ):
+    def test_dump_tar( self, elasticc2_ppdb_class ):
         try:
             # Just make sure things are as expected
             assert elasticc2.models.PPDBDiaObject.objects.count() == 346
