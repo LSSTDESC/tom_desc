@@ -100,17 +100,19 @@ services:
       - /bin/bash
       - -c
       - |
-        python tom_desc/manage.py migrate
-        python tom_desc/manage.py create_test_superuser
-        python tom_desc/manage.py create_test_apibroker
-        python /tests/create_postgres_ro_user.py
+        python tom_desc/manage.py migrate &&
+        python tom_desc/manage.py create_test_superuser &&
+        python tom_desc/manage.py create_test_apibroker &&
+        python /tests/create_postgres_ro_user.py &&
         python /tests/setup_mongodb.py
+    #entrypoint: [ "tail", "-f", "/etc/issue" ]
 
 
   tom:
     depends_on:
       createdb:
         condition: service_completed_successfully
+        #condition: service_started
     image: ${TOM_DOCKER_ARCHIVE:-ghcr.io/lsstdesc/tom_desc}/tom_desc_bindmount:${TOM_DOCKER_VERSION:-latest}
     build:
       context: ../
