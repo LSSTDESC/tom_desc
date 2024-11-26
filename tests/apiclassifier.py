@@ -7,12 +7,12 @@ import logging
 import fastavro
 import datetime
 
-from msgconsumer import MsgConsumer
+from testmsgconsumer import MsgConsumer
 from tom_client import TomClient
 
 _rundir = pathlib.Path( __file__ ).parent
 
-_logger = logging.getLogger( __name__ )
+_logger = logging.getLogger( "tests/apiclassifier" )
 _logger.propagate = False
 if not _logger.hasHandlers():
     _logout = logging.StreamHandler( sys.stderr )

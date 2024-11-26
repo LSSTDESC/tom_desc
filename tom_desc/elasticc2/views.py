@@ -1,5 +1,6 @@
 import sys
 import re
+import io
 import pathlib
 import datetime
 import dateutil.parser
@@ -39,7 +40,7 @@ from elasticc2.serializers import PPDBDiaObjectSerializer, PPDBDiaSourceSerializ
 #  doesn't seem to have the formatting built in;
 #  I guess djano makes its own formatting instead
 #  of using logging's.  Sigh.
-_logger = logging.getLogger(__name__)
+_logger = logging.getLogger( "elasticc2/views" )
 _logout = logging.StreamHandler( sys.stderr )
 _formatter = logging.Formatter( f'[%(asctime)s - %(levelname)s] - %(message)s' )
 _logout.setFormatter( _formatter )
@@ -1164,23 +1165,71 @@ class AskForSpectrumView(PermissionRequiredMixin, django.views.View):
             return HttpResponse( "Mal-formed data for askforspectrum", status=500,
                                  content_type='text/plain; charset=utf-8' )
 
+        now = datetime.datetime.now( tz=datetime.timezone.utc )
         tocreate = [ { 'requester': data['requester'],
                        'diaobject_id': data['objectids'][i],
                        'wantspec_id': f"{data['objectids'][i]} ; {data['requester']}",
                        'user_id': request.user.id,
                        'priority': ( 0 if int(data['priorities'][i]) < 0
                                      else 5 if int(data['priorities'][i]) > 5
-                                     else int(data['priorities'][i] )) }
+                                     else int(data['priorities'][i] )),
+                       'wanttime': now }
                        for i in range(len(data['objectids'])) ]
 
         try:
-            objs = WantedSpectra.bulk_load_or_create( tocreate )
+            # OK.  Rant warning.
+            #
+            # I hate ORMs.  I hate them all.  The ONLY nice thing I have
+            #   to say about Django is that it's not SQLAlchemy.  (OMG,
+            #   SQLAlchemy, I have so much past trauma.)
+            #
+            # For efficiency, I was using using Postgres' ability to
+            #   bulk create by uploading a lot of data in one big blob,
+            #   instead of with a bunch of SQL insert commands.  But,
+            #   that meant that the default fields weren't getting
+            #   filled... because django was managing the defaults, not
+            #   the database.  This is what happens when you use an
+            #   intervening layer to define your database instead of the
+            #   database itself.  As is often the case when using ORMs,
+            #   you lose control of your database, and regret it later.
+            #
+            # Now, it turns out that django has the keyword
+            #   "db_default"... but that's new in django 5, and right
+            #   now I can't do the dependency-hell switch from django 4
+            #   to 5, because we've built on top of the TOM Toolkit, and
+            #   just bumping django is likely to break that if we don't
+            #   bump the TOM toolkit at the same time.  I'm already two
+            #   interrupt levels deep in this PR, and I don't want its
+            #   scope to creep any more.  (Which it may not, but I've
+            #   learned through years of pain to have a deep and
+            #   visceral fear of even the specter of dependency hell.)
+            #
+            # As such, I'm putting in the kwmap parameter here in hopes
+            #   of working around the way I tried to set things up to be
+            #   able to use SQL directly with django models.  The right
+            #   solution, of course, is to eschew and avoid ORMs at all
+            #   times instead of trying to write ugly hack code to be
+            #   able to cope with the fact that you have an ORM but want
+            #   to do actual PostgreSQL sometimes.  But, oh well.  We go
+            #   insane with the world we live in, not the world we
+            #   wished we lived in.
+            ninserted = WantedSpectra.bulk_insert_or_upsert( tocreate, upsert=True,
+                                                             kwmap={ 'wantspec_id': 'wantspec_id',
+                                                                     'diaobject_id': 'diaobject_id',
+                                                                     'user_id': 'user_id',
+                                                                     'requester': 'requester',
+                                                                     'priority': 'priority',
+                                                                     'wanttime': 'wanttime' } )
         except Exception as ex:
+            strio = io.StringIO()
+            strio.write( "Exception in AskForSpectrumView:\n" )
+            traceback.print_exc( file=strio )
+            _logger.error( strio.getvalue() )
             return HttpResponse( str(ex), status=500, content_type='text/plain; charset=utf-8' )
 
         return JsonResponse( { 'status': 'ok',
                                'message': f'wanted spectra created',
-                               'num': len(objs) } )
+                               'num': ninserted } )
 
 # ======================================================================
 

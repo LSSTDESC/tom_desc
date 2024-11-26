@@ -15,12 +15,31 @@ import elasticc2.models as m
 
 class TestLoadSnanaFits:
 
-    def test_ppdb_loaded( self, elasticc2_ppdb ):
+    @pytest.fixture( scope="class" )
+    def snana_loaded_elasticc2_ppdb( tomclient ):
+        basedir = pathlib.Path( "/elasticc2data" )
+        dirs = []
+        for subdir in basedir.glob( '*' ):
+            if subdir.is_dir():
+                result = subprocess.run( [ "python", "manage.py", "load_snana_fits",
+                                           "-d", str(subdir), "--ppdb", "--do" ],
+                                         cwd="/tom_desc", capture_output=True )
+                assert result.returncode == 0
+
+        yield True
+
+        m.DiaObjectTruth.objects.all().delete()
+        m.PPDBAlert.objects.all().delete()
+        m.PPDBDiaForcedSource.objects.all().delete()
+        m.PPDBDiaSource.objects.all().delete()
+        m.PPDBDiaObject.objects.all().delete()
+
+    def test_ppdb_loaded( self, snana_loaded_elasticc2_ppdb ):
         # I should probably have some better tests than just object counts....
-        assert m.PPDBDiaObject.objects.count() == 138
-        assert m.PPDBDiaSource.objects.count() == 429
+        assert m.PPDBDiaObject.objects.count() == 346
+        assert m.PPDBDiaSource.objects.count() == 1862
         assert m.PPDBAlert.objects.count() == m.PPDBDiaSource.objects.count()
-        assert m.PPDBDiaForcedSource.objects.count() == 34284
+        assert m.PPDBDiaForcedSource.objects.count() == 52172
         assert m.DiaObjectTruth.objects.count() == m.PPDBDiaObject.objects.count()
         
 
@@ -37,6 +56,8 @@ class TestLoadSnanaFits:
         
     @pytest.fixture( scope="class" )
     def elasticc2_training( self, count_ppdb ):
+        # Loding in exactly the same data for test purposes,
+        #  just to differnt tables
         basedir = pathlib.Path( "/elasticc2data" )
         dirs = []
         for subdir in basedir.glob( '*' ):
@@ -61,9 +82,9 @@ class TestLoadSnanaFits:
         assert m.PPDBDiaForcedSource.objects.count() == self.__class__._ppdbdiaforcedsources
         assert m.DiaObjectTruth.objects.count() == self.__class__._ppdbdiaobjecttruths
 
-        assert m.TrainingDiaObject.objects.count() == 138
-        assert m.TrainingDiaSource.objects.count() == 429
-        assert m.TrainingDiaForcedSource.objects.count() == 34284
+        assert m.TrainingDiaObject.objects.count() == 346
+        assert m.TrainingDiaSource.objects.count() == 1862
+        assert m.TrainingDiaForcedSource.objects.count() == 52172
         assert m.TrainingAlert.objects.count() == m.TrainingDiaSource.objects.count()
         assert ( m.TrainingDiaObjectTruth.objects.count()
                  == m.TrainingDiaObject.objects.count() )

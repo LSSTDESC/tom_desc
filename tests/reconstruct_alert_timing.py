@@ -1,3 +1,5 @@
+# Intended to be run with pytest, but not automatically
+
 import sys
 import time
 import logging

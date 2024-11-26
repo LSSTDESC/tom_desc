@@ -1,6 +1,6 @@
 services:
   kafka-zookeeper:
-    image: registry.nersc.gov/m1727/raknop/kafka
+    image: ${TOM_DOCKER_ARCHIVE:-ghcr.io/lsstdesc/tom_desc}/kafka:${TOM_DOCKER_VERSION:-latest}
     build:
       context: ../docker_kafka
     healthcheck:
@@ -14,7 +14,7 @@ services:
     depends_on:
        kafka-zookeeper:
          condition: service_healthy
-    image: registry.nersc.gov/m1727/raknop/kafka
+    image: ${TOM_DOCKER_ARCHIVE:-ghcr.io/lsstdesc/tom_desc}/kafka:${TOM_DOCKER_VERSION:-latest}
     build:
       context: ../docker_kafka
     healthcheck:
@@ -24,17 +24,8 @@ services:
       retries: 5
     entrypoint: [ "bin/kafka-server-start.sh", "config/server.properties" ]
 
-  fakebroker:
-    depends_on:
-      kafka-server:
-        condition: service_healthy
-    image: registry.nersc.gov/m1727/raknop/fakebroker
-    build:
-      context: .
-      dockerfile: Dockerfile.fakebroker
-
   postgres:
-    image: registry.nersc.gov/m1727/raknop/tom-postgres
+    image: ${TOM_DOCKER_ARCHIVE:-ghcr.io/lsstdesc/tom_desc}/tom-postgres:${TOM_DOCKER_VERSION:-latest}
     build:
       context: ../docker_postgres
       target: tom-postgres
@@ -45,7 +36,7 @@ services:
       retries: 5
 
   mongodb:
-    image: registry.nersc.gov/m1727/rknop/tom-mongodb:latest
+    image: ${TOM_DOCKER_ARCHIVE:-ghcr.io/lsstdesc/tom_desc}/tom-mongodb:${TOM_DOCKER_VERSION:-latest}
     build:
       context: ../docker_mongodb
     environment:
@@ -73,7 +64,7 @@ services:
         condition: service_healthy
       mongodb:
         condition: service_healthy
-    image: registry.nersc.gov/m1727/raknop/tom_desc_bindmount
+    image: ${TOM_DOCKER_ARCHIVE:-ghcr.io/lsstdesc/tom_desc}/tom_desc_bindmount:${TOM_DOCKER_VERSION:-latest}
     build:
       context: ../
       dockerfile: docker_server/Dockerfile
@@ -120,7 +111,7 @@ services:
     depends_on:
       createdb:
         condition: service_completed_successfully
-    image: registry.nersc.gov/m1727/raknop/tom_desc_bindmount
+    image: ${TOM_DOCKER_ARCHIVE:-ghcr.io/lsstdesc/tom_desc}/tom_desc_bindmount:${TOM_DOCKER_VERSION:-latest}
     build:
       context: ../
       dockerfile: docker_server/Dockerfile
@@ -154,79 +145,6 @@ services:
       MONGODB_ALERT_READER_PASSWORD: reader
 
 
-  brokerpoll:
-    depends_on:
-      createdb:
-        condition: service_completed_successfully
-      tom:
-        condition: service_started
-      fakebroker:
-        condition: service_started
-    image: registry.nersc.gov/m1727/raknop/tom_desc_bindmount
-    build:
-      context: ../
-      dockerfile: docker_server/Dockerfile
-      target: tom-server-bindmount
-    volumes:
-      - type: bind
-        source: ../secrets
-        target: /secrets
-      - type: bind
-        source: ../tom_desc
-        target: /tom_desc
-      - type: volume
-        source: logs
-        target: /logs
-    environment:
-      LOGDIR: /logs
-      DB_NAME: tom_desc
-      DB_HOST: postgres
-      DB_USER: postgres
-      DB_PASS: fragile
-      DB_PORT: 5432
-    entrypoint: [ "python", "manage.py", "brokerpoll2", "--do-test", "--grouptag", "elasticc2" ]
-
-
-  brokerpoll_fastdb_dev:
-    depends_on:
-      createdb:
-        condition: service_completed_successfully
-      tom:
-        condition: service_started
-      fakebroker:
-        condition: service_started
-    image: registry.nersc.gov/m1727/raknop/tom_desc_bindmount
-    build:
-      context: ../
-      dockerfile: docker_server/Dockerfile
-      target: tom-server-bindmount
-    volumes:
-      - type: bind
-        source: ../secrets
-        target: /secrets
-      - type: bind
-        source: ../tom_desc
-        target: /tom_desc
-      - type: volume
-        source: logs
-        target: /logs
-    environment:
-      LOGDIR: /logs
-      MONGOHOST: mongodb
-      MONGODB_ADMIN: mongodb_admin
-      MONGODB_ADMIN_PASSWORD: fragile
-      MONGODB_ALERT_WRITER: mongodb_alert_writer
-      MONGODB_ALERT_WRITER_PASSWORD: writer
-      MONGODB_ALERT_READER: mongdb_alert_reader
-      MONGODB_ALERT_READER_PASSWORD: reader
-      DB_NAME: tom_desc
-      DB_HOST: postgres
-      DB_USER: postgres
-      DB_PASS: fragile
-      DB_PORT: 5432
-    entrypoint: [ "python", "manage.py", "fastdb_dev_brokerpoll", "--do-test", "--grouptag", "fastdb_dev" ]
-
-
   # Thought required: want to make this dependent on
   #   createdb completed successfully, or just on the
   #   database servers being up?  The advantage of the latter
@@ -241,13 +159,15 @@ services:
         condition: service_healthy
       tom:
         condition: service_started
-      fakebroker:
-        condition: service_started
-      brokerpoll:
-        condition: service_started
-      brokerpoll_fastdb_dev:
-        condition: service_started
-    image: registry.nersc.gov/m1727/raknop/tom_server_bindmount_dev
+      kafka-server:
+        condition: service_healthy
+      # fakebroker:
+      #   condition: service_started
+      # brokerpoll:
+      #   condition: service_started
+      # brokerpoll_fastdb_dev:
+      #   condition: service_started
+    image: ${TOM_DOCKER_ARCHIVE:-ghcr.io/lsstdesc/tom_desc}/tom_server_bindmount_dev:${TOM_DOCKER_VERSION:-latest}
     build:
       context: ../
       dockerfile: docker_server/Dockerfile

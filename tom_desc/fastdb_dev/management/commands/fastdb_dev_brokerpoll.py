@@ -69,7 +69,7 @@ class Command(BaseCommand):
         parser.add_argument( '--pitt-project', default=None, help="Project name for PITT-Google" )
         parser.add_argument( '--do-test', action='store_true', default=False,
                              help="Poll from kafka-server:9092 (for testing purposes)" )
-        parser.add_argument( '---test-topic', default='classifications',
+        parser.add_argument( '--test-topic', default='classifications',
                              help="Topic to poll from on kafka-server:9092" )
         parser.add_argument( '-g', '--grouptag', default=None, help="Tag to add to end of kafka group ids" )
         parser.add_argument( '-r', '--reset', default=False, action='store_true',
@@ -121,12 +121,13 @@ class Command(BaseCommand):
 
         # Launch a process for each broker that will poll that broker indefinitely
 
-        # We want to make sure that django doesn't send copies of database sessions
-        # to the subprocesses; at least for Cassandra, that breaks things.  So,
-        # before launching all the processes, close all the database django connections
+        # We want to make sure that django doesn't send copies of
+        # database sessions to the subprocesses.  So, before launching
+        # all the processes, close all the database django connections
         # so that each process will open a new one as it needs it.
-        # (They already open mongo connections as necessary, and django doesn't muck
-        # about with mongo, so we don't have to do things for that.)
+        # (They already open mongo connections as necessary, and django
+        # doesn't muck about with mongo, so we don't have to do things
+        # for that.)
         django.db.connections.close_all()
 
         brokers = {}

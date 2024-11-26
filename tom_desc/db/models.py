@@ -131,16 +131,43 @@ class Createable(models.Model):
     # This version uses postgres COPY and tries to be faster than mucking
     # about with ORM constructs.
     @classmethod
-    def bulk_insert_onlynew( cls, data, kwmap=None ):
-        """Insert a bunch of data into the database.  Ignores records that conflict with things present.
+    def bulk_insert_or_upsert( cls, data, kwmap=None, upsert=False, assume_no_conflict=False ):
+        """Try to efficiently insert a bunch of data into the database.
 
-        data can be:
-          * a dict of { kw: iterable }.  All of the iterables must have the same length,
-            and must be something that pandas.DataFrame could handle
-          * a list of dicts.  The keys in all dicts must be the same
-        data and kwmap will be run through data_to_createdict
+        Parameters
+        ----------
+           data: dict or list
+             Data can be:
+              * a dict of { kw: iterable }.  All of the iterables must
+                have the same length, and must be something that
+                pandas.DataFrame could handle
+              * a list of dicts.  The keys in all dicts must be the same
 
-        Returns the number of rows actually inserted (which may be less than len(data)).
+           kwmap: dict, default None
+             A map of { dict_keyword : model_keyword } of conversions
+             from data to the class model.  (See data_to_createdict().)
+             Defaults to the _create_kws_map property of the object.
+
+           upsert: bool, default False
+             If False, then objects whose primary key is already in the
+             database will be ignored.  If True, then objects whose
+             primary key is already in the database will be updated with
+             the values in dict.  (SQL will have ON CONFLICT DO NOTHING
+             if False, ON CONFLICT DO UPDATE if True.)
+
+           assume_no_conflict: bool, default False
+             Usually you just want to leave this False.  There are
+             obscure kludge cases (e.g. if you're playing games and have
+             removed primary key constraints and you know what you're
+             doing-- this happens in load_snana_fits.py, for instance)
+             where the conflict clauses cause the sql to fail.  Set this
+             to True to avoid having those clauses.
+
+
+        Returns
+        -------
+           inserted: int
+             The number of rows actually inserted (which may be less than len(data)).
 
         """
         conn = None
@@ -165,6 +192,9 @@ class Createable(models.Model):
             # float our double, thereby losing precision.  I've checked it, and it seems
             # to be doing the right thing.  But I have had issues in the past with
             # pandas silently converting data to doubles.
+            # ****
+            # sys.stderr.write( f"Calling data_to_createdict on {data} with kwmap {kwmap}\n" )
+            # ****
             df = pandas.DataFrame( cls.data_to_createdict( data, kwmap=kwmap ) )
             strio = io.StringIO()
             df.to_csv( strio, index=False, header=False, sep='\t', na_rep='\\N' )
@@ -174,8 +204,22 @@ class Createable(models.Model):
             # this will break if columns aren't all lower case)
             # columns = [ f'"{c}"' for c in df.columns.values ]
             columns = df.columns.values
+            # ****
+            # sys.stderr.write( f"Bulk uploading from:\n{strio.getvalue()}\ncolmns={columns}\n" )
+            # ****
             cursor.copy_from( strio, "bulk_upsert", columns=columns, size=1048576 )
-            q = f"INSERT INTO {cls._meta.db_table} SELECT * FROM bulk_upsert ON CONFLICT DO NOTHING"
+            if not assume_no_conflict:
+                if not upsert:
+                    conflict = f"ON CONFLICT ({cls._pk}) DO NOTHING"
+                else:
+                    conflict = ( f"ON CONFLICT ({cls._pk}) DO UPDATE SET "
+                                 + ",".join( f"{c}=EXCLUDED.{c}" for c in columns ) )
+            else:
+                conflict = ""
+            q = f"INSERT INTO {cls._meta.db_table} SELECT * FROM bulk_upsert {conflict}"
+            # ****
+            # sys.stderr.write( f"Running query {q}\n" )
+            # ****
             cursor.execute( q )
             ninserted = cursor.rowcount
             # I don't think I should have to do this; shouldn't it happen automatically

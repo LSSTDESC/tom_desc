@@ -20,7 +20,6 @@ import psycopg2.extras
 import django.db
 from matplotlib import pyplot
 from django.core.management.base import BaseCommand, CommandError
-import cassandra.query
 
 _rundir = pathlib.Path(__file__).parent
 
