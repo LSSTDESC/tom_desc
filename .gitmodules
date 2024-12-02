@@ -1,6 +1,6 @@
 [submodule "tom_base"]
 	path = tom_desc/extern/tom_base
-	url = https://github.com/mtauraso/tom_base.git
+	url = https://github.com/LSSTDESC/tom_base.git
 	branch = tom_desc_extern_tracking_branch
 [submodule "tom_antares"]
 	path = tom_desc/extern/tom_antares
