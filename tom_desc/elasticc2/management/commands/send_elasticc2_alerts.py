@@ -43,7 +43,7 @@ class Command(BaseCommand):
         if not self.logger.hasHandlers():
             logout = logging.StreamHandler( sys.stderr )
             self.logger.addHandler( logout )
-            formatter = logging.Formatter( f'[%(asctime)s - %(levelname)s] - %(message)s',
+            formatter = logging.Formatter( f'[%(asctime)s - e2alert - %(levelname)s] - %(message)s',
                                            datefmt='%Y-%m-%d %H:%M:%S' )
             logout.setFormatter( formatter )
         self.logger.setLevel( logging.INFO )

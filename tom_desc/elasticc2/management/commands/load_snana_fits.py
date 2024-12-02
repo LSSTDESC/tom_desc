@@ -203,7 +203,7 @@ class FITSFileHandler( ColumnMapper ):
                 #     row['isddf'] = True
 
             if self.really_do:
-                nobj = DiaObject.bulk_insert_onlynew( dict( head ) )
+                nobj = DiaObject.bulk_insert_or_upsert( dict( head ), assume_no_conflict=True )
                 self.logger.info( f"PID {os.getpid()} loaded {nobj} objects from {headfile.name}" )
             else:
                 nobj = len(head)
@@ -242,7 +242,7 @@ class FITSFileHandler( ColumnMapper ):
             phot = phot[ phot['diaobject_id'] >= 0 ]
 
             if self.really_do:
-                nfrc = DiaForcedSource.bulk_insert_onlynew( phot )
+                nfrc = DiaForcedSource.bulk_insert_or_upsert( phot, assume_no_conflict=True )
                 self.logger.info( f"PID {os.getpid()} loaded {nfrc} forced photometry points from {photfile.name}" )
             else:
                 nfrc = len(phot)
@@ -254,7 +254,7 @@ class FITSFileHandler( ColumnMapper ):
             phot = phot[ ( phot['photflag'] & self.photflag_detect ) !=0 ]
 
             if self.really_do:
-                nsrc = DiaSource.bulk_insert_onlynew( phot )
+                nsrc = DiaSource.bulk_insert_or_upsert( phot, assume_no_conflict=True )
                 self.logger.info( f"PID {os.getpid()} loaded {nsrc} sources from {photfile.name}" )
             else:
                 nsrc = len(phot)
@@ -266,7 +266,7 @@ class FITSFileHandler( ColumnMapper ):
                        'diasource_id': phot[ 'diasource_id' ],
                        'diaobject_id': phot[ 'diaobject_id' ] }
             if self.really_do:
-                nalrt = Alert.bulk_insert_onlynew( alerts )
+                nalrt = Alert.bulk_insert_or_upsert( alerts, assume_no_conflict=True )
                 self.logger.info( f"PID {os.getpid()} loaded {nalrt} alerts" )
             else:
                 nalrt = len(alerts['alert_id'])

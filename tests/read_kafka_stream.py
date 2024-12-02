@@ -4,7 +4,7 @@ import logging
 import datetime
 from msgconsumer import MsgConsumer
 
-_logger = logging.getLogger(__name__)
+_logger = logging.getLogger( "tests/read_kafka_stream" )
 if not _logger.hasHandlers():
     _logout = logging.StreamHandler( sys.stderr )
     _logger.addHandler( _logout )
