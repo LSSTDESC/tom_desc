@@ -26,7 +26,7 @@ import uuid
 from rest_framework.settings import api_settings
 
 _logger = logging.getLogger("fastdb_queries")
-_logout = logging.FileHandler( pathlib.Path( os.getenv('LOGDIR'), "/logs" ) / "fastdb_queries.log" )
+_logout = logging.FileHandler( pathlib.Path( os.getenv('LOGDIR', "/logs" )) / "fastdb_queries.log" )
 _logger.addHandler( _logout )
 _formatter = logging.Formatter( f'[%(asctime)s - %(levelname)s] - %(message)s',
                                     datefmt='%Y-%m-%d %H:%M:%S' )
