@@ -1,7 +1,7 @@
 # A base class for any class that tests the alert cycle.  Right now there are two, in
 #  test_elasticc2_alertcycle.py and test_fastdb_dev_alertcycle.py.
 
-# Inefficiency note: the fixutres do everything needed for both the
+# Inefficiency note: some of the fixtures do everything needed for both the
 # elasticc2 and fastdb_dev tests, but because those tests are separate,
 # it all gets run twice. ¯\_(ツ)_/¯
 

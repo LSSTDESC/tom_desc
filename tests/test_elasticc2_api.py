@@ -1,4 +1,5 @@
 import pytest
+import pandas
 import elasticc2.models
 
 
@@ -112,17 +113,59 @@ class TestLtcv:
     def test_ltcvs( self, elasticc2_database_snapshot_class, tomclient ):
         # Try with a single objectid
         res = tomclient.post( "elasticc2/ltcv", json={ 'objectid': 1552185 } )
-        data = data.json()
+        data = res.json()
+
         assert data['status'] == 'ok'
         assert len( data['diaobject'] ) == 1
-        assert data['diaobject'][0]['diaobjectid'] == 1552185
-        assert len( data['diaobject'][0]['photometry']['mjd'] )
+        assert data['diaobject'][0]['objectid'] == 1552185
+        assert len( data['diaobject'][0]['photometry']['mjd'] ) == 32
+        for field in [ 'band', 'flux', 'fluxerr' ] :
+            assert len( data['diaobject'][0]['photometry'][field] ) == len( data['diaobject'][0]['photometry']['mjd'] )
 
+        # Pick out a few objects I know that have overlapping lightcurves (in time),
+        #   that start before and end after mjd 60420
+        testobjs = [ 1731906, 1102362, 800290 ]
 
-        import pdb; pdb.set_trace()
-        pass
+        # Get full lightcurves
+        res = tomclient.post( "elasticc2/ltcv", json={ 'objectid': testobjs } )
+        data = res.json()
 
-        res = tomclient.post( "elasticc2/ltcv", json={ 'objectid': [ 1552185, 1696949, 1913410 ] } )
+        assert data['status'] == 'ok'
+        assert len( data['diaobject'] ) == 3
+        assert set( data['diaobject'][i]['objectid'] for i in [0,1,2] ) == set( testobjs )
+        fullltcvlens = []
+        for i in range(3):
+            fullltcvlens.append( len( data['diaobject'][i]['photometry']['mjd'] ) )
+            assert fullltcvlens[i] > 0
+            for field in [ 'band', 'flux', 'fluxerr' ]:
+                assert len( data['diaobject'][i]['photometry'][field] ) == fullltcvlens[i]
+
+        # Test a fake current mjd
+        res = tomclient.post( "elasticc2/ltcv", json={ 'objectid': testobjs, 'mjd_now': 60420  } )
+        data = res.json()
+
+        assert data['status'] == 'ok'
+        assert len( data['diaobject'] ) == 3
+        assert set( data['diaobject'][i]['objectid'] for i in [0,1,2] ) == set( testobjs )
+        partialltcvlens = []
+        for i in range(2):
+            partialltcvlens.append( len( data['diaobject'][i]['photometry']['mjd'] ) )
+            assert  partialltcvlens[i] < fullltcvlens[i]
+            assert all ( m < 60420 for m in data['diaobject'][i]['photometry']['mjd'] )
+
+        # Test returnformat 2  (TODO : returnformat 1)
+
+        # Test a fake current mjd
+        res = tomclient.post( "elasticc2/ltcv", json={ 'objectid': testobjs, 'mjd_now': 60420, 'return_format': 2 } )
+        data = res.json()
+
+        assert data['status'] == 'ok'
+        df = pandas.DataFrame( data['diaobject'] )
+        assert set( df.objectid ) == set( testobjs )
+        assert all( len( df.mjd[i] ) == partialltcvlens[i] for i in range(2) )
+        assert all( len( df.mjd[i] ) == len( df[field][i] )
+                    for field in [ 'band', 'flux', 'fluxerr' ]
+                    for i in range(2) )
 
 
     def test_ltcv_features( self, elasticc2_ppdb_class, tomclient ):

@@ -1,7 +1,6 @@
 import elasticc2.models
 
 def test_elasticc2_database_snapshot( elasticc2_database_snapshot ):
-    import pdb; pdb.set_trace()
     assert elasticc2.models.BrokerClassifier.objects.count() == 3
     assert elasticc2.models.BrokerMessage.objects.count() == 1950
     assert elasticc2.models.DiaForcedSource.objects.count() == 5765

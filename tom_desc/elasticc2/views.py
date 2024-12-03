@@ -718,6 +718,7 @@ class LtcvsView(PermissionRequiredMixin, django.views.View):
             elif return_format == 2:
                 sne = { 'objectid': [],
                         'mjd': [],
+                        'band': [],
                         'flux': [],
                         'fluxerr': [],
                         'zp': [] }
@@ -731,7 +732,7 @@ class LtcvsView(PermissionRequiredMixin, django.views.View):
                 for objid in objids:
                     subdf = df.xs( objid, level='diaobject_id' )
                     if return_format == 0:
-                        sne.append( { 'objectdid': int(objid),
+                        sne.append( { 'objectid': int(objid),
                                       'photometry': { 'mjd': list( subdf['midpointtai'] ),
                                                       'band': list( subdf['filtername'] ),
                                                       'flux': list( subdf['psflux'] ),
@@ -747,7 +748,7 @@ class LtcvsView(PermissionRequiredMixin, django.views.View):
                     elif return_format == 2:
                         sne['objectid'].append( int(objid) )
                         sne['mjd'].append( list( subdf['midpointtai'] ) )
-                        sne['band'].append( list( subdf['band'] ) )
+                        sne['band'].append( list( subdf['filtername'] ) )
                         sne['flux'].append( list( subdf['psflux'] ) )
                         sne['fluxerr'].append( list( subdf['psfluxerr'] ) )
                         sne['zp'].append( 27.5 )
@@ -1730,7 +1731,7 @@ class GetSpectrumInfo(PermissionRequiredMixin, django.views.View):
                 else:
                     q = q.filter( diaobject_id=int(data['objectid']) )
             if 'facility' in data.keys():
-                q = q.filter( facillity=data['facility'] )
+                q = q.filter( facility=data['facility'] )
             if 'mjd_min' in data.keys():
                 q = q.filter( mjd__gte=float(data['mjd']) )
             if 'mjd_max' in data.keys():
