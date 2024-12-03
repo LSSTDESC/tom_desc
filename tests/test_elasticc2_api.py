@@ -109,6 +109,22 @@ class TestReconstructAlert:
 
 
 class TestLtcv:
+    def test_ltcvs( self, elasticc2_database_snapshot_class, tomclient ):
+        # Try with a single objectid
+        res = tomclient.post( "elasticc2/ltcv", json={ 'objectid': 1552185 } )
+        data = data.json()
+        assert data['status'] == 'ok'
+        assert len( data['diaobject'] ) == 1
+        assert data['diaobject'][0]['diaobjectid'] == 1552185
+        assert len( data['diaobject'][0]['photometry']['mjd'] )
+
+
+        import pdb; pdb.set_trace()
+        pass
+
+        res = tomclient.post( "elasticc2/ltcv", json={ 'objectid': [ 1552185, 1696949, 1913410 ] } )
+
+
     def test_ltcv_features( self, elasticc2_ppdb_class, tomclient ):
 
         # Default features for an object

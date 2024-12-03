@@ -659,6 +659,111 @@ class GetAlert(PermissionRequiredMixin, django.views.View):
 
 # ======================================================================
 
+class LtcvsView(PermissionRequiredMixin, django.views.View):
+    raise_exception = True
+
+    def has_permission( self ):
+        return bool( self.request.user.is_authenticated )
+
+    def get( self, *args, **kwargs ):
+        return self.post( *args, **kwargs )
+
+    def post( self, request ):
+        try:
+            data = json.loads( request.body )
+            if ( ( not isinstance( data, dict ) ) or
+                 ( ( 'objectid' not in data ) and
+                   ( 'objectids' not in data )
+                  ) ):
+                raise ValueError( "Must supply either objectid or objectids" )
+            if ( ( 'objectid' in data ) and ( 'objectids' in data ) ):
+                raise ValueError( "Can't supply both objectid and objectids" )
+
+            objectids = data['objectid'] if 'objectid' in data else data['objectids']
+            if not isinstance( objectids, list ):
+                objectids = [ objectids ]
+
+            mjdnow = None
+            if 'mjd_now' in data:
+                mjdnow = float( data['mjd_now'] )
+
+            return_format = 0
+            if 'return_format' in data:
+                return_format = int( data['return_format'] )
+                if return_format not in ( 0, 1, 2 ):
+                    raise ValueError( f"Unknown return_format {return_format}" )
+
+            dbinfo = tom_desc.settings.DATABASES['default']
+            with psycopg2.connect( host=dbinfo['HOST'],
+                                   port=dbinfo['PORT'],
+                                   user=dbinfo['USER'],
+                                   password=dbinfo['PASSWORD'],
+                                   dbname=dbinfo['NAME']
+                                  ) as dbcon:
+                with dbcon.cursor() as cursor:
+
+                    q = ( 'SELECT diaobject_id,diaforcedsource_id,filtername,midpointtai,psflux,psfluxerr '
+                          'FROM elasticc2_diaforcedsource f '
+                          'WHERE f.diaobject_id IN %(objectids)s ' )
+                    if mjdnow is not None:
+                        q += '  AND f.midpointtai <= %(now)s '
+                    q += 'ORDER BY f.diaobject_id, f.midpointtai'
+                    cursor.execute( q, { 'objectids': tuple(objectids), 'now': mjdnow } )
+                    columns = [ c.name for c in cursor.description ]
+                    rows = cursor.fetchall()
+            df = pandas.DataFrame( rows, columns=columns )
+
+            if return_format in ( 0, 1 ):
+                sne = []
+            elif return_format == 2:
+                sne = { 'objectid': [],
+                        'mjd': [],
+                        'flux': [],
+                        'fluxerr': [],
+                        'zp': [] }
+            else:
+                raise RuntimeError( "This should never happen" )
+
+            if len(df) > 0:
+                objids = df['diaobject_id'].unique()
+                df.set_index( [ 'diaobject_id', 'diaforcedsource_id' ], inplace=True )
+
+                for objid in objids:
+                    subdf = df.xs( objid, level='diaobject_id' )
+                    if return_format == 0:
+                        sne.append( { 'objectdid': int(objid),
+                                      'photometry': { 'mjd': list( subdf['midpointtai'] ),
+                                                      'band': list( subdf['filtername'] ),
+                                                      'flux': list( subdf['psflux'] ),
+                                                      'fluxerr': list( subdf['psfluxerr'] ) },
+                                      'zp': 27.5 } )
+                    elif return_format == 1:
+                        sne.append( { 'objectid': int(objid),
+                                      'mjd': list( subdf['midpointtai'] ),
+                                      'band': list( subdf['filtername'] ),
+                                      'flux': list( subdf['psflux'] ),
+                                      'fluxerr': list( subdf['psfluxerr'] ),
+                                      'zp': 27.5 } )
+                    elif return_format == 2:
+                        sne['objectid'].append( int(objid) )
+                        sne['mjd'].append( list( subdf['midpointtai'] ) )
+                        sne['band'].append( list( subdf['band'] ) )
+                        sne['flux'].append( list( subdf['psflux'] ) )
+                        sne['fluxerr'].append( list( subdf['psfluxerr'] ) )
+                        sne['zp'].append( 27.5 )
+                    else:
+                        raise RuntimeError( "This should never happen." )
+
+            resp = JsonResponse( { 'status': 'ok',
+                                   'diaobject': sne } )
+            return resp
+
+        except Exception as ex:
+            sys.stderr.write( f"Exception in LtcvsView: {ex}\n" )
+            traceback.print_exc( file=sys.stderr )
+            return HttpResponse( f"Exception in LtcvsView: {str(ex)}", status=500,
+                                 content_type='text/plain; charset=utf-8' )
+
 class LtcvFeatures(PermissionRequiredMixin, django.views.View):
     raise_exception = True
 
