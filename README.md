@@ -247,7 +247,7 @@ TODO: flesh out
 You can get lightcurves for objects at the URL `elasticc2/ltcv`.  POST to this URL, with the post body a json-encoded dict, with keys:
 * `objectid` or `objecitds`: One of these two is required.  Either the numerical ID of the object whose lightcurve you want, or a list of such numerical ids.
 * `mjd_now`: (Optional.)  For testing purposes.  Normally, you will get all known photometry for an object.  Pass an MJD here, and you'll only get photometry before that mjd.
-* `hostgal_info`: (Optional.) 0 or 1, default 0.  If 1, return information about the first possible host galaxy for each transient.
+* `include_hostinfo`: (Optional.) 0 or 1, default 0.  If 1, return information about the first possible host galaxy for each transient.
 * `return_format`: (Optional.)  0, 1, or 2, default 0.  (See below.)
 
 Example:
@@ -333,7 +333,7 @@ Currently hot transients can be found at the URL `elasticc2/gethottransients`.  
 * `detected_since_mjd: float` — will return all SNe detected since the indicated mjd. ("Detected" means a LSST alert was sent out, and at least one broker has returned a classification.)
 * `detected_in_last_days: float` — will return all SNe detected between this many days before now and now.  The TOM will search what it knows about forced photometry, considering any point with S/N>5 as a detection.
 * `mjd_now: float` — The mjd of right now.  Usually you don't want to specify this, and the server will automatically determine the current MJD.  This is here so it can be used with simulations, where "right now" in the simulation may not be the real right now.  You will not get back any detections or forced photometry with an MJD newer than this value.
-* `hostgal_info`: (Optional.) 0 or 1, default 0.  If 1, return information about the first possible host galaxy for each transient.
+* `include_hostinfo`: (Optional.) 0 or 1, default 0.  If 1, return information about the first possible host galaxy for each transient.
 * `return_format: int` — 0, 1, or 2.  Optional, defaults to 0.
 
 Example:
