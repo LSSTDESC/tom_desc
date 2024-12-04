@@ -713,7 +713,7 @@ class LtcvsView(PermissionRequiredMixin, django.views.View):
                     if include_object_hostinfo:
                         for band in [ 'u', 'g', 'r', 'i', 'z', 'y' ]:
                             q += f"o.hostgal_mag_{band},o.hostgal_magerr_{band},"
-                        q += "o.hostgal_ellipticity,o.hostgal_sqradius,"
+                        q += "o.hostgal_ellipticity,o.hostgal_sqradius,o.hostgal_snsep,"
                     q += ( 'f.diaforcedsource_id,f.filtername,f.midpointtai,f.psflux,f.psfluxerr '
                            'FROM elasticc2_diaforcedsource f '
                            'INNER JOIN elasticc2_diaobject o ON f.diaobject_id=o.diaobject_id '
@@ -743,6 +743,7 @@ class LtcvsView(PermissionRequiredMixin, django.views.View):
                         sne[ f'hostgal_magerr_{band}' ] = []
                     sne[ 'hostgal_ellipticity' ] = []
                     sne[ 'hostgal_sqradius' ] = []
+                    sne[ 'hostgal_snsep' ] = []
             else:
                 raise RuntimeError( "This should never happen" )
 
@@ -763,6 +764,7 @@ class LtcvsView(PermissionRequiredMixin, django.views.View):
                                 toadd[ f'hostgal_magerr_{band}' ] = subdf[ f'hostgal_magerr_{band}' ].values[0]
                             toadd[ f'hostgal_ellipticity' ] = subdf[ f'hostgal_ellipticity' ].values[0]
                             toadd[ f'hostgal_sqradius' ] = subdf[ f'hostgal_sqradius' ].values[0]
+                            toadd[ f'hostgal_snsep' ] = subdf[ f'hostgal_snsep' ].values[0]
 
                         if return_format == 0:
                             toadd['photometry'] = { 'mjd': list( subdf['midpointtai'] ),
@@ -792,6 +794,7 @@ class LtcvsView(PermissionRequiredMixin, django.views.View):
                                 sne[ f'hostgal_magerr_{band}' ].append( subdf[f'hostgal_magerr_{band}'].values[0] )
                             sne[ 'hostgal_ellipticity' ].append( subdf['hostgal_ellipticity'].values[0] )
                             sne[ 'hostgal_sqradius' ].append( subdf['hostgal_sqradius'].values[0] )
+                            sne[ 'hostgal_snsep' ].append( subdf['hostgal_snsep'].values[0] )
 
                     else:
                         raise RuntimeError( "This should never happen." )
@@ -1227,7 +1230,7 @@ class GetHotSNeView(PermissionRequiredMixin, django.views.View):
                     if include_object_hostinfo:
                         for band in [ 'u', 'g', 'r', 'i', 'z', 'y' ]:
                             q += f"o.hostgal_mag_{band},o.hostgal_magerr_{band},"
-                        q += "o.hostgal_ellipticity,o.hostgal_sqradius,"
+                        q += "o.hostgal_ellipticity,o.hostgal_sqradius,o.hostgal_snsep,"
                     q += ( "       f.diaforcedsource_id AS diaforcedsource_id,"
                            "       f.filtername AS band,f.midpointtai AS mjd,"
                            "       f.psflux AS flux, f.psfluxerr AS fluxerr "
@@ -1264,6 +1267,7 @@ class GetHotSNeView(PermissionRequiredMixin, django.views.View):
                         sne[ f'hostgal_magerr_{band}' ] = []
                     sne[ 'hostgal_ellipticity' ] = []
                     sne[ 'hostgal_sqradius' ] = []
+                    sne[ 'hostgal_snsep' ] = []
             else:
                 raise RuntimeError( "This should never happen." )
 
@@ -1287,6 +1291,7 @@ class GetHotSNeView(PermissionRequiredMixin, django.views.View):
                                 toadd[ f'hostgal_magerr_{band}' ] = subdf[f'hostgal_magerr_{band}'].values[0]
                             toadd[ 'hostgal_ellipticity' ] = subdf.hostgal_ellipticity.values[0]
                             toadd[ 'hostgal_sqradius' ] = subdf.hostgal_sqradius.values[0]
+                            toadd[ 'hostgal_snsep' ] = subdf.hostgal_snsep.values[0]
 
                         if return_format == 0:
                             toadd['photometry'] = { 'mjd': list( subdf['mjd'] ),
@@ -1316,6 +1321,7 @@ class GetHotSNeView(PermissionRequiredMixin, django.views.View):
                                 sne[ f'hostgal_magerr_{band}' ].append( subdf[f'hostgal_magerr_{band}'].values[0] )
                             sne[ 'hostgal_ellipticity' ].append( subdf['hostgal_ellipticity'].values[0] )
                             sne[ 'hostgal_sqradius' ].append( subdf['hostgal_sqradius'].values[0] )
+                            sne[ 'hostgal_snsep' ].append( subdf['hostgal_snsep'].values[0] )
 
                     else:
                         raise RuntimeError( "This should never happen." )

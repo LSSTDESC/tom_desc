@@ -92,7 +92,7 @@ class TestSpectrumCycle:
                                          'hostgal_mag_i','hostgal_magerr_i',
                                          'hostgal_mag_z','hostgal_magerr_z',
                                          'hostgal_mag_y','hostgal_magerr_y',
-                                         'hostgal_ellipticity', 'hostgal_sqradius'
+                                         'hostgal_ellipticity', 'hostgal_sqradius', 'hostgal_snsep'
                                         }
         assert set( sne[0]['photometry'].keys() ) == { 'mjd', 'band', 'flux', 'fluxerr' }
 
@@ -123,7 +123,7 @@ class TestSpectrumCycle:
                                       'hostgal_mag_i','hostgal_magerr_i',
                                       'hostgal_mag_z','hostgal_magerr_z',
                                       'hostgal_mag_y','hostgal_magerr_y',
-                                      'hostgal_ellipticity', 'hostgal_sqradius'
+                                      'hostgal_ellipticity', 'hostgal_sqradius', 'hostgal_snsep'
                                      }
         assert df.mjd.dtype == numpy.dtype('O')
         assert len( df.mjd[0] ) > 1

@@ -169,14 +169,14 @@ class TestLtcv:
         data = res.json()
         assert data['status'] == 'ok'
         assert len( data['diaobject'] ) == 3
-        assert data['diaobject'][0].keys() == { 'objectid', 'ra','dec', 'zp', 'photometry',
-                                                'hostgal_mag_u', 'hostgal_magerr_u',
-                                                'hostgal_mag_g', 'hostgal_magerr_g',
-                                                'hostgal_mag_r', 'hostgal_magerr_r',
-                                                'hostgal_mag_i', 'hostgal_magerr_i',
-                                                'hostgal_mag_z', 'hostgal_magerr_z',
-                                                'hostgal_mag_y', 'hostgal_magerr_y',
-                                                'hostgal_ellipticity', 'hostgal_sqradius' }
+        assert set( data['diaobject'][0].keys() ) == { 'objectid', 'ra','dec', 'zp', 'photometry',
+                                                       'hostgal_mag_u', 'hostgal_magerr_u',
+                                                       'hostgal_mag_g', 'hostgal_magerr_g',
+                                                       'hostgal_mag_r', 'hostgal_magerr_r',
+                                                       'hostgal_mag_i', 'hostgal_magerr_i',
+                                                       'hostgal_mag_z', 'hostgal_magerr_z',
+                                                       'hostgal_mag_y', 'hostgal_magerr_y',
+                                                       'hostgal_ellipticity', 'hostgal_sqradius', 'hostgal_snsep' }
 
 
         # Test returnformat 2  (TODO : returnformat 1)
@@ -208,7 +208,7 @@ class TestLtcv:
                                       'hostgal_mag_i', 'hostgal_magerr_i',
                                       'hostgal_mag_z', 'hostgal_magerr_z',
                                       'hostgal_mag_y', 'hostgal_magerr_y',
-                                      'hostgal_ellipticity', 'hostgal_sqradius' }
+                                      'hostgal_ellipticity', 'hostgal_sqradius', 'hostgal_snsep' }
         assert set( df.objectid ) == set( testobjs )
         assert all( len( df.mjd[i] ) == partialltcvlens[i] for i in range(2) )
         assert all( len( df.mjd[i] ) == len( df[field][i] )
