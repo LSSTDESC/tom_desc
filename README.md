@@ -12,6 +12,7 @@ Based on the [Tom Toolkit](https://lco.global/tomtoolkit/)
   * [Database Schema and Notes](#database-schema-and-notes)
   * [classId and gentype](#classid-and-gentype)
 * [The ELAsTiCC2 application](#elasticc2)
+  * [Getting lightcurves](#elasticc2ltcvs)
   * [Getting and pushing spectrum information](#elasticc2spec)
     * [Finding hot SNe](#elasticc2hotsne)
     * [Asking for a spectrum](#elasticc2askspec)
@@ -222,17 +223,7 @@ There are two database tables to help matching broker classifications to truth, 
 
 ---
 
-# <a name="elasticc2"></a>The ELAsTiCC2 application
-
-The production location for this is https://desc-tom.lbl.gov/elasticc2/
-
-TODO: flesh out
-
-## <a name="elasticc2spec"></a>Getting and pushing spectrum information
-
-The easiest way to do all of this is to use `tom_client.py`.  Make an object, and then call that object's `post` method to hit the URLs described below.
-
-_*WARNING*_ : all of the APIs below should be considered preliminary, and may change.  In particular, there are things we probably need to add to some of them.
+<a name="tomclientimportwarning"></a>_*WARNING*_ : all of the APIs below should be considered preliminary, and may change.  In particular, there are things we probably need to add to some of them.
 
 All of the examples below assume that you have the following code somewhere before that example:
 
@@ -241,35 +232,50 @@ All of the examples below assume that you have the following code somewhere befo
    tom = TomClient( url="<url>", username="<username>", passwordfile="<passwordfile>" )
 ```
 
-where `<url>` is the TOM's url; if you're going to the default (https://desc-tom.lbl.gov), then this is optional.  
+where `<url>` is the TOM's url; if you're going to the default (https://desc-tom.lbl.gov), then this is optional.
 See [Acessing the TOM:Via Web API](#via-web-api) for more information on using `TomClient`.
 
 
-### <a name="elasticc2hotsne"></a>Finding hot transients
+# <a name="elasticc2"></a>The ELAsTiCC2 application
 
-Currently hot transients can be found at the URL `elasticc2/gethottransients`.  POST to this URL, with the post body a json-encoded dict.  You can specifiy one of two keys in this dict:
-* `detected_since_mjd: float` — will return all SNe detected since the indicated mjd. ("Detected" means a LSST alert was sent out, and at least one broker has returned a classification.)
-* `detected_in_last_days: float` — will return all SNe detected between this many days before now and now.  The TOM will search what it knows about forced photometry, considering any point with S/N>5 as a detection.
-* `mjd_now: float` — The mjd of right now.  Usually you don't want to specify this, and the server will automatically determine the current MJD.  This is here so it can be used with simulations, where "right now" in the simulation may not be the real right now.  You will not get back any detections or forced photometry with an MJD newer than this value.
+The production location for this is https://desc-tom.lbl.gov/elasticc2/
+
+TODO: flesh out
+
+## <a name="elasticc2ltcvs"></a>Getting lightcurves
+
+You can get lightcurves for objects at the URL `elasticc2/ltcv`.  POST to this URL, with the post body a json-encoded dict, with keys:
+* `objectid` or `objecitds`: One of these two is required.  Either the numerical ID of the object whose lightcurve you want, or a list of such numerical ids.
+* `mjd_now`: (Optional.)  For testing purposes.  Normally, you will get all known photometry for an object.  Pass an MJD here, and you'll only get photometry before that mjd.
+* `include_hostinfo`: (Optional.) 0 or 1, default 0.  If 1, return information about the first possible host galaxy for each transient.
+* `return_format`: (Optional.)  0, 1, or 2, default 0.  (See below.)
 
 Example:
 ```
-   res = tom.post( 'elasticc2/gethottransients', json={ 'detected_since_mjd': 60380 } )
+   res = tom.post( 'elasticc2/ltcvs', json={ 'objectids': [ 1, 2 ] } )
    assert res.status_code == 200
-   assert res.json()['status'] == ok
-   sne = res.json()['sne']
+   data = res.json()
+   assert data['status'] == ok
+   sne = data['diaobject']
 ```
 
 If you get something other than `status_code` 200 back from the server, it means something went wrong.  Look at `res.text` (assuming `res` is as in the example above) for a hint as to what that might be.
 
-If you get a good return, then `res.json()` will give you a dictionary with two keywords: `status` (which is always `ok`), and `sne`.  The latter keyword is a list of dictionaries, where each element of the list has structure:
+If all goes well, the return is a json-encoded dictionary (which we'll call `data`, as in the example above) with two keywords, `status` and `diaobject`.  The value of `data['status']` is just `ok`, where the value of `data['diaobject']` depends on `return_format`.
+
+In all cases, what you find in `objectid` is what you will use to indicate a given SN in further communication with the TOM.  `redshift` will be less than -1 if the TOM doesn't have a redshift estimate.  `sncode` is an integer specifying the best-guess as to the object's type.  (TODO: document taxonomy, give a way to ask for details about the code classification.)  `sncode=-99` indicates the object's type is unknown.  NOTE: right now, this URL will always return `redshift` and `snocde` as -99 for everything.  Actually getting those values in there is a TODO.
+
+*Return format 0*
+
+`data['diaobject']` is list of dictionaries; each element of the list has structure:
+
 ```
-  { 'objectid': <int:objectid>,
-    'ra': <float:ra>,
-    'dec': <float:dec>,
-    'zp': <float:zeropoint>,
-    'redshift: <float:redshift>,
-    'sncode': <int:sncode>,
+  { 'objectid': <int>
+    'ra': <float>,
+    'dec': <float>,
+    'zp': <float>,        # AB zeropoint for photometry→flux and photometry→fluxerr
+    'redshift: <float>,   # Currently always -99
+    'sncode': <int>,      # Currently always -99
     'photometry': { 'mjd': [ <float>, <float>, ... ],
                     'band': [ <str>, <str>, ... ],
                     'flux': [ <float>, <float>, ... ],
@@ -277,7 +283,72 @@ If you get a good return, then `res.json()` will give you a dictionary with two 
   }
 ```
 
-The `objectid` is what you will use to indicate a given SN in further communication with the TOM.  `redshift` will be less than -1 if the TOM doesn't have a redshift estimate.  `sncode` is an integer specifying the best-guess as to the object's type.  (TODO: document taxonomy, give a way to ask for details about the code classification.)  `sncode=-99` indicates the object's type is unknown.  NOTE: right now, this URL will always return `redshift` and `snocde` as -99 for everything.  Actually getting those values in there is a TODO.
+*Return format 1*
+
+`data['diaobject']` is a list of dictionaries; each element of the list has structure:
+
+```
+  { 'objectid': <int>,
+    'ra': <float>,
+    'dec': <float>,
+    'mjd': <list of float>
+    'band': <list of str>
+    'flux': <list of float>
+    'fluxerr': <list of float>
+    'zp': float
+    'redshift': float,       # Currently always -99
+    'sncode': float          # Currently always -99
+  }
+```
+
+*Return format 2*
+
+`data['diaobject']` is a dictionary; this is the format that you could feed directly into `pandas.DataFrame()` or `polars.DataFrame()`.  Each value of the dictionary is a list, all of which have the same length.  The fields `mjd`, `flux`, `fluxerr`, and `band` are lists of lists, so `data['diaobject'][0]['mjd']` is a list holding the dates of the lightcurve for the object with id `data['diaobject'][0]['objectid']`, etc.
+
+```
+  { 'objectid': <list of int>,
+    'ra': <list of float>,
+    'dec': <list of float>,
+    'mjd': <list of list of float>
+    'band': <list of list of str>
+    'flux': <list of list of float>
+    'fluxerr': <list of list of float>
+    'zp': <list of float>
+    'redshift': <list of float>         # Currently all are -99
+    'sncode': <list of float>           # Currently all are -99
+  }
+```
+
+*For all three return formats*
+
+If you specified `include_hostinfo`, there will be additional keys `hostgal_mag_*` and `hostgal_magerr_*` (where * is u, g, r, i, z), as well as `hostgal_ellipticity` and `hostgal_sqradius`.  The values of these are all floats (or lists of floats, for return format 2).
+
+## <a name="elasticc2spec"></a>Getting and pushing spectrum information
+
+The easiest way to do all of this is to use `tom_client.py`.  Make an object, and then call that object's `post` method to hit the URLs described below.  See the [note about initializing the tom client above](#tomclientimportwarning).
+
+### <a name="elasticc2hotsne"></a>Finding hot transients
+
+Currently hot transients can be found at the URL `elasticc2/gethottransients`.  POST to this URL, with the post body a json-encoded dict.  You can specifiy one of two keys in this dict:
+* `detected_since_mjd: float` — will return all SNe detected since the indicated mjd. ("Detected" means a LSST alert was sent out, and at least one broker has returned a classification.)
+* `detected_in_last_days: float` — will return all SNe detected between this many days before now and now.  The TOM will search what it knows about forced photometry, considering any point with S/N>5 as a detection.
+* `mjd_now: float` — The mjd of right now.  Usually you don't want to specify this, and the server will automatically determine the current MJD.  This is here so it can be used with simulations, where "right now" in the simulation may not be the real right now.  You will not get back any detections or forced photometry with an MJD newer than this value.
+* `include_hostinfo`: (Optional.) 0 or 1, default 0.  If 1, return information about the first possible host galaxy for each transient.
+* `return_format: int` — 0, 1, or 2.  Optional, defaults to 0.
+
+Example:
+```
+   res = tom.post( 'elasticc2/gethottransients', json={ 'detected_since_mjd': 60380 } )
+   assert res.status_code == 200
+   data = res.json()
+   assert data['status'] == ok
+   sne = data['diaobject']
+```
+
+If you get something other than `status_code` 200 back from the server, it means something went wrong.  Look at `res.text` (assuming `res` is as in the example above) for a hint as to what that might be.
+
+If you get a good return, then `res.json()` will give you a dictionary, which we shall call `data` as in the example above.  `data` has two keywords: `status` (which is always `ok`), and `diaobject`.  The latter is either a dictionary or a list, depending on `return_format`, and the format is exactly the same as the return from [Getting lightcurves](#elasticc2ltcvs)
+
 
 ### <a name="elasticc2askspec"></a>Asking for a spectrum
 

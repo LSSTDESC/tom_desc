@@ -658,6 +658,156 @@ class GetAlert(PermissionRequiredMixin, django.views.View):
 
 
 # ======================================================================
+# This and GetHotSNe view have a bunch of overlapping code; think about that.
+
+class LtcvsView(PermissionRequiredMixin, django.views.View):
+    raise_exception = True
+
+    def has_permission( self ):
+        return bool( self.request.user.is_authenticated )
+
+    def get( self, *args, **kwargs ):
+        return self.post( *args, **kwargs )
+
+    def post( self, request ):
+        try:
+            data = json.loads( request.body )
+            known_keys = { 'objectid', 'objectids', 'mjd_now', 'return_format', 'include_hostinfo' }
+            if not ( set( data.keys() ) <= known_keys ):
+                raise ValueError( f"Unknown parameters: {set(data.keys())-known_keys}" )
+
+            if ( ( not isinstance( data, dict ) ) or
+                 ( ( 'objectid' not in data ) and
+                   ( 'objectids' not in data )
+                  ) ):
+                raise ValueError( "Must supply either objectid or objectids" )
+            if ( ( 'objectid' in data ) and ( 'objectids' in data ) ):
+                raise ValueError( "Can't supply both objectid and objectids" )
+
+            objectids = data['objectid'] if 'objectid' in data else data['objectids']
+            if not isinstance( objectids, list ):
+                objectids = [ objectids ]
+
+            mjdnow = None
+            if 'mjd_now' in data:
+                mjdnow = float( data['mjd_now'] )
+
+            return_format = 0
+            if 'return_format' in data:
+                return_format = int( data['return_format'] )
+                if return_format not in ( 0, 1, 2 ):
+                    raise ValueError( f"Unknown return_format {return_format}" )
+
+            include_object_hostinfo = ( 'include_hostinfo' in data ) and ( data['include_hostinfo'] )
+
+            dbinfo = tom_desc.settings.DATABASES['default']
+            with psycopg2.connect( host=dbinfo['HOST'],
+                                   port=dbinfo['PORT'],
+                                   user=dbinfo['USER'],
+                                   password=dbinfo['PASSWORD'],
+                                   dbname=dbinfo['NAME']
+                                  ) as dbcon:
+                with dbcon.cursor() as cursor:
+
+                    q = 'SELECT f.diaobject_id,o.ra,o.decl as dec,'
+                    if include_object_hostinfo:
+                        for band in [ 'u', 'g', 'r', 'i', 'z', 'y' ]:
+                            q += f"o.hostgal_mag_{band},o.hostgal_magerr_{band},"
+                        q += "o.hostgal_ellipticity,o.hostgal_sqradius,o.hostgal_snsep,"
+                    q += ( 'f.diaforcedsource_id,f.filtername,f.midpointtai,f.psflux,f.psfluxerr '
+                           'FROM elasticc2_diaforcedsource f '
+                           'INNER JOIN elasticc2_diaobject o ON f.diaobject_id=o.diaobject_id '
+                           'WHERE f.diaobject_id IN %(objectids)s ' )
+                    if mjdnow is not None:
+                        q += '  AND f.midpointtai <= %(now)s '
+                    q += 'ORDER BY f.diaobject_id, f.midpointtai'
+                    cursor.execute( q, { 'objectids': tuple(objectids), 'now': mjdnow } )
+                    columns = [ c.name for c in cursor.description ]
+                    rows = cursor.fetchall()
+            df = pandas.DataFrame( rows, columns=columns )
+
+            if return_format in ( 0, 1 ):
+                sne = []
+            elif return_format == 2:
+                sne = { 'objectid': [],
+                        'ra': [],
+                        'dec': [],
+                        'mjd': [],
+                        'band': [],
+                        'flux': [],
+                        'fluxerr': [],
+                        'zp': [] }
+                if include_object_hostinfo:
+                    for band in [ 'u', 'g', 'r', 'i', 'z', 'y' ]:
+                        sne[ f'hostgal_mag_{band}' ] = []
+                        sne[ f'hostgal_magerr_{band}' ] = []
+                    sne[ 'hostgal_ellipticity' ] = []
+                    sne[ 'hostgal_sqradius' ] = []
+                    sne[ 'hostgal_snsep' ] = []
+            else:
+                raise RuntimeError( "This should never happen" )
+
+            if len(df) > 0:
+                objids = df['diaobject_id'].unique()
+                df.set_index( [ 'diaobject_id', 'diaforcedsource_id' ], inplace=True )
+
+                for objid in objids:
+                    subdf = df.xs( objid, level='diaobject_id' )
+                    if ( return_format == 0 ) or ( return_format == 1):
+                        toadd = { 'objectid': int(objid),
+                                  'ra': subdf.ra.values[0],
+                                  'dec': subdf.dec.values[0],
+                                  'zp': 27.5 }
+                        if include_object_hostinfo:
+                            for band in [ 'u', 'g', 'r', 'i', 'z', 'y' ]:
+                                toadd[ f'hostgal_mag_{band}' ] = subdf[ f'hostgal_mag_{band}' ].values[0]
+                                toadd[ f'hostgal_magerr_{band}' ] = subdf[ f'hostgal_magerr_{band}' ].values[0]
+                            toadd[ f'hostgal_ellipticity' ] = subdf[ f'hostgal_ellipticity' ].values[0]
+                            toadd[ f'hostgal_sqradius' ] = subdf[ f'hostgal_sqradius' ].values[0]
+                            toadd[ f'hostgal_snsep' ] = subdf[ f'hostgal_snsep' ].values[0]
+
+                        if return_format == 0:
+                            toadd['photometry'] = { 'mjd': list( subdf['midpointtai'] ),
+                                                    'band': list( subdf['filtername'] ),
+                                                    'flux': list( subdf['psflux'] ),
+                                                    'fluxerr': list( subdf['psfluxerr'] ) }
+                        else:
+                            toadd['mjd'] = list( subdf['mjd'] ),
+                            toadd['band'] = list( subdf['band'] )
+                            toadd['flux'] = list( subdf['flux'] )
+                            toadd['fluxerr'] = list( subdf['fluxerr'] )
+
+                        sne.append( toadd )
+
+                    elif return_format == 2:
+                        sne['objectid'].append( int(objid) )
+                        sne['ra'].append( subdf.ra.values[0] )
+                        sne['dec'].append( subdf.dec.values[0] )
+                        sne['mjd'].append( list( subdf['midpointtai'] ) )
+                        sne['band'].append( list( subdf['filtername'] ) )
+                        sne['flux'].append( list( subdf['psflux'] ) )
+                        sne['fluxerr'].append( list( subdf['psfluxerr'] ) )
+                        sne['zp'].append( 27.5 )
+                        if include_object_hostinfo:
+                            for band in [ 'u', 'g', 'r', 'i', 'z', 'y' ]:
+                                sne[ f'hostgal_mag_{band}' ].append( subdf[f'hostgal_mag_{band}'].values[0] )
+                                sne[ f'hostgal_magerr_{band}' ].append( subdf[f'hostgal_magerr_{band}'].values[0] )
+                            sne[ 'hostgal_ellipticity' ].append( subdf['hostgal_ellipticity'].values[0] )
+                            sne[ 'hostgal_sqradius' ].append( subdf['hostgal_sqradius'].values[0] )
+                            sne[ 'hostgal_snsep' ].append( subdf['hostgal_snsep'].values[0] )
+
+                    else:
+                        raise RuntimeError( "This should never happen." )
+
+            resp = JsonResponse( { 'status': 'ok',
+                                   'diaobject': sne } )
+            return resp
+
+        except Exception as ex:
+            sys.stderr.write( f"Exception in LtcvsView: {ex}\n" )
+            traceback.print_exc( file=sys.stderr )
+            return HttpResponse( f"Exception in LtcvsView: {str(ex)}", status=500,
+                                 content_type='text/plain; charset=utf-8' )
 
 class LtcvFeatures(PermissionRequiredMixin, django.views.View):
     raise_exception = True
@@ -986,13 +1136,15 @@ class GetHotSNeView(PermissionRequiredMixin, django.views.View):
             data = json.loads( request.body )
 
             mjdnow = None
-            mjd0 = 0.
+            mjd0 = None
+            include_object_hostinfo = False
 
             if 'return_format' in data.keys():
                 return_format = int( data['return_format'] )
                 if return_format not in (0, 1, 2):
                     return HttpResponse( f"Error, unknown return_format {return_format}",
                                          status=500, content_type='text/plain; charset=utf-8' )
+                del data['return_format' ]
             else:
                 return_format = 0
 
@@ -1003,17 +1155,22 @@ class GetHotSNeView(PermissionRequiredMixin, django.views.View):
                                          content_type='text/plain; charset=utf-8' )
                 # _logger.info( f"Getting hot SNe since {data['detected_since_mjd']}" )
                 mjd0 = float( data['detected_since_mjd'] )
+                del data['detected_since_mjd']
             else:
                 lastdays = 30
                 if 'detected_in_last_days' in data.keys():
                     lastdays = float( data['detected_in_last_days'] )
-                # _logger.info( f"Getting hot SNe detected in last {lastdays} days" )
-                if 'mjd_now' in data.keys():
-                    mjdnow = float( data['mjd_now'] )
+                    del data['detected_in_last_days']
+
+            if 'mjd_now' in data.keys():
+                mjdnow = float( data['mjd_now'] )
+                if mjd0 is None:
                     mjd0 = mjdnow - lastdays
-                else:
-                    mjd0 = astropy.time.Time( datetime.datetime.now( datetime.timezone.utc )
-                                              - datetime.timedelta( days=lastdays ) ).mjd
+                del data['mjd_now']
+
+            elif mjd0 is None:
+                mjd0 = astropy.time.Time( datetime.datetime.now( datetime.timezone.utc )
+                                          - datetime.timedelta( days=lastdays ) ).mjd
 
             cheat_gentypes = None
             if 'cheat_gentypes' in data.keys():
@@ -1022,6 +1179,17 @@ class GetHotSNeView(PermissionRequiredMixin, django.views.View):
                     return HttpResponse( "Error, cheat_gentypes must be a list", status=500,
                                          content_type='text/plain; charset=utf-8' )
                 cheat_gentypes = tuple( cheat_gentypes )
+                del data['cheat_gentypes']
+
+            if 'include_hostinfo' in data.keys():
+                if data['include_hostinfo']:
+                    include_object_hostinfo = True
+                del data['include_hostinfo']
+
+
+            if len(data) != 0:
+                return HttpResponse( f"Error, unknown parameters passed in request body: {list(data.keys())}",
+                                     status=500, content_type="text/plain; charset=utf-8" )
 
             # _logger.info( f"Getting SNe detected since mjd {mjd0}" )
 
@@ -1058,12 +1226,16 @@ class GetHotSNeView(PermissionRequiredMixin, django.views.View):
                     q = ( "/* IndexScan(f diaobject_id)\n"
                           "   IndexScan(o)\n"
                           "*/\n"
-                          "SELECT f.diaobject_id AS diaobject_id, o.ra AS ra, o.decl AS dec,"
-                          "       f.diaforcedsource_id AS diaforcedsource_id,"
-                          "       f.filtername AS band,f.midpointtai AS mjd,"
-                          "       f.psflux AS flux, f.psfluxerr AS fluxerr "
-                          "FROM elasticc2_diaforcedsource f "
-                          "INNER JOIN elasticc2_diaobject o ON f.diaobject_id=o.diaobject_id " )
+                          "SELECT f.diaobject_id AS diaobject_id, o.ra AS ra, o.decl AS dec," )
+                    if include_object_hostinfo:
+                        for band in [ 'u', 'g', 'r', 'i', 'z', 'y' ]:
+                            q += f"o.hostgal_mag_{band},o.hostgal_magerr_{band},"
+                        q += "o.hostgal_ellipticity,o.hostgal_sqradius,o.hostgal_snsep,"
+                    q += ( "       f.diaforcedsource_id AS diaforcedsource_id,"
+                           "       f.filtername AS band,f.midpointtai AS mjd,"
+                           "       f.psflux AS flux, f.psfluxerr AS fluxerr "
+                           "FROM elasticc2_diaforcedsource f "
+                           "INNER JOIN elasticc2_diaobject o ON f.diaobject_id=o.diaobject_id " )
                     if cheat_gentypes is not None:
                         q += "INNER JOIN elasticc2_diaobjecttruth t ON o.diaobject_id=t.diaobject_id "
                     q += "WHERE f.diaobject_id IN ( SELECT diaobject_id FROM tmp_objids ) "
@@ -1089,6 +1261,13 @@ class GetHotSNeView(PermissionRequiredMixin, django.views.View):
                         'zp': [],
                         'redshift': [],
                         'sncode': [] }
+                if include_object_hostinfo:
+                    for band in [ 'u', 'g', 'r', 'i', 'z', 'y' ]:
+                        sne[ f'hostgal_mag_{band}' ] = []
+                        sne[ f'hostgal_magerr_{band}' ] = []
+                    sne[ 'hostgal_ellipticity' ] = []
+                    sne[ 'hostgal_sqradius' ] = []
+                    sne[ 'hostgal_snsep' ] = []
             else:
                 raise RuntimeError( "This should never happen." )
 
@@ -1099,28 +1278,32 @@ class GetHotSNeView(PermissionRequiredMixin, django.views.View):
 
                 for objid in objids:
                     subdf = df.xs( objid, level='diaobject_id' )
-                    if return_format == 0:
-                        sne.append( { 'objectid': int(objid),
-                                      'ra': subdf.ra.values[0],
-                                      'dec': subdf.dec.values[0],
-                                      'photometry': { 'mjd': list( subdf['mjd'] ),
-                                                      'band': list( subdf['band'] ),
-                                                      'flux': list( subdf['flux'] ),
-                                                      'fluxerr': list( subdf['fluxerr'] ) },
-                                      'zp': 27.5,   # standard SNANA zeropoint,
-                                      'redshift': -99,
-                                      'sncode': -99 } )
-                    elif return_format == 1:
-                        sne.append( { 'objectid': int(objid),
-                                      'ra': subdf.ra.values[0],
-                                      'dec': subdf.dec.values[0],
-                                      'mjd': list( subdf['mjd'] ),
-                                      'band': list( subdf['band'] ),
-                                      'flux': list( subdf['flux'] ),
-                                      'fluxerr': list( subdf['fluxerr'] ),
-                                      'zp': 27.5,   # standard SNANA zeropoint,
-                                      'redshift': -99,
-                                      'sncode': -99 } )
+                    if ( return_format == 0 ) or ( return_format == 1 ):
+                        toadd = { 'objectid': int(objid),
+                                  'ra': subdf.ra.values[0],
+                                  'dec': subdf.dec.values[0],
+                                  'zp': 27.5,   # standard SNANA zeropoint,
+                                  'redshift': -99,
+                                  'sncode': -99 }
+                        if include_object_hostinfo:
+                            for band in [ 'u', 'g', 'r', 'i', 'z', 'y' ]:
+                                toadd[ f'hostgal_mag_{band}' ] = subdf[f'hostgal_mag_{band}'].values[0]
+                                toadd[ f'hostgal_magerr_{band}' ] = subdf[f'hostgal_magerr_{band}'].values[0]
+                            toadd[ 'hostgal_ellipticity' ] = subdf.hostgal_ellipticity.values[0]
+                            toadd[ 'hostgal_sqradius' ] = subdf.hostgal_sqradius.values[0]
+                            toadd[ 'hostgal_snsep' ] = subdf.hostgal_snsep.values[0]
+
+                        if return_format == 0:
+                            toadd['photometry'] = { 'mjd': list( subdf['mjd'] ),
+                                                    'band': list( subdf['band'] ),
+                                                    'flux': list( subdf['flux'] ),
+                                                    'fluxerr': list( subdf['fluxerr'] ) }
+                        else:
+                            toadd['mjd'] = list( subdf['mjd'] ),
+                            toadd['band'] = list( subdf['band'] )
+                            toadd['flux'] = list( subdf['flux'] )
+                            toadd['fluxerr'] = list( subdf['fluxerr'] )
+                        sne.append( toadd )
                     elif return_format == 2:
                         sne['objectid'].append( int(objid) )
                         sne['ra'].append( subdf.ra.values[0] )
@@ -1132,6 +1315,14 @@ class GetHotSNeView(PermissionRequiredMixin, django.views.View):
                         sne['zp'].append( 27.5 )
                         sne['redshift'].append( -99 )
                         sne['sncode'].append( -99 )
+                        if include_object_hostinfo:
+                            for band in [ 'u', 'g', 'r', 'i', 'z', 'y' ]:
+                                sne[ f'hostgal_mag_{band}' ].append( subdf[f'hostgal_mag_{band}'].values[0] )
+                                sne[ f'hostgal_magerr_{band}' ].append( subdf[f'hostgal_magerr_{band}'].values[0] )
+                            sne[ 'hostgal_ellipticity' ].append( subdf['hostgal_ellipticity'].values[0] )
+                            sne[ 'hostgal_sqradius' ].append( subdf['hostgal_sqradius'].values[0] )
+                            sne[ 'hostgal_snsep' ].append( subdf['hostgal_snsep'].values[0] )
+
                     else:
                         raise RuntimeError( "This should never happen." )
 
@@ -1625,7 +1816,7 @@ class GetSpectrumInfo(PermissionRequiredMixin, django.views.View):
                 else:
                     q = q.filter( diaobject_id=int(data['objectid']) )
             if 'facility' in data.keys():
-                q = q.filter( facillity=data['facility'] )
+                q = q.filter( facility=data['facility'] )
             if 'mjd_min' in data.keys():
                 q = q.filter( mjd__gte=float(data['mjd']) )
             if 'mjd_max' in data.keys():
