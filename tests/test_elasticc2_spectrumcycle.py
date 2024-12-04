@@ -9,6 +9,8 @@ import datetime
 import dateutil.parser
 import pytest
 
+import numpy
+import pandas
 import astropy.time
 
 sys.path.insert( 0, "/tom_desc" )
@@ -52,12 +54,19 @@ class TestSpectrumCycle:
 
     # TODO : test things other than detected_since_mjd sent to gethottransients
     def test_hot_sne( self, elasticc2_database_snapshot_class, tomclient ):
+        # Make sure it rejects bad keywords
+        res = tomclient.post( 'elasticc2/gethottransients', json={ 'foo': 0 } )
+        assert res.status_code == 500
+        assert res.text == "Error, unknown parameters passed in request body: ['foo']"
+
         # Testing detected_in_last_days is fraught because
         #   the mjds in elasticc2 are what they are, are
         #   in the future (as of this comment writing).
         # So, go old school and just not test it.
+        # (Should test with mjd_now...)
 
         res = tomclient.post( 'elasticc2/gethottransients', json={ 'detected_since_mjd': 60660 } )
+        assert res.status_code == 200
         sne = res.json()['diaobject']
         assert len(sne) == 8
 
@@ -67,6 +76,58 @@ class TestSpectrumCycle:
         # Should probably check more than this...
         assert set( sne[0].keys() ) == { 'objectid', 'ra', 'dec', 'photometry', 'zp', 'redshift', 'sncode' }
         assert set( sne[0]['photometry'].keys() ) == { 'mjd', 'band', 'flux', 'fluxerr' }
+
+        # Make sure the include_hostinfo parameter works
+        res = tomclient.post( 'elasticc2/gethottransients', json={ 'detected_since_mjd': 60660,
+                                                                   'include_hostinfo': 1 } )
+        assert res.status_code == 200
+        sne = res.json()['diaobject']
+        assert len(sne) == 8
+        snids = { s['objectid'] for s in sne }
+        assert snids == { 15232, 1913410, 2110476, 416626, 1286131, 1684659, 1045654, 1263066 }
+        assert set( sne[0].keys() ) == { 'objectid', 'ra', 'dec', 'photometry', 'zp', 'redshift', 'sncode',
+                                         'hostgal_mag_u','hostgal_magerr_u',
+                                         'hostgal_mag_g','hostgal_magerr_g',
+                                         'hostgal_mag_r','hostgal_magerr_r',
+                                         'hostgal_mag_i','hostgal_magerr_i',
+                                         'hostgal_mag_z','hostgal_magerr_z',
+                                         'hostgal_mag_y','hostgal_magerr_y',
+                                         'hostgal_ellipticity', 'hostgal_sqradius'
+                                        }
+        assert set( sne[0]['photometry'].keys() ) == { 'mjd', 'band', 'flux', 'fluxerr' }
+
+        # Try return format 2
+        res = tomclient.post( 'elasticc2/gethottransients', json={ 'detected_since_mjd': 60660,
+                                                                   'return_format': 2 } )
+        assert res.status_code == 200
+        df = pandas.DataFrame( res.json()['diaobject'] )
+        assert len(df) == 8
+        assert set( df.objectid.values ) == { 15232, 1913410, 2110476, 416626, 1286131, 1684659, 1045654, 1263066 }
+        assert set( df.columns ) == { 'objectid', 'ra', 'dec', 'mjd', 'band', 'flux', 'fluxerr',
+                                      'zp', 'redshift', 'sncode' }
+        assert df.mjd.dtype == numpy.dtype('O')
+        assert len( df.mjd[0] ) > 1
+
+        res = tomclient.post( 'elasticc2/gethottransients', json={ 'detected_since_mjd': 60660,
+                                                                   'include_hostinfo': 1,
+                                                                   'return_format': 2 } )
+        assert res.status_code == 200
+        df = pandas.DataFrame( res.json()['diaobject'] )
+        assert len(df) == 8
+        assert set( df.objectid.values ) == { 15232, 1913410, 2110476, 416626, 1286131, 1684659, 1045654, 1263066 }
+        assert set( df.columns ) == { 'objectid', 'ra', 'dec', 'mjd', 'band', 'flux', 'fluxerr',
+                                      'zp', 'redshift', 'sncode',
+                                      'hostgal_mag_u','hostgal_magerr_u',
+                                      'hostgal_mag_g','hostgal_magerr_g',
+                                      'hostgal_mag_r','hostgal_magerr_r',
+                                      'hostgal_mag_i','hostgal_magerr_i',
+                                      'hostgal_mag_z','hostgal_magerr_z',
+                                      'hostgal_mag_y','hostgal_magerr_y',
+                                      'hostgal_ellipticity', 'hostgal_sqradius'
+                                     }
+        assert df.mjd.dtype == numpy.dtype('O')
+        assert len( df.mjd[0] ) > 1
+
 
 
     def test_ask_for_spectra( self, ask_for_spectra, tomclient ):
