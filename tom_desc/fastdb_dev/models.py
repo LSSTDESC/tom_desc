@@ -75,6 +75,7 @@ class DiaObject(models.Model):
     host_gal_second = models.ForeignKey(HostGalaxy, on_delete=models.CASCADE, null=True, related_name='hgal2')
     host_gal_third = models.ForeignKey(HostGalaxy, on_delete=models.CASCADE, null=True, related_name='hgal3')
     insert_time =  models.DateTimeField(default=timezone.now)
+    update_time =  models.DateTimeField(default=timezone.now)
 
 class SnapshotTags(models.Model):
 
@@ -130,6 +131,7 @@ class DiaSource(PostgresPartitionedModel):
     broker_count = models.IntegerField(db_comment="Number of brokers that alerted on this source")
     valid_flag =  models.IntegerField(db_comment='Valid data flag', default=1)
     insert_time =  models.DateTimeField(default=timezone.now)
+    update_time =  models.DateTimeField(default=timezone.now)
 
 
 
@@ -162,6 +164,7 @@ class DiaForcedSource(PostgresPartitionedModel):
     processing_version =  models.TextField(db_comment="Local copy of Processing version key to circumvent Django")
     valid_flag =  models.IntegerField(db_comment='Valid data flag', default=1)
     insert_time =  models.DateTimeField(default=timezone.now)
+    update_time =  models.DateTimeField(default=timezone.now)
 
 
 class DStoPVtoSS(PostgresPartitionedModel):
@@ -170,6 +173,10 @@ class DStoPVtoSS(PostgresPartitionedModel):
         app_label = 'fastdb_dev'
         db_table = 'ds_to_pv_to_ss'
         constraints = [models.UniqueConstraint(fields=['processing_version','snapshot_name','dia_source'],name='unique_ds_pv_ss')]
+        indexes = [
+            models.Index(fields=["processing_version", "snapshot_name", "dia_source"]),
+        ]
+
 
     class PartitioningMeta:
         method = PostgresPartitioningMethod.LIST
@@ -181,6 +188,7 @@ class DStoPVtoSS(PostgresPartitionedModel):
     dia_source = models.BigIntegerField(db_comment="Local copy of dia_source to circumvent Django")
     valid_flag = models.IntegerField(db_comment='Valid data flag', default=1)
     insert_time =  models.DateTimeField(default=timezone.now)
+    update_time =  models.DateTimeField(default=timezone.now)
         
 
 
@@ -200,6 +208,7 @@ class DFStoPVtoSS(PostgresPartitionedModel):
     dia_forced_source = models.BigIntegerField(db_comment="Local copy of dia_source to circumvent Django")
     valid_flag = models.IntegerField(db_comment='Valid data flag', default=1)
     insert_time =  models.DateTimeField(default=timezone.now)
+    update_time =  models.DateTimeField(default=timezone.now)
     
 # Broker information
 
