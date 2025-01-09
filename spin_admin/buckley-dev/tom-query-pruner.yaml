@@ -32,7 +32,7 @@ spec:
               value: fragile
             - name: DB_USER
               value: postgres
-            image: registry.nersc.gov/m1727/buckley/devuan-chimaera-buckley:latest
+            image: registry.nersc.gov/m1727/buckley/devuan-daedalus-buckley:latest
             imagePullPolicy: Always
             name: tom-query-pruner
             resources: {}
@@ -58,6 +58,8 @@ spec:
               name: tom-deployment
             - mountPath: /query_results
               name: tom-query-results
+            - mountPath: /logs
+              name: tom-logs
             workingDir: /tom_desc
           dnsPolicy: ClusterFirst
           restartPolicy: Never
@@ -74,13 +76,17 @@ spec:
               optional: false
               secretName: tom-secrets
           - hostPath:
-              path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/des-tom-buckley-dev/tom_desc
+              path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/tom_desc_fastdb_dev/tom_desc
               type: Directory
             name: tom-deployment
           - hostPath:
               path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/production/query_results
               type: Directory
             name: tom-query-results
+          - hostPath:
+              path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/tom_desc_fastdb_dev/logs
+              type: Directory
+            name: tom-logs	
   schedule: 20 8 * * *
   successfulJobsHistoryLimit: 3
   suspend: false
