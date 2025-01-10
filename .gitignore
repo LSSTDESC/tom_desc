@@ -157,3 +157,8 @@ tom_desc/admin_tools/elasticc2_dump_10obj.sql
 tom_desc/admin_tools/elasticc2_dump_100obj.sql
 tom_desc/admin_tools/elasticc2_dump_1000obj.sql
 tom_desc/elasticc_subset.sql
+
+# Locations of runtime files for a docker compose dev setup
+tom_desc/elasticc2/static/
+tom_desc/load_snana_fits_reconstruct_indexes_constraints.sql
+

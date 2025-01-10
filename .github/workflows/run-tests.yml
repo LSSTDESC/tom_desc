@@ -1,0 +1,77 @@
+name: Unit tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./tests
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: 'recursive'
+    
+    - name: Unpack test files
+      run: |
+        tar xf elasticc2_alert_test_data.tar.bz2
+    
+    - name: Build docker images
+      run: |
+        docker compose build
+    
+    - name: Bring docker environments up
+      run: |
+        docker compose up -d shell
+    
+    - name: Run Cycle Tests
+      run: |
+        docker compose exec -it shell /bin/bash -c "python3 -m pytest /tests/test_elasticc2_spectrumcycle.py"
+    
+    - name: Post to a Slack channel
+      if: ${{ failure() && github.event_name != 'workflow_dispatch' }}
+      id: slack
+      uses: slackapi/slack-github-action@v2
+      with:
+        # #lf-resspect-ci channel in LSSTC slack workspace
+        method: chat.postMessage
+        token: ${{ secrets.SLACK_BOT_TOKEN }}
+        payload: |
+          {
+            "channel": "C080P31B1L4",
+            "text": "GitHub Action build result: *${{ job.status }}* :${{ job.status }}:",
+            "blocks": [
+              {
+                "type": "header",
+                "text": {
+                  "type": "plain_text",
+                  "text": "${{ github.repository }}"
+                }
+              },
+              {
+                "type": "section",
+                "text": {
+                  "type": "mrkdwn",
+                  "text": "GitHub Action build result: *${{ job.status }}* :${{ job.status }}:"
+                }
+              },
+              {
+                "type": "divider"
+              },
+              {
+                "type": "section",
+                "text": {
+                  "type": "mrkdwn",
+                  "text": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                }
+              }
+            ]
+          }
+      env:
+        SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
