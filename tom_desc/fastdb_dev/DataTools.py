@@ -26,6 +26,7 @@ import uuid
 from rest_framework.settings import api_settings
 
 _logger = logging.getLogger("fastdb_queries")
+_logout = logging.FileHandler( pathlib.Path( os.getenv('LOGDIR', "/logs" )) / "fastdb_queries.log" )
 _log_path = pathlib.Path( os.environ.get('LOGDIR',""), "/logs" )
 _log_path.mkdir(parents=True, exist_ok=True)
 _logout = logging.FileHandler( _log_path / "fastdb_queries.log" )
