@@ -34,6 +34,7 @@ urlpatterns = [
     path('brokermessage/', views.BrokerMessageView.as_view(), name='brokermessage-noparam'),
 
     path('getalert', views.GetAlert.as_view(), name='getalert' ),
+    path('ltcv', views.LtcvsView.as_view(), name='ltcv' ),
     path('ltcvfeatures', views.LtcvFeatures.as_view(), name='ltcvfeatures' ),
 
     path('gethottransients', views.GetHotSNeView.as_view(), name='gethottransients'),

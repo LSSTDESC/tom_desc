@@ -1,4 +1,5 @@
 import pytest
+import pandas
 import elasticc2.models
 
 
@@ -109,6 +110,112 @@ class TestReconstructAlert:
 
 
 class TestLtcv:
+    def test_ltcvs( self, elasticc2_database_snapshot_class, tomclient ):
+        # Make sure it objects to an unknown keyword
+        res = tomclient.post( "elasticc2/ltcv", json={ 'objectid': 1552185, 'foo': 1 } )
+        assert res.status_code == 500
+        assert res.text == "Exception in LtcvsView: Unknown parameters: {'foo'}"
+
+        # Try with a single objectid
+        res = tomclient.post( "elasticc2/ltcv", json={ 'objectid': 1552185 } )
+        assert res.status_code == 200
+        data = res.json()
+
+        assert data['status'] == 'ok'
+        assert len( data['diaobject'] ) == 1
+        assert data['diaobject'][0]['objectid'] == 1552185
+        assert len( data['diaobject'][0]['photometry']['mjd'] ) == 32
+        for field in [ 'band', 'flux', 'fluxerr' ] :
+            assert len( data['diaobject'][0]['photometry'][field] ) == len( data['diaobject'][0]['photometry']['mjd'] )
+
+        # Pick out a few objects I know that have overlapping lightcurves (in time),
+        #   that start before and end after mjd 60420
+        testobjs = [ 1731906, 1102362, 800290 ]
+
+        # Get full lightcurves
+        res = tomclient.post( "elasticc2/ltcv", json={ 'objectid': testobjs } )
+        assert res.status_code == 200
+        data = res.json()
+
+        assert data['status'] == 'ok'
+        assert len( data['diaobject'] ) == 3
+        assert set( data['diaobject'][i]['objectid'] for i in [0,1,2] ) == set( testobjs )
+        fullltcvlens = []
+        for i in range(3):
+            assert set( data['diaobject'][i].keys() ) == { 'objectid', 'ra', 'dec', 'zp', 'photometry' }
+            fullltcvlens.append( len( data['diaobject'][i]['photometry']['mjd'] ) )
+            assert fullltcvlens[i] > 0
+            for field in [ 'band', 'flux', 'fluxerr' ]:
+                assert len( data['diaobject'][i]['photometry'][field] ) == fullltcvlens[i]
+
+        # Test a fake current mjd
+        res = tomclient.post( "elasticc2/ltcv", json={ 'objectid': testobjs, 'mjd_now': 60420  } )
+        assert res.status_code == 200
+        data = res.json()
+
+        assert data['status'] == 'ok'
+        assert len( data['diaobject'] ) == 3
+        assert set( data['diaobject'][i]['objectid'] for i in [0,1,2] ) == set( testobjs )
+        partialltcvlens = []
+        for i in range(2):
+            partialltcvlens.append( len( data['diaobject'][i]['photometry']['mjd'] ) )
+            assert  partialltcvlens[i] < fullltcvlens[i]
+            assert all ( m < 60420 for m in data['diaobject'][i]['photometry']['mjd'] )
+
+
+        # Make sure that include_hostinfo works
+        res = tomclient.post( "elasticc2/ltcv", json={ 'objectid': testobjs, 'include_hostinfo': 1 } )
+        assert res.status_code == 200
+        data = res.json()
+        assert data['status'] == 'ok'
+        assert len( data['diaobject'] ) == 3
+        assert set( data['diaobject'][0].keys() ) == { 'objectid', 'ra','dec', 'zp', 'photometry',
+                                                       'hostgal_mag_u', 'hostgal_magerr_u',
+                                                       'hostgal_mag_g', 'hostgal_magerr_g',
+                                                       'hostgal_mag_r', 'hostgal_magerr_r',
+                                                       'hostgal_mag_i', 'hostgal_magerr_i',
+                                                       'hostgal_mag_z', 'hostgal_magerr_z',
+                                                       'hostgal_mag_y', 'hostgal_magerr_y',
+                                                       'hostgal_ellipticity', 'hostgal_sqradius', 'hostgal_snsep' }
+
+
+        # Test returnformat 2  (TODO : returnformat 1)
+
+        # Test a fake current mjd
+        res = tomclient.post( "elasticc2/ltcv", json={ 'objectid': testobjs, 'mjd_now': 60420, 'return_format': 2 } )
+        assert res.status_code == 200
+        data = res.json()
+        assert data['status'] == 'ok'
+        df = pandas.DataFrame( data['diaobject'] )
+        assert set( df.columns ) == { 'objectid', 'ra', 'dec', 'zp', 'mjd', 'band', 'flux', 'fluxerr' }
+        assert set( df.objectid ) == set( testobjs )
+        assert all( len( df.mjd[i] ) == partialltcvlens[i] for i in range(2) )
+        assert all( len( df.mjd[i] ) == len( df[field][i] )
+                    for field in [ 'band', 'flux', 'fluxerr' ]
+                    for i in range(2) )
+
+        res = tomclient.post( "elasticc2/ltcv", json={ 'objectid': testobjs, 'mjd_now': 60420,
+                                                       'include_hostinfo': 1,
+                                                       'return_format': 2 } )
+        assert res.status_code == 200
+        data = res.json()
+        assert data['status'] == 'ok'
+        df = pandas.DataFrame( data['diaobject'] )
+        assert set( df.columns ) == { 'objectid', 'ra', 'dec', 'zp', 'mjd', 'band', 'flux', 'fluxerr',
+                                      'hostgal_mag_u', 'hostgal_magerr_u',
+                                      'hostgal_mag_g', 'hostgal_magerr_g',
+                                      'hostgal_mag_r', 'hostgal_magerr_r',
+                                      'hostgal_mag_i', 'hostgal_magerr_i',
+                                      'hostgal_mag_z', 'hostgal_magerr_z',
+                                      'hostgal_mag_y', 'hostgal_magerr_y',
+                                      'hostgal_ellipticity', 'hostgal_sqradius', 'hostgal_snsep' }
+        assert set( df.objectid ) == set( testobjs )
+        assert all( len( df.mjd[i] ) == partialltcvlens[i] for i in range(2) )
+        assert all( len( df.mjd[i] ) == len( df[field][i] )
+                    for field in [ 'band', 'flux', 'fluxerr' ]
+                    for i in range(2) )
+
+
     def test_ltcv_features( self, elasticc2_ppdb_class, tomclient ):
 
         # Default features for an object

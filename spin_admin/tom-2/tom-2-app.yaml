@@ -89,6 +89,8 @@ spec:
           name: tom-2-deployment
         - mountPath: /query_results
           name: tom-query-results
+        - mountPath: /logs
+          name: tom-logs
         # - mountPath: /sample
         #   name: tom-2-sample
       dnsConfig: {}
@@ -114,6 +116,10 @@ spec:
           path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/production-2/query_results
           type: Directory
         name: tom-query-results
+      - hostPath:
+          path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/production-2/logs
+          type: Directory
+        name: tom-logs
       # - hostPath:
       #     path: /global/cfs/cdirs/desc-td/ELASTICC2
       #     type: Directory
