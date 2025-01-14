@@ -3,6 +3,8 @@ import os
 import io
 import re
 import time
+import datetime
+import uuid
 import pathlib
 import logging
 import traceback
@@ -18,65 +20,63 @@ import django.db
 
 from django.core.management.base import BaseCommand, CommandError
 
-from elasticc2.models import (
-    TrainingDiaObject,
-    TrainingDiaForcedSource,
-    TrainingDiaSource,
-    TrainingAlert,
-    TrainingDiaObjectTruth,
-    PPDBDiaObject,
-    PPDBDiaForcedSource,
-    PPDBDiaSource,
-    PPDBAlert,
-    DiaObjectTruth )
+from fastdb_dev.models import (
+    ProcessingVersions,
+    HostGalaxy,
+    Snapshots,
+    DiaObject,
+    SnapshotTags,
+    LastUpdateTime,
+    DiaSource,
+    DiaForcedSource,
+    DStoPVtoSS,
+    DFStoPVtoSS,
+)
+
+# https://stackoverflow.com/questions/4716533/how-to-attach-debugger-to-a-python-subproccess
+import pdb
+class ForkablePdb(pdb.Pdb):
+
+    _original_stdin_fd = sys.stdin.fileno()
+    _original_stdin = None
+
+    def __init__(self):
+        pdb.Pdb.__init__(self, nosigint=True)
+
+    def _cmdloop(self):
+        current_stdin = sys.stdin
+        try:
+            if not self._original_stdin:
+                self._original_stdin = os.fdopen(self._original_stdin_fd)
+            sys.stdin = self._original_stdin
+            self.cmdloop()
+        finally:
+            sys.stdin = current_stdin
+
 
 class ColumnMapper:
     @classmethod
     def diaobject_map_columns( cls, tab ):
         """Map from the HEAD.FITS.gz files to the diaobject table"""
-        mapper = { 'SNID': 'diaobject_id',
+        mapper = { 'SNID': 'dia_object',
                    'IAUC': 'dia_object_iau_name',
                    'DEC': 'decl',
                   }
-        lcs = { 'RA', 'MWEBV', 'MWEBV_ERR', 'simversion' }
-        for hostgal in ( "", "2" ):
-            for q in ( 'Q000', 'Q010', 'Q020', 'Q030', 'Q040', 'Q050',
-                       'Q060', 'Q070', 'Q080', 'Q090', 'Q100' ):
-                lcs.add( f'HOSTGAL{hostgal}_ZPHOT_{q}' )
-            for f in ( 'MAG_u', 'MAG_g', 'MAG_r', 'MAG_i', 'MAG_z', 'MAG_Y',
-                       'MAGERR_u', 'MAGERR_g', 'MAGERR_r', 'MAGERR_i', 'MAGERR_z', 'MAGERR_Y',
-                       'ELLIPTICITY', 'SQRADIUS', 'SNSEP', 'RA', 'DEC' ):
-                lcs.add( f'HOSTGAL{hostgal}_{f}' )
+        lcs = { 'RA' }
 
         cls._map_columns( tab, mapper, lcs )
 
     @classmethod
     def diasource_map_columns( cls, tab ):
         """Map from the PHOT.FITS.gz files to the diasource table"""
-        mapper = { 'MJD': 'midpointtai',
-                   'BAND': 'filtername',
-                   'FLUXCAL': 'psflux',
-                   'FLUXCALERR': 'psfluxerr',
+        mapper = { 'MJD': 'mid_point_tai',
+                   'BAND': 'filter_name',
+                   'FLUXCAL': 'ps_flux',
+                   'FLUXCALERR': 'ps_flux_err',
                    # This next one isn't part of the table, but I need it for further processing
                    'PHOTFLAG': 'photflag'
                   }
-        lcs = { }
-        cls._map_columns( tab, mapper, lcs )
-
-    @classmethod
-    def diaobjecttruth_map_columns( cls, tab ):
-        """Map from the DUMP file to the elasticc2_diaobjecttruth table"""
-        mapper = { 'CID': 'diaobject_id',
-                   'NON1A_INDEX': 'sim_template_index'
-                  }
-        lcs = { 'LIBID', 'SIM_SEARCHEFF_MASK', 'GENTYPE', 'ZCMB',
-                'ZHELIO', 'ZCMB_SMEAR', 'RA', 'DEC', 'MWEBV', 'GALID',
-                'GALZPHOT', 'GALZPHOTERR', 'GALSNSEP', 'GALSNDDLR',
-                'RV', 'AV', 'MU', 'LENSDMU', 'PEAKMJD',
-                'MJD_DETECT_FIRST', 'MJD_DETECT_LAST', 'DTSEASON_PEAK',
-                'PEAKMAG_u', 'PEAKMAG_g', 'PEAKMAG_r', 'PEAKMAG_i',
-                'PEAKMAG_z', 'PEAKMAG_Y', 'SNRMAX', 'SNRMAX2',
-                'SNRMAX3', 'NOBS', 'NOBS_SATURATE' }
+        lcs = {}
         cls._map_columns( tab, mapper, lcs )
 
     @classmethod
@@ -105,8 +105,10 @@ class FITSFileHandler( ColumnMapper ):
         self.pipe = pipe
 
         # Copy settings from parent
-        for attr in [ 'simversion', 'max_sources_per_object', 'photflag_detect',
-                      'snana_zeropoint', 'alert_zeropoint', 'really_do', 'verbose', 'tableset' ]:
+        for attr in [ 'max_sources_per_object', 'photflag_detect', 
+                      'snana_zeropoint', 'alert_zeropoint', 't0',
+                      'processing_version', 'snapshot',
+                      'really_do', 'verbose' ]:
             setattr( self, attr, getattr( parent, attr ) )
 
         self.logger = logging.getLogger( f"logger {os.getpid()}" )
@@ -141,19 +143,6 @@ class FITSFileHandler( ColumnMapper ):
 
     def load_one_file( self, headfile, photfile ):
         try:
-            if self.tableset == 'ppdb':
-                DiaObject = PPDBDiaObject
-                DiaSource = PPDBDiaSource
-                DiaForcedSource = PPDBDiaForcedSource
-                Alert = PPDBAlert
-            elif self.tableset == 'training':
-                DiaObject = TrainingDiaObject
-                DiaSource = TrainingDiaSource
-                DiaForcedSource = TrainingDiaForcedSource
-                Alert = TrainingAlert
-            else:
-                raise ValueError( f"Unknown tableset {self.tableset}" )
-
             self.logger.info( f"PID {os.getpid()} reading {headfile.name}" )
 
             orig_head = Table.read( headfile )
@@ -169,29 +158,35 @@ class FITSFileHandler( ColumnMapper ):
             # Load the DiaObject table
 
             self.diaobject_map_columns( head )
-            head.add_column( self.simversion, name='simversion' )
             head.add_column( False, name='isddf' )
-
-            # Figure out which objects are "DDF" objects
+            now = datetime.datetime.now( tz=datetime.UTC )
+            head.add_column( now, name='validity_start' )
+            head.add_column( 0., name='ra_sigma' )
+            head.add_column( 0., name='decl_sigma' )
+            head.add_column( now, name='insert_time' )
+            head.add_column( now, name='update_time' )
+            head.add_column( 0, name='nobs' )
+            head.add_column( 0, name='fake_id' )
+            head['dia_object_iau_name'] = [ None if i.strip()=='NULL' else i.strip()
+                                            for i in head['dia_object_iau_name'] ]
+            head.add_column( 0, name='season' )
+            head.add_column( -1., name='ra_dec_tai' )
+            
+            # Get observation counts.
+            # Figure out the season in a cheesy way; just look at the first detection,
+            #   and set the season in 182.5 day gaps following the start of the survey.
+            # Just set ra_dec_tai as that of the first observation.  For SNANA sims,
+            #   it's gratuitous anyway
             for origrow, row in zip( orig_head, head ):
                 pmin = origrow['PTROBS_MIN'] - 1
                 pmax = origrow['PTROBS_MAX'] - 1
-                # The right criterion for DDF isn't obvious
-                # Practically speaking, the issue was alerts
-                # with way too much photometry in them.  So,
-                # limit based on the total count.
-                if ( pmax + 1 - pmin ) > 1000:
-                    row['isddf'] = True
+                row['nobs'] = pmax + 1 - pmin
+                row['season'] = int( numpy.floor( ( phot['MJD'][pmin] - self.t0 ) / 182.5 ) )
+                row['ra_dec_tai'] = phot['MJD'][pmin]
 
-                # Another option would be to look at the
-                # maximum (or mean) number of observations
-                # in a single day.  (The 0.625 offsets
-                # to noon Chile time to divide nights.)
-                # mjds = numpy.floor( phot['MJD'][pmin:pmax+1] - 0.625 ).astype( numpy.int64 )
-                # hist, histbin = numpy.histogram( mjds, bins=range( mjds[0], mjds[-1]+1 ) )
-                # hist = hist[ hist > 0 ]
-                # if ( hist.mean() >= 10 ) or ( hist.max() >= 30 ):
-                #     row['isddf'] = True
+            for col in DiaObject._create_kws:
+                if col not in head.columns:
+                    head.add_column( None, name=col )
 
             if self.really_do:
                 nobj = DiaObject.bulk_insert_or_upsert( dict( head ), assume_no_conflict=True )
@@ -206,31 +201,47 @@ class FITSFileHandler( ColumnMapper ):
             phot['FLUXCALERR'] *= 10 ** ( ( self.alert_zeropoint - self.snana_zeropoint ) / 2.5 )
 
             self.diasource_map_columns( phot )
-            phot.add_column( numpy.int64(-1), name='diaobject_id' )
-            phot.add_column( numpy.int64(-1), name='diaforcedsource_id' )
-            phot['snr'] = phot['psflux'] / phot['psfluxerr']
-            phot['filtername'] = [ i.strip() for i in phot['filtername'] ]
-            phot.add_column( -999., name='ra' )
-            phot.add_column( -999., name='decl' )
-
+            phot.add_column( numpy.int64(-1), name='dia_object' )
+            phot.add_column( numpy.int64(-1), name='dia_forced_source' )
+            phot['snr'] = phot['ps_flux'] / phot['ps_flux_err']
+            phot['filter_name'] = [ i.strip() for i in phot['filter_name'] ]
+            phot.add_column( uuid.uuid4(), name='uuid' )
+            phot.add_column( self.processing_version, name='processing_version' )
+            phot.add_column( now, name='insert_time' )
+            phot.add_column( now, name='update_time' )
+            phot.add_column( 0, name='season' )
+            phot.add_column( 1, name='valid_flag' )
+            phot.add_column( -1., name='ra' )
+            phot.add_column( -100., name='decl' )
+            phot.add_column( 0, name='broker_count' )
+            
             # Load the DiaForcedSource table
 
-            for obj in orig_head:
+            for obj, headrow in zip( orig_head, head ):
                 # All the -1 is because the files are 1-indexed, but astropy is 0-indexed
                 pmin = obj['PTROBS_MIN'] -1
                 pmax = obj['PTROBS_MAX'] -1
+                nobs = pmax + 1 - pmin
                 if ( pmax - pmin + 1 ) > self.max_sources_per_object:
                     self.logger.error( f'SNID {obj["SNID"]} in {headfile.name} has {pmax-mpin+1} sources, '
                                        f'which is more than max_sources_per_object={self.max_sources_per_object}' )
                     raise RuntimeError( "Too many sources" )
-                phot['diaobject_id'][pmin:pmax+1] = obj['SNID']
-                phot['diaforcedsource_id'][pmin:pmax+1] = ( obj['SNID'] * self.max_sources_per_object
+                phot['uuid'][pmin:pmax+1] = [ str(uuid.uuid4()) for i in range(nobs) ]
+                phot['dia_object'][pmin:pmax+1] = obj['SNID']
+                phot['dia_forced_source'][pmin:pmax+1] = ( obj['SNID'] * self.max_sources_per_object
                                                             + numpy.arange( pmax - pmin + 1 ) )
                 phot['ra'][pmin:pmax+1] = obj['RA']
                 phot['decl'][pmin:pmax+1] = obj['DEC']
+                        
+                # Setting the season to the season of the object; this may not be the right thing!
+                phot['season'][pmin:pmax+1] = headrow['season']
 
             # The phot table has separators, so there will still be some junk data in there I need to purge
-            phot = phot[ phot['diaobject_id'] >= 0 ]
+            phot = phot[ phot['dia_object'] >= 0 ]
+
+            for col in DiaForcedSource._create_kws:
+                if col not in phot.columns:
+                    phot.add_column( None, name=col )
 
             if self.really_do:
                 nfrc = DiaForcedSource.bulk_insert_or_upsert( phot, assume_no_conflict=True )
@@ -239,10 +250,31 @@ class FITSFileHandler( ColumnMapper ):
                 nfrc = len(phot)
                 self.logger.info( f"PID {os.getpid()} would try to load {nfrc} forced photometry points" )
 
+            # Load the dfs_to_pv_to_ss table
+            dfstopvtoss = Table()
+            dfstopvtoss['dia_forced_source'] = phot['dia_forced_source']
+            dfstopvtoss['uuid'] = [ uuid.uuid4() for i in range(len(phot['dia_forced_source'])) ]
+            dfstopvtoss.add_column( self.snapshot, name='snapshot_name' )
+            dfstopvtoss.add_column( self.processing_version, name='processing_version' )
+            dfstopvtoss.add_column( now, name='insert_time' )
+            dfstopvtoss.add_column( now, name='update_time' )
+            dfstopvtoss.add_column( 1, name='valid_flag' )
+
+            if self.really_do:
+                nfps = DFStoPVtoSS.bulk_insert_or_upsert( dfstopvtoss, assume_no_conflict=True )
+                self.logger.info( f"PID {os.getpid()} loaded {nfps} DFStoPVtoSS from {photfile.name}" )
+            else:
+                nfps = len(dfstopvtoss)
+                self.logger.info( f"PID {os.getpid()} would try to load {nfps} rows into DFStoPVtoSS" )
+            
             # Load the DiaSource table
 
-            phot.rename_column( 'diaforcedsource_id', 'diasource_id' )
+            phot.rename_column( 'dia_forced_source', 'dia_source' )
             phot = phot[ ( phot['photflag'] & self.photflag_detect ) !=0 ]
+
+            for col in DiaSource._create_kws:
+                if col not in phot.columns:
+                    phot.add_column( None, name=col )
 
             if self.really_do:
                 nsrc = DiaSource.bulk_insert_or_upsert( phot, assume_no_conflict=True )
@@ -251,19 +283,26 @@ class FITSFileHandler( ColumnMapper ):
                 nsrc = len(phot)
                 self.logger.info( f"PID {os.getpid()} would try to load {nsrc} sources" )
 
-            # Load the alert table based on this
+            # Load the ds_to_pv_to_ss table
 
-            alerts = { 'alert_id': phot[ 'diasource_id' ],
-                       'diasource_id': phot[ 'diasource_id' ],
-                       'diaobject_id': phot[ 'diaobject_id' ] }
+            dstopvtoss = Table()
+            dstopvtoss['dia_source'] = phot['dia_source']
+            dstopvtoss['uuid'] = [ uuid.uuid4() for i in range(len(phot['dia_source'])) ]
+            dstopvtoss.add_column( self.snapshot, name='snapshot_name' )
+            dstopvtoss.add_column( self.processing_version, name='processing_Version' )
+            dstopvtoss.add_column( now, name='insert_time' )
+            dstopvtoss.add_column( now, name='update_time' )
+            dstopvtoss.add_column( 1, name='valid_flag' )
+
             if self.really_do:
-                nalrt = Alert.bulk_insert_or_upsert( alerts, assume_no_conflict=True )
-                self.logger.info( f"PID {os.getpid()} loaded {nalrt} alerts" )
+                nsps = DStoPVtoSS.bulk_insert_or_upsert( dstopvtoss, assume_no_conflict=True )
+                self.logger.info( f"PID {os.getpid()} loaded {nsps} DStoPVtoSS from {photfile.name}" )
             else:
-                nalrt = len(alerts['alert_id'])
-                self.logger.info( f"PID {os.getpid()} would try to load {nalrt} alerts" )
-
-            return { "ok": True, "msg": f"Loaded {nobj} objs, {nsrc} src, {nfrc} forced, {nalrt} alerts" }
+                nsps = len(dstopvtoss)
+                self.logger.info( f"PID {os.getpid()} would try to load {nsps} rows into DStoPVtoSS" )
+            
+            return { 'ok': True, 'msg': ( f"Loaded {nobj} objects, {nsrc} sources, {nfrc} forced, "
+                                          f"{nfps} dfs_to_pv_toss, {nsps} dv_to_pv_to_ss" ) }
         except Exception as e:
             self.logger.error( f"Exception loading {headfile}: {traceback.format_exc()}" )
             return { "ok": False, "msg": traceback.format_exc() }
@@ -272,24 +311,20 @@ class FITSFileHandler( ColumnMapper ):
 # ----------------------------------------------------------------------
 
 class FITSLoader( ColumnMapper ):
-    def __init__( self, nprocs, directories, files=[], simversion='2023-04-01',
+    def __init__( self, nprocs, directories, files=[],
                   max_sources_per_object=100000, photflag_detect=4096,
-                  snana_zeropoint=27.5, alert_zeropoint=31.4, tableset='ppdb',
+                  snana_zeropoint=27.5, alert_zeropoint=31.4, t0=60796.,
                   processing_version=None, snapshot=None,
                   really_do=False, verbose=False, logger=logging.getLogger( "load_snana_fits") ):
-
-        if tableset not in [ 'ppdb', 'training' ]:
-            raise ValueError( f'tableset must be one of ppdb, training, not {tableset}' )
 
         self.nprocs = nprocs
         self.directories = directories
         self.files = files
-        self.simversion = simversion
         self.max_sources_per_object=max_sources_per_object
         self.photflag_detect = photflag_detect
         self.snana_zeropoint = snana_zeropoint
         self.alert_zeropoint = alert_zeropoint
-        self.tableset = tableset
+        self.t0 = t0
         self.processing_version = processing_version
         self.snapshot = snapshot
         self.really_do = really_do
@@ -335,10 +370,11 @@ class FITSLoader( ColumnMapper ):
                         raise RuntimeError( f"Failed to parse {row['condef']} for primary key" )
                     primarykeys[table] = match.group(1)
                     tablepkconstraints[table] = row['conname']
-                    pkreconstructs.insert( 0, f"ALTER TABLE {table} ADD {row['condef']};" )
+                    pkreconstructs.insert( 0, f"ALTER TABLE {table} ADD CONSTRAINT {row['conname']} {row['condef']};" )
                 else:
                     tableconstraints[table].append( row['conname'] )
-                    constraintreconstructs.insert( 0, f"ALTER TABLE {table} ADD {row['condef']};" )
+                    constraintreconstructs.insert( 0, ( f"ALTER TABLE {table} ADD CONSTRAINT {row['conname']} "
+                                                        f"{row['condef']};" ) )
 
         # Make sure we found the primary key for all tables
         missing = []
@@ -357,12 +393,17 @@ class FITSLoader( ColumnMapper ):
                 match = pkindexmatcher.search( row['indexdef'] )
                 if match is None:
                     raise RuntimeError( f"Error parsing index def {row['indexdef']}" )
-                if match.group(1) != primarykeys[table]:
+                if match.group(1) == primarykeys[table]:
                     # The primary key index will be deleted when
                     #  the primary key constraint is deleted
-                    tableindexes[table].append( row['indexname'] )
-                    indexreconstructs.insert( 0, f"{row['indexdef']};" )
-
+                    continue
+                if row['indexname'] in tableconstraints[table]:
+                    # It's possible the index is already present in table constraints,
+                    #   as a UNIQUE constraint will also create an index.
+                    continue
+                tableindexes[table].append( row['indexname'] )
+                indexreconstructs.insert( 0, f"{row['indexdef']};" )                
+                    
         with open( "load_snana_fits_reconstruct_indexes_constraints.sql", "w" ) as ofp:
             for row in pkreconstructs:
                 ofp.write( f"{row}\n" )
@@ -401,12 +442,7 @@ class FITSLoader( ColumnMapper ):
 
 
     def load_all_directories( self ):
-        if self.tableset == 'ppdb':
-            Truth = DiaObjectTruth
-        elif self.tableset == 'training':
-            Truth = TrainingDiaObjectTruth
-        else:
-            raise ValueError( f"Unknown tableset {self.tableset}" )
+        now = datetime.datetime.now( tz=datetime.UTC )
 
         # Make sure all HEAD.FITS.gz and PHOT.FITS.gz files exist
         direcheadfiles = {}
@@ -437,6 +473,19 @@ class FITSLoader( ColumnMapper ):
             direcheadfiles[ direc ] = headfiles
             direcphotfiles[ direc ] = photfiles
 
+        # Make the ProcessingVersions and Snapshots objects
+        pv = ProcessingVersions.objects.filter( pk=self.processing_version )
+        if len(pv) == 0:
+            pv = ProcessingVersions( version=self.processing_version,validity_start=now )
+            pv.save()
+
+        ss = Snapshots.objects.filter( pk=self.snapshot )
+        if len(ss) == 0:
+            ss = Snapshots( name=self.snapshot, insert_time=now )
+            ss.save()
+
+        # Do the long stuff
+            
         self.logger.info( f'Launching {self.nprocs} processes to load the db.' )
 
         # Need to make sure that each subprocess gets its own database
@@ -533,11 +582,11 @@ class FITSLoader( ColumnMapper ):
 # **********************************************************************
 
 class Command(BaseCommand):
-    help = "Load SNANA FITS file into DiaObject/Source/ForcedSoruce tables"
+    help = "Load SNANA FITS file into fastdb_dev tables"
 
     def __init__( self, *args, **kwargs ):
         super().__init__( *args, **kwargs )
-        self.logger = logging.getLogger( "load_snana_fits" )
+        self.logger = logging.getLogger( "load_fastdb_dev_snana_fits" )
         self.logger.propagate = False
         if not self.logger.hasHandlers():
             logout = logging.StreamHandler( sys.stderr )
@@ -566,10 +615,12 @@ class Command(BaseCommand):
                              help="Zeropoint to move all photometry to" )
         parser.add_argument( '-a', '--alert-zeropoint', default=31.4, type=float,
                              help="Zeropoint to use for alerts (and to store in the source table)" )
-        parser.add_argument( '-v', '--processing-version', default=None, required=True,
+        parser.add_argument( '--processing-version', '--pv', default=None, required=True,
                              help="String value of the processing version to set for all objects" )
-        parsser.add_argument( '-s', '--snapshot', default=None,
-                              help="If given, create this snapshot and put all loaded sources/forced sources in it" )
+        parser.add_argument( '-s', '--snapshot', default=None,
+                             help="If given, create this snapshot and put all loaded sources/forced sources in it" )
+        parser.add_argument( '-t', '--mjd-start', default=60796., type=float,
+                             help="Time that the whole campaign starts (for season determination)" )
         parser.add_argument( '--dont-disable-indexes-fks', action='store_true', default=False,
                              help="Don't temporarily disable indexes and foreign keys (by default will)" )
         parser.add_argument( '--do', action='store_true', default=False,
@@ -580,20 +631,16 @@ class Command(BaseCommand):
         if options['verbose']:
             self.logger.setLevel( logging.DEBUG )
 
-        if not ( options['ppdb'] or options['train'] ):
-            raise RuntimeError( "Must give one of --ppdb or --train" )
-        if options['ppdb'] and options['train']:
-            raise RuntimeError( "Must give only one of --pdb or --train" )
-
         fitsloader = FITSLoader( options['nprocs'], options['directories'],
                                  logger=self.logger,
-                                 tableset='ppdb' if options['ppdb'] else 'training',
                                  files=options['files'],
-                                 simversion=options['simversion'],
+                                 processing_version=options['processing_version'],
+                                 snapshot=options['snapshot'],
                                  max_sources_per_object=options['max_sources_per_object'],
                                  photflag_detect=options['photflag_detect'],
                                  snana_zeropoint=options['snana_zeropoint'],
                                  alert_zeropoint=options['alert_zeropoint'],
+                                 t0=options['mjd_start'],
                                  really_do=options['do'],
                                  verbose=options['verbose'] )
 
@@ -602,12 +649,14 @@ class Command(BaseCommand):
         if not options[ "dont_disable_indexes_fks" ]:
             self.logger.warning( "Disabling all indexes and foreign keys before loading" )
             fitsloader.disable_indexes_and_fks()
+        import pdb; pdb.set_trace()
 
         # Do
 
         fitsloader.load_all_directories()
 
-        # Recreate all indexes 
+        # Recreate all indexes
+        import pdb; pdb.set_trace()
 
         if not options[ "dont_disable_indexes_fks" ]:
             self.logger.warning( "Recreating indexes and foreign keys" )
