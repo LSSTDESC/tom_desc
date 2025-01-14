@@ -75,6 +75,7 @@ class CreateDiaSource(LoginRequiredMixin, django.views.View):
                 ds.season = do.season
                 ds.processing_version = d['processing_version']
                 ds.broker_count = d['broker_count']
+                ds.update_time = datetime.datetime.now(tz=datetime.timezone.utc)
                 
                 dia_source_data.append(ds)
 
@@ -115,6 +116,7 @@ class CreateDSPVSS(LoginRequiredMixin, django.views.View):
                 dspvss.snapshot_name = d['snapshot_name']
                 dspvss.valid_flag = d['valid_flag']
                 dspvss.insert_time =  datetime.datetime.now(tz=datetime.timezone.utc)
+                dspvss.update_time = datetime.datetime.now(tz=datetime.timezone.utc)
                 
                 dspvss_data.append(dspvss)
 
@@ -161,10 +163,12 @@ class UpdateDSPVSSValidFlag(LoginRequiredMixin, django.views.View):
                 dd['dia_source'] = d['dia_source']
                 dd['processing_version'] = d['processing_version']
                 dd['snapshot_name'] = d['snapshot_name']
+                dd['update_time'] = datetime.datetime.now(tz=datetime.timezone.utc)
+                
 
                 dspvss_data.append(dd)
         
-                query = "update ds_to_pv_to_ss set valid_flag = %(valid_flag)s where dia_source = %(dia_source)s and processing_version = %(processing_version)s and snapshot_name = %(snapshot_name)s"
+                query = "update ds_to_pv_to_ss set valid_flag = %(valid_flag)s,  update_time = %(update_time)s where dia_source = %(dia_source)s and processing_version = %(processing_version)s and snapshot_name = %(snapshot_name)s"
 
             execute_batch(cursor,query,dspvss_data)
             _logger.debug( f"Updated {count} rows." )
@@ -202,10 +206,11 @@ class UpdateDiaSourceValidFlag(LoginRequiredMixin, django.views.View):
                 dd['valid_flag'] = d['valid_flag']
                 dd['dia_source'] = d['dia_source']
                 dd['processing_version'] = d['processing_version']
+                dd['update_time'] = datetime.datetime.now(tz=datetime.timezone.utc)
                 
                 dia_source_data.append(dd)
 
-            query = "update dia_source set valid_flag = %(valid_flag)s where dia_source = %(dia_source)s and processing_version = %(processing_version)s"
+            query = "update dia_source set valid_flag = %(valid_flag)s, update_time = %(update_time)s where dia_source = %(dia_source)s and processing_version = %(processing_version)s"
 
             execute_batch(cursor,query,dia_source_data)
             _logger.debug( f"Updated {count} rows." )

@@ -91,9 +91,6 @@ metadata:
   name: tom-postgres
   namespace: desc-tom-buckley-dev
 spec:
-  clusterIP: None
-  clusterIPs:
-  - None
   ports:
   - name: default
     port: 42

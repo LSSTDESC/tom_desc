@@ -6,27 +6,81 @@ from psqlextra.types import PostgresPartitioningMethod
 from psqlextra.models import PostgresPartitionedModel
 import uuid
 
-# Support the Q3c Indexing scheme
+# rknop customizations:
+# Support for the Q3c indexing scheme, index names up to 63 characters
+# (django limits to 30, postgres has more), and the Createable base class
+# that defines the "create" and "load_or_create" methods for bulk
+# upserting.
+from db.models import q3c_ang2ipix, LongNameBTreeIndex, Createable, Float32Field
 
-class q3c_ang2ipix(models.Func):
-    function = "q3c_ang2ipix"
+class LastUpdateTime(models.Model):
 
-class ProcessingVersions(models.Model):
+    class Meta:
+        app_label = 'fastdb_dev'
+        db_table = 'last_update_time'
+
+    last_update_time =  models.DateTimeField(null=True)
+
+
+class ProcessingVersions(Createable):
 
     class Meta:
         app_label = 'fastdb_dev'
         db_table = 'processing_versions'
 
+    _pk = 'version'
+    _create_kws = [ 'version', 'validity_start', 'validity_end' ]
+    _dict_kws = _create_kws
+
     version = models.TextField(db_comment="Processing version", primary_key=True)
     validity_start = models.DateTimeField(db_comment="Time when validity of this processing version starts")
-    validity_end = models.DateTimeField(null=True, blank=True, db_comment="Time when validity of this processing version ends")
+    validity_end = models.DateTimeField(null=True, blank=True,
+                                        db_comment="Time when validity of this processing version ends")
 
 
-class HostGalaxy(models.Model):
+class Snapshots(Createable):
+
+    class Meta:
+        app_label = 'fastdb_dev'
+        db_table = 'snapshots'
+
+    _pk = 'name'
+    _create_kws = [ 'name', 'insert_time' ]
+    _dict_kws = _create_kws
+
+    name = models.TextField(db_comment='Snapshot name', primary_key=True)
+    insert_time =  models.DateTimeField(default=timezone.now)
+
+    def __str__(self):
+       return self.name
+
+
+class SnapshotTags(Createable):
+
+    class Meta:
+        app_label = 'fastdb_dev'
+        db_table = 'snapshot_tags'
+        constraints = [models.UniqueConstraint(fields=['name','snapshot_name'], name='unique_ss_tag')]
+
+    _pk = 'id'
+    _create_kws = [ 'name', 'snapshot_name', 'insert_time' ]
+    _dict_kws = [ 'id' ] + _create_kws
+
+    name =  models.TextField(db_comment='Tag name')
+    snapshot_name = models.ForeignKey(Snapshots, on_delete=models.RESTRICT,
+                                      db_column='snapshot_name', related_name='tag_snap_name')
+    insert_time =  models.DateTimeField(default=timezone.now)
+
+
+class HostGalaxy(Createable):
 
     class Meta:
         app_label = 'fastdb_dev'
         db_table = 'host_galaxy'
+
+    _pk = 'id'
+    _create_kws = [ 'host_gal_id', 'host_gal_flux', 'host_gal_fluxerr', 'processing_version_id', 'insert_time' ]
+    _dict_kws = [ 'id' ] + _create_kws
 
     host_gal_id = models.BigIntegerField(db_comment="nearbyObj from PPDB")
     host_gal_flux = ArrayField(models.FloatField(db_comment="galaxy flux in ugrizy", null=True))
@@ -34,20 +88,8 @@ class HostGalaxy(models.Model):
     processing_version = models.ForeignKey(ProcessingVersions, on_delete=models.RESTRICT, null=True, related_name='hg_proc_version')
     insert_time =  models.DateTimeField(default=timezone.now)
 
-class Snapshots(models.Model):
 
-    class Meta:
-        app_label = 'fastdb_dev'
-        db_table = 'snapshots'
-
-    name = models.TextField(db_comment='Snapshot name', primary_key=True)
-    insert_time =  models.DateTimeField(default=timezone.now)
-
-
-    def __str__(self):
-       return self.name
-   
-class DiaObject(models.Model):
+class DiaObject(Createable):
 
     class Meta:
         app_label = 'fastdb_dev'
@@ -56,8 +98,16 @@ class DiaObject(models.Model):
             models.Index(fields=["dia_object"]),
             models.Index(fields=["season"]),
             models.Index(fields=["dia_object","season"]),
+            LongNameBTreeIndex( q3c_ang2ipix( 'ra', 'decl' ),
+                                name='idx_%(app_label)s_%(class)s_q3c' ),
         ]
 
+    _pk = 'dia_object'
+    _create_kws = [ 'dia_object', 'dia_object_iau_name', 'validity_start', 'season', 'fake_id',
+                    'ra', 'ra_sigma', 'decl', 'decl_sigma', 'ra_dec_tai',
+                    'nobs', 'host_gal_first_id', 'host_gal_second_id', 'host_gal_third_id',
+                    'validity_end', 'insert_time', 'update_time' ]
+    _dict_kws = _create_kws
 
     dia_object = models.BigIntegerField(primary_key=True, db_comment="diaObjectId from PPDB")
     dia_object_iau_name = models.TextField(db_comment="IAU Name", null=True)
@@ -77,28 +127,8 @@ class DiaObject(models.Model):
     insert_time =  models.DateTimeField(default=timezone.now)
     update_time =  models.DateTimeField(default=timezone.now)
 
-class SnapshotTags(models.Model):
 
-    class Meta:
-        app_label = 'fastdb_dev'
-        db_table = 'snapshot_tags'
-        constraints = [models.UniqueConstraint(fields=['name','snapshot_name'], name='unique_ss_tag')]
-
-    
-    name =  models.TextField(db_comment='Tag name')
-    snapshot_name = models.ForeignKey(Snapshots, on_delete=models.RESTRICT, db_column='snapshot_name', related_name='tag_snap_name')
-    insert_time =  models.DateTimeField(default=timezone.now)
-
-class LastUpdateTime(models.Model):
-
-    class Meta:
-        app_label = 'fastdb_dev'
-        db_table = 'last_update_time'
-
-    last_update_time =  models.DateTimeField(null=True)
-
-
-class DiaSource(PostgresPartitionedModel):
+class DiaSource(Createable, PostgresPartitionedModel):
 
     class Meta:
         app_label = 'fastdb_dev'
@@ -107,19 +137,31 @@ class DiaSource(PostgresPartitionedModel):
         indexes = [
             models.Index(fields=["dia_object"]),
             models.Index(fields=["dia_source"]),
+            LongNameBTreeIndex( q3c_ang2ipix( 'ra', 'decl' ),
+                                name='idx_%(app_label)s_%(class)s_q3c' ),
         ]
 
     class PartitioningMeta:
         method = PostgresPartitioningMethod.LIST
         key = ['processing_version']
 
+    _pk = 'uuid'
+    _create_kws = [ 'uuid', 'dia_source', 'ccd_visit_id', 'dia_object', 'parent_dia_source_id',
+                    'season', 'fake_id', 'mid_point_tai', 'filter_name', 'ra', 'decl', 'ps_flux', 'ps_flux_err',
+                    'snr', 'processing_version', 'broker_count', 'valid_flag',
+                    'insert_time', 'update_time' ]
+    _dict_kws = _create_kws
+
     uuid = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     dia_source = models.BigIntegerField(db_comment="diaSourceId from Alert stream")
     ccd_visit_id = models.BigIntegerField(db_comment="ccdVisitId from PPDB", null=True)
-    dia_object = models.ForeignKey(DiaObject, on_delete=models.RESTRICT, related_name='dia_obj_s', db_column='dia_object')
-    parent_dia_source_id = models.BigIntegerField(null=True, db_comment="parentdiaSourceId from PPDB", db_column='parent_dia_source_id')
+    dia_object = models.ForeignKey(DiaObject, on_delete=models.RESTRICT, related_name='dia_obj_s',
+                                   db_column='dia_object')
+    parent_dia_source_id = models.BigIntegerField(null=True, db_comment="parentdiaSourceId from PPDB",
+                                                  db_column='parent_dia_source_id')
     season = models.IntegerField(db_comment='Season when this object appears - filled from DiaObject')
-    fake_id = models.IntegerField(db_comment='ID to indicate fake SN, fake = integer, real = 0  - filled from DiaObject', null=True)
+    fake_id = models.IntegerField(db_comment='ID to indicate fake SN, fake=integer, real=0 - filled from DiaObject',
+                                  null=True)
     mid_point_tai = models.FloatField(db_comment="midPointTai from PPDB")
     filter_name = models.TextField(db_comment="CcdVisit.filterName from PPDB")
     ra = models.FloatField(db_comment="RA of the center of this source from PPDB" )
@@ -135,28 +177,36 @@ class DiaSource(PostgresPartitionedModel):
 
 
 
-class DiaForcedSource(PostgresPartitionedModel):
+class DiaForcedSource(Createable, PostgresPartitionedModel):
 
     class Meta:
         app_label = 'fastdb_dev'
         db_table = 'dia_forced_source'
-        constraints = [models.UniqueConstraint(fields=['processing_version','dia_forced_source'],name='unique_pv_dia_forced_source')]
+        constraints = [ models.UniqueConstraint( fields=['processing_version','dia_forced_source'],
+                                                 name='unique_pv_dia_forced_source') ]
         indexes = [
             models.Index(fields=["dia_object"]),
             models.Index(fields=["dia_forced_source"]),
         ]
 
-        
     class PartitioningMeta:
         method = PostgresPartitioningMethod.LIST
         key = ['processing_version']
 
+    _pk = 'uuid'
+    _create_kws = [ 'uuid', 'dia_forced_source', 'ccd_visit_id', 'dia_object', 'season', 'fake_id',
+                    'mid_point_tai', 'filter_name', 'ps_flux', 'ps_flux_err', 'processing_version', 'valid_flag',
+                    'insert_time', 'update_time' ]
+    _dict_kws = _create_kws
+
     uuid = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     dia_forced_source = models.BigIntegerField(db_comment="diaForcedSourceId from PPDB")
     ccd_visit_id = models.BigIntegerField(db_comment="ccdVisitId from PPDB", null=True)
-    dia_object = models.ForeignKey(DiaObject, on_delete=models.RESTRICT, related_name='dia_obj_fs', db_column='dia_object')
+    dia_object = models.ForeignKey(DiaObject, on_delete=models.RESTRICT, related_name='dia_obj_fs',
+                                   db_column='dia_object')
     season = models.IntegerField(db_comment='Season when this object appears - filled from DiaObject')
-    fake_id = models.IntegerField(db_comment='ID to indicate fake SN, fake = integer, real = 0  - filled from DiaObject', null=True)
+    fake_id = models.IntegerField(db_comment='ID to indicate fake SN, fake=integer, real=0 - filled from DiaObject',
+                                  null=True)
     mid_point_tai = models.FloatField(db_comment="midPointTai from PPDB", null=True)
     filter_name = models.TextField(db_comment="CcdVisit.filterName from PPDB")
     ps_flux = models.FloatField(db_comment="psFlux from PPDB")
@@ -167,49 +217,62 @@ class DiaForcedSource(PostgresPartitionedModel):
     update_time =  models.DateTimeField(default=timezone.now)
 
 
-class DStoPVtoSS(PostgresPartitionedModel):
+class DStoPVtoSS(Createable, PostgresPartitionedModel):
 
     class Meta:
         app_label = 'fastdb_dev'
         db_table = 'ds_to_pv_to_ss'
-        constraints = [models.UniqueConstraint(fields=['processing_version','snapshot_name','dia_source'],name='unique_ds_pv_ss')]
+        constraints = [ models.UniqueConstraint(fields=['processing_version','snapshot_name','dia_source'],
+                                                name='unique_ds_pv_ss') ]
         indexes = [
             models.Index(fields=["processing_version", "snapshot_name", "dia_source"]),
         ]
-
 
     class PartitioningMeta:
         method = PostgresPartitioningMethod.LIST
         key = ['processing_version']
 
 
+    _pk = 'uuid'
+    _create_kws = [ 'uuid', 'processing_version', 'snapshot_name', 'dia_source', 'valid_flag',
+                    'insert_time', 'update_time' ]
+    _dict_kws = _create_kws
+
+    uuid = models.UUIDField( primary_key=True, default=uuid.uuid4, editable=False )
     processing_version =  models.TextField(db_comment="Local copy of Processing version key to circumvent Django")
     snapshot_name = models.TextField(db_comment="Local copy of snapshot_name key to circumvent Django")
     dia_source = models.BigIntegerField(db_comment="Local copy of dia_source to circumvent Django")
     valid_flag = models.IntegerField(db_comment='Valid data flag', default=1)
     insert_time =  models.DateTimeField(default=timezone.now)
     update_time =  models.DateTimeField(default=timezone.now)
-        
 
 
-class DFStoPVtoSS(PostgresPartitionedModel):
+
+class DFStoPVtoSS(Createable, PostgresPartitionedModel):
 
     class Meta:
         app_label = 'fastdb_dev'
         db_table = 'dfs_to_pv_to_ss'
-        constraints = [models.UniqueConstraint(fields=['processing_version','snapshot_name','dia_forced_source'],name='unique_dfs_pv_ss')]
+        constraints = [ models.UniqueConstraint(fields=['processing_version','snapshot_name','dia_forced_source'],
+                                                name='unique_dfs_pv_ss') ]
 
     class PartitioningMeta:
         method = PostgresPartitioningMethod.LIST
         key = ['processing_version']
 
+    _pk = 'uuid'
+    _create_kws = [ 'uuid', 'processing_version', 'snapshot_name', 'dia_forced_source', 'valid_flag',
+                    'insert_time', 'update_time' ]
+    _dict_kws = _create_kws
+
+    uuid = models.UUIDField( primary_key=True, default=uuid.uuid4, editable=False )
     processing_version =  models.TextField(db_comment="Local copy of Processing version to circumvent Django")
     snapshot_name = models.TextField(db_comment="Local copy of snapshot_name to circumvent Django")
     dia_forced_source = models.BigIntegerField(db_comment="Local copy of dia_source to circumvent Django")
     valid_flag = models.IntegerField(db_comment='Valid data flag', default=1)
     insert_time =  models.DateTimeField(default=timezone.now)
     update_time =  models.DateTimeField(default=timezone.now)
-    
+
 # Broker information
 
 # Brokers send avro alerts (or the equivalent) with schema in:
@@ -220,7 +283,7 @@ class DFStoPVtoSS(PostgresPartitionedModel):
 # The classifications array of that message will be saved as a JSON object to BrokerClassifications,
 # creating new entries in BrokerClassifier as necessary.
 
-            
+
 class BrokerClassifier(models.Model):
     """Model for a classifier producing a broker classification."""
 
@@ -241,7 +304,7 @@ class BrokerClassifier(models.Model):
     broker_version = models.TextField(null=True)     # state changes logically not part of the classifier
     classifier_name = models.CharField(max_length=200)
     classifier_params = models.TextField(null=True)   # change in classifier code / parameters
-    
+
     insert_time =  models.DateTimeField(default=timezone.now)
 
 
@@ -251,7 +314,7 @@ class BrokerClassification(PostgresPartitionedModel):
     class PartitioningMeta:
         method = PostgresPartitioningMethod.LIST
         key = [ 'classifier' ]
-        
+
     class Meta:
         app_label = 'fastdb_dev'
         db_table = 'broker_classification'
@@ -277,7 +340,7 @@ class BrokerClassification(PostgresPartitionedModel):
     classifier = models.BigIntegerField("Local copy of clasifier to circumvent Django")
 
     # Create classifications JSON object with class_id and probability aa keys
-    
+
     classifications = models.JSONField(db_index=True, null=True)
     insert_time =  models.DateTimeField(default=timezone.now)
 
