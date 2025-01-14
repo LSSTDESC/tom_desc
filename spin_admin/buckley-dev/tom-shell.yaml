@@ -53,7 +53,7 @@ spec:
           value: /secrets/pitt_google_auth_key.json
         - name: GOOGLE_CLOUD_PROJECT
           value: elasticc-challenge
-        image: registry.nersc.gov/m1727/buckley/devuan-chimaera-buckley:latest
+        image: registry.nersc.gov/m1727/buckley/devuan-daedalus-buckley:latest
         imagePullPolicy: Always
         name: tom-shell
         resources: {}
@@ -81,6 +81,8 @@ spec:
           name: tom-checkout
         - mountPath: /sample
           name: tom-sample
+	- mountPath: /logs
+          name: tom-logs
         #- mountPath: /pgdump
         #  name: pgdump
         # - mountPath: /pgdata
@@ -114,6 +116,10 @@ spec:
           path: /global/cfs/cdirs/desc-td/ELASTICC2
           type: Directory
         name: tom-sample
+      - hostPath:
+          path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/tom_desc_fastdb_dev/logs
+          type: Directory
+        name: tom-logs	
       #- hostPath:
       #    path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/pg_dump
       #    type: Directory
