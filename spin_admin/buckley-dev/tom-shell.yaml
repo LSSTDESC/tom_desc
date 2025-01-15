@@ -67,7 +67,7 @@ spec:
           privileged: false
           readOnlyRootFilesystem: false
           runAsNonRoot: true
-          runAsUser: 56805
+          runAsUser: 95089
         stdin: true
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
@@ -81,7 +81,7 @@ spec:
           name: tom-checkout
         - mountPath: /sample
           name: tom-sample
-	- mountPath: /logs
+        - mountPath: /logs
           name: tom-logs
         #- mountPath: /pgdump
         #  name: pgdump
@@ -119,7 +119,7 @@ spec:
       - hostPath:
           path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/tom_desc_fastdb_dev/logs
           type: Directory
-        name: tom-logs	
+        name: tom-logs
       #- hostPath:
       #    path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/pg_dump
       #    type: Directory
