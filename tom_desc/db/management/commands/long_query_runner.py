@@ -4,6 +4,7 @@ import datetime
 import pathlib
 import time
 import json
+import multiprocessing
 
 import pandas
 import psycopg2
@@ -22,7 +23,7 @@ class Command(BaseCommand):
         super().__init__( *args, **kwargs )
 
         self.outdir = pathlib.Path( "/query_results" )
-        self.sleeptime = 2
+        self.sleeptime = 10
 
         self.logger = logging.getLogger( "long_query_runner" )
         _logout = logging.StreamHandler( sys.stderr )
@@ -92,7 +93,7 @@ class Command(BaseCommand):
             if len(qentry) > 1:
                 raise RuntimeError( f"Error, {len(qentry)} queue entries with id {queryinfo['queryid']}" )
             qentry = qentry[0]
-            
+
             # Make a separate connection to the database to run
             # these queries.  We need a psycopg2 connection anyway,
             # which django yields only grudgingly, but more
@@ -176,21 +177,38 @@ class Command(BaseCommand):
         finally:
             if conn is not None:
                 conn.rollback()
+                conn.close()
 
     def add_arguments( self, parser ):
         parser.add_argument( '-o', '--once', default=False, action='store_true',
                              help="Just run at most one query" )
         parser.add_argument( '-l', '--loop', default=False, action='store_true',
                              help="Run the check/run query loop" )
+        parser.add_argument( '-s', '--sleep-time', default=10, type=int,
+                             help=( "How many seconds to sleep between looking to see if there are queries to do "
+                                    "(default 10)" ) )
+        parser.add_argument( '-n', '--num-runners', default=10, type=int,
+                             help=( "How many queries to run simutalenously (default 10)" ) )
         parser.add_argument( '-p', '--prune', default=None, type=float,
                              help=( "Prune queries older than this many days.  It probably doesn't "
                                     "make sense to use this with --loop" ) )
-        
+
+
+    def query_loop( self, sleeptime ):
+        while True:
+            while True:
+                queryinfo = self.get_queued_query()
+                if queryinfo is None:
+                    time.sleep( self.sleeptime )
+                    continue
+
+                self.run_query( queryinfo )
+
 
     def handle( self, *args, **options ):
         if options['prune'] is not None:
             self.prune_old_query_results( options['prune'] )
-        
+
         if options['once']:
             if options['loop']:
                 self.logger.warning( "Both --once and --loop given, only running one query (ignoring --loop)." )
@@ -203,13 +221,20 @@ class Command(BaseCommand):
             return
 
         if options['loop']:
-            self.logger.info( f"Starting infinite loop to look for and run queries." )
-            while True:
-                queryinfo = self.get_queued_query()
-                if queryinfo is None:
-                    time.sleep( self.sleeptime )
-                    continue
+            if ( options['num_runners'] < 1 ) or ( options['num_runners'] > 20 ):
+                raise ValueError( "num-runners must be >=1 and <= 20." )
+            if options['num_runners'] == 1:
+                self.logger.info( f"Starting infinite loop to look for and run queries." )
+                self.query_loop( options['sleep-time'] )
+            else:
+                self.logger.info( f"Starting {options['num_runners']} processes to go into infinite loops "
+                                  f"looking for and running queries." )
+                pool = multiprocessing.Pool( options['num_runners'] )
+                for i in range( options['num_runners'] ):
+                    pool.apply_async( query_loop, [ options['sleep-time'] ] )
+                pool.close()
+                pool.join()
 
-                self.run_query( queryinfo )
+
 
 

@@ -24,8 +24,8 @@ spec:
         nersc.gov/gid: "95089"
         nersc.gov/gids: 95089,57177,60152,96414
         nersc.gov/roles: user
-        nersc.gov/uid: "56805"
-        nersc.gov/username: buckley
+        nersc.gov/uid: "95089"
+        nersc.gov/username: raknop
       creationTimestamp: null
       labels:
         workload.user.cattle.io/workloadselector: deployment-desc-tom-buckley-dev-tom-query-runner
@@ -40,7 +40,7 @@ spec:
           value: fragile
         - name: DB_USER
           value: postgres
-        image: registry.nersc.gov/m1727/buckley/devuan-daedalus-buckley:latest
+        image: registry.nersc.gov/m1727/raknop/tom-app-fastdb-dev:latest
         imagePullPolicy: Always
         name: tom-query-runner
         resources: {}
@@ -54,7 +54,7 @@ spec:
           privileged: false
           readOnlyRootFilesystem: false
           runAsNonRoot: true
-          runAsUser: 56805
+          runAsUser: 95089
         stdin: true
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
@@ -71,7 +71,7 @@ spec:
         - mountPath: /logs
           name: tom-logs
         command: [ 'python' ]
-        args: [ 'manage.py', 'long_query_runner', '-l' ]
+        args: [ 'manage.py', 'long_query_runner', '-l', '-s', '5', '-n', '10' ]
       dnsConfig: {}
       dnsPolicy: ClusterFirst
       restartPolicy: Always
@@ -96,7 +96,7 @@ spec:
           type: Directory
         name: tom-deployment
       - hostPath:
-          path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/production/query_results
+          path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/tom_desc_fastdb_dev_query_results
           type: Directory
         name: tom-query-results
       - hostPath:

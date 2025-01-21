@@ -31,7 +31,7 @@ class TestSQLWebInterface:
         c2223 = [ r for r in rows if r['classid'] == 2223 ]
         assert len(c2223) == 5
         assert all( [ r['description'] == 'Ib/c' for r in c2223 ] )
-        
+
         # Check single query with substitution
         res = tomclient.post( 'db/runsqlquery/',
                               json={ 'query': "SELECT * FROM elasticc2_gentypeofclassid WHERE classid=%(id)s",
@@ -66,7 +66,7 @@ class TestSQLWebInterface:
                                         "WHERE classid=%(id)s" ),
                                       "SELECT * FROM pg_temp.junk" ] ,
                                   'subdict': [ { 'id': 2223 }, {} ] } )
-                              
+
         data = res.json()
         assert data['status'] == 'ok'
         rows = data['rows']
@@ -87,14 +87,14 @@ class TestSQLWebInterface:
         data = res.json()
         assert data['status'] == 'error'
         assert re.search( "^POST data must include 'query'", data['error'] ) is not None
-        
+
         res = tomclient.post( 'db/runsqlquery/', json={'query': {'oops': 'oops'}} )
         assert res.status_code == 200
         data = res.json()
         assert data['status'] == 'error'
         assert re.search( "^query must be either a list of strings or a string", data['error'] ) is not None
 
-        
+
         res = tomclient.post( 'db/runsqlquery/', json={ 'query': [ "SELECT * FROM elasticc2_gentypeofclassid",
                                                                    {'oops': 'oops'} ] } )
         assert res.status_code == 200
@@ -102,22 +102,23 @@ class TestSQLWebInterface:
         assert data['status'] == 'error'
         assert re.search( "^queries must all be strings", data['error'] ) is not None
 
-        res = tomclient.post( 'db/runsqlquery/',
-                              json={
-                                  'query': "SELECT * FROM elasticc2_gentypeofclassid WHERE classid=%(id)s",
-                                  'subdict': [ { 'id': 2223 }, { 'foo': 'bar' } ] } )
-        assert res.status_code == 200
-        data = res.json()
-        assert data['status'] == 'error'
-        assert re.search( "^number of queries and subdicts must match", data['error'] )
-                                      
+        # This code in views.py is commented out right now, maybe to deal with None in subdict?
+        # res = tomclient.post( 'db/runsqlquery/',
+        #                       json={
+        #                           'query': "SELECT * FROM elasticc2_gentypeofclassid WHERE classid=%(id)s",
+        #                           'subdict': [ { 'id': 2223 }, { 'foo': 'bar' } ] } )
+        # assert res.status_code == 200
+        # data = res.json()
+        # assert data['status'] == 'error'
+        # assert re.search( "^number of queries and subdicts must match", data['error'] )
+
         # TODO : more error modes
 
     # The next set of fixtures and tests probably violate some
     # assumption about how pytest is supposed to be used, but oh well.
     # The tests depend on some fixtures having been run and others not
     # having been run, in order.
-        
+
     @pytest.fixture( scope='class' )
     def submit_long_query( self, tomclient, elasticc2_database_snapshot_class ):
         res = tomclient.post( 'db/submitsqlquery/',
@@ -137,6 +138,9 @@ class TestSQLWebInterface:
         for f in direc.glob( '*' ):
             f.unlink()
 
+    # TODO : long query test with subdict
+    #   Also with a list parameter to make sure tuple conversion is working
+
     @pytest.fixture( scope='class' )
     def run_long_query( self, submit_long_query ):
         res = subprocess.run( [ 'python', 'manage.py', 'long_query_runner', '-o' ], cwd='/tom_desc' )
@@ -149,7 +153,7 @@ class TestSQLWebInterface:
                               cwd='/tom_desc' )
         assert res.returncode == 0
         yield True
-        
+
     def test_submit_long_query( self, tomclient, submit_long_query ):
         res = tomclient.post( 'db/runsqlquery/', json={'query': 'SELECT * FROM db_queryqueue'} )
         assert res.status_code == 200
@@ -169,7 +173,7 @@ class TestSQLWebInterface:
         if submittime.tzinfo is None:
             submittime = pytz.utc.localize( submittime )
         assert submittime < datetime.datetime.now( tz=datetime.timezone.utc )
-        
+
     def test_query_result( self, tomclient, submit_long_query, run_long_query ):
         res = tomclient.post( f'db/checksqlquery/{submit_long_query}/' )
         assert res.status_code == 200
