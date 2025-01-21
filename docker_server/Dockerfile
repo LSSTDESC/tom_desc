@@ -80,7 +80,7 @@ WORKDIR /tom_desc
 
 # Run the TOM server
 EXPOSE 8080
-ENTRYPOINT [ "/venv/bin/gunicorn", "tom_desc.wsgi", "-b", "0.0.0.0:8080", "--access-logfile", "-", "--error-logfile", "-", "-k", "gevent", "--timeout", "300", "--workers", "2"]
+ENTRYPOINT [ "/venv/bin/gunicorn", "tom_desc.wsgi", "-b", "0.0.0.0:8080", "--access-logfile", "-", "--error-logfile", "-", "-k", "gevent", "--timeout", "300", "--workers", "40" ]
 
 # ======================================================================
 # TODO -- make an install here that doesn't copy the git checkout, but
@@ -94,7 +94,7 @@ ENTRYPOINT [ "/venv/bin/gunicorn", "tom_desc.wsgi", "-b", "0.0.0.0:8080", "--acc
 # COPY tom_desc/ ./tom_desc/
 #
 # EXPOSE 8080
-# ENTRYPOINT [ "/venv/bin/gunicorn", "tom_desc.wsgi", "-b", "0.0.0.0:8080", "--access-logfile", "-", "--error-logfile", "-", "-k", "gevent", "--timeout", "300", "--workers", "2"]
+# ENTRYPOINT [ "/venv/bin/gunicorn", "tom_desc.wsgi", "-b", "0.0.0.0:8080", "--access-logfile", "-", "--error-logfile", "-", "-k", "gevent", "--timeout", "300", "--workers", "40" ]
 
 # ======================================================================
 FROM build AS tom-server-bindmount-dev
@@ -104,4 +104,4 @@ ENV PATH=/venv/bin:$PATH
 WORKDIR /tom_desc
 
 EXPOSE 8080
-ENTRYPOINT [ "/venv/bin/gunicorn", "tom_desc.wsgi", "-b", "0.0.0.0:8080", "--access-logfile", "-", "--error-logfile", "-", "-k", "gevent", "--timeout", "300", "--workers", "2"]
+ENTRYPOINT [ "/venv/bin/gunicorn", "tom_desc.wsgi", "-b", "0.0.0.0:8080", "--access-logfile", "-", "--error-logfile", "-", "-k", "gevent", "--timeout", "300", "--workers", "40" ]

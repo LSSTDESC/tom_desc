@@ -93,8 +93,7 @@ class RunSQLQuery(LoginRequiredMixin, django.views.View):
             queries, subdicts, data, return_format = _extract_queries( request )
 
             dbconn = psycopg2.connect( dbname=os.getenv('DB_NAME'), host=os.getenv('DB_HOST'),
-                                       user=dbuser, password=password,
-                                       cursor_factory=psycopg2.extras.RealDictCursor )
+                                       user=dbuser, password=password )
             cursor = dbconn.cursor()
 
             _logger.debug( "Starting query sequence" )
@@ -105,10 +104,24 @@ class RunSQLQuery(LoginRequiredMixin, django.views.View):
                 cursor.execute( query, subdict )
                 _logger.debug( 'Query done' )
             _logger.debug( "Fetching" )
+            columns = [ c.name for c in cursor.description ]
             rows = cursor.fetchall()
 
+            if return_format == 0:
+                retval = { 'status': ok,
+                           'rows': [ { c: r[i] for i, c in enumerate(columns) } for r in rows ]
+                          }
+            elif return_format == 1:
+                retval = { 'status': ok,
+                           'data': { c: [ r[i] for r in rows ] for i, c in enumerate(columns) }
+                          }
+            else:
+                return HttpResponse( f"Unknown return format {return_format}.",
+                                     content_type="text/plain; charset=utf-8",
+                                     status=500 )
+
             _logger.debug( f"Returning {len(rows)} rows from query sequence." )
-            return JsonResponse( { 'status': 'ok', 'rows': rows } )
+            return JsonResponse( retval )
 
         except Exception as ex:
             _logger.exception( ex )
