@@ -74,7 +74,7 @@ def _extract_queries( request ):
     # Look for a return format
     return_format = 0
     if 'format' in data:
-        return_format = int( data['format'] )
+        return_format = data['format']
 
     return queries, subdicts, data, return_format
 

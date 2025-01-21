@@ -21,7 +21,7 @@ class Command(BaseCommand):
         super().__init__( *args, **kwargs )
 
         self.outdir = pathlib.Path( "/query_results" )
-        self.sleeptime = 60
+        self.sleeptime = 2
 
         self.logger = logging.getLogger( "long_query_runner" )
         _logout = logging.StreamHandler( sys.stderr )

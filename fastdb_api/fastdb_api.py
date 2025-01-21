@@ -105,6 +105,61 @@ class FASTDB(object):
             print( f'Cannot find {fastdbservices}. Failed to authenticate' )
 
 
+    def synchronous_long_query( self, query, subdict=None, format='csv', checkeach=30, maxwait=3600 ):
+        queryid = None
+
+        params = { 'query': query, 'format': format }
+        if subdict is not None:
+            params['subdict'] = subdict
+        res = self._retry_send( SUBMIT_LONG_QUERY_URL, json=params )
+        if res.headers['Content-Type'][:16] != 'application/json':
+            raise TypeError( f"ERROR, didn't get json, got {res.headers['Content-Type']}" )
+        else:
+            data = res.json()
+            if 'status' not in data.keys():
+                raise ValueError( f"Unexpected response: {data}\n" )
+            elif data['status'] == 'error':
+                raise RuntimeError( f"Got an error: {data['error']}\n" )
+            elif data['status'] != 'ok':
+                raise RuntimeError( f"status is {data['status']} and I don't know how to cope.\n" )
+            else:
+                queryid = data['queryid']
+                _logger.info( f"Submitted query {queryid}" )
+
+        t0 = time.perf_counter()
+        done = False
+        totwait = 0
+        while ( not done) and ( totwait < maxwait ):
+            time.sleep( checkeach )
+
+            res = self._retry_send( CHECK_LONG_SQL_QUERY_URL + queryid + '/' )
+            if res.headers['Content-Type'][:16] != 'application/json':
+                sys.stderr.write( f"ERROR, didn't get json, got {res.headers['Content-Type']}" )
+            else:
+                data = res.json()
+                if 'status' not in data.keys():
+                    sys.stderr.write( f"Unexpected response: {data}\n" )
+                elif data['status'] == 'error':
+                    sys.stderr.write( f"Got an error: {data['error']}\n" )
+
+                _logger.info( f"Query status is {data['status']}")
+                if ( data['status'] == 'finished' ):
+                    done = True
+
+            totwait = time.perf_counter() - t0
+
+        res = self._retry_send( GET_LONG_SQL_QUERY_URL + queryid + '/' )
+        ctype = res.headers['Content-Type']
+        _logger.info( f"Long query results fetch got a {ctype} that is {len(res.content)} bytes long "
+                      f"(res.text is {len(res.text)} characters long)." )
+        if ctype[:8] == 'text/csv':
+            return res.text
+        elif ctype == 'application/octet-stream':
+            return res.content
+        else:
+            raise TypeError( f"Got unknown type {ctype}, expected text/csv or application/octet-stream" )
+
+
     def submit_long_query(self, q, format='csv'):
 
         queryid = None
