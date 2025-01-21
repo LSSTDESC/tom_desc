@@ -1,5 +1,6 @@
 import sys
 import os
+import io
 import json
 import uuid
 import datetime
@@ -138,6 +139,11 @@ class SubmitLongSQLQuery(LoginRequiredMixin, django.views.View):
                     raise ValueError( f"Unknown format {format}" )
 
             queryid = uuid.uuid4()
+            strio = io.StringIO()
+            strio.write( f"Queueing query {queryid} with len(queries) queries\n" )
+            for q, s in zip( queries, subdicts ):
+                strio.write( f"  =====> query={q}    ;   subdict={s}\n" )
+            _logger.debug( strio.getvalue() )
             newqueue = QueryQueue.objects.create( queryid=queryid, submitted=datetime.datetime.now(),
                                                   queries=queries, subdicts=subdicts, format=format )
 

@@ -138,9 +138,9 @@ class FASTDB(object):
             else:
                 data = res.json()
                 if 'status' not in data.keys():
-                    sys.stderr.write( f"Unexpected response: {data}\n" )
+                    _logger.error( f"Unexpected response: {data}\n" )
                 elif data['status'] == 'error':
-                    sys.stderr.write( f"Got an error: {data['error']}\n" )
+                    _logger.error( f"Got an error: {data['error']}\n" )
 
                 _logger.info( f"Query status is {data['status']}")
                 if ( data['status'] == 'finished' ):

@@ -3,6 +3,7 @@ import logging
 import datetime
 import pathlib
 import time
+import json
 
 import pandas
 import psycopg2
@@ -30,6 +31,7 @@ class Command(BaseCommand):
         _logout.setFormatter( _formatter )
         self.logger.propagate = False
         self.logger.setLevel( logging.INFO )
+        # self.logger.setLevel( logging.DEBUG )
 
 
     def prune_old_query_results( self, days=7 ):
@@ -112,13 +114,21 @@ class Command(BaseCommand):
 
             self.logger.info( f"Starting query request {queryinfo['queryid']}" )
 
-            for query, subdict in zip( queryinfo['queries'], queryinfo['subdicts'] ):
+            for query, subdict_text in zip( queryinfo['queries'], queryinfo['subdicts'] ):
                 try:
-                    self.logger.info( f"For query request {queryinfo['queryid']}, running query: "
+                    # Have to convert lists to tuples in the substitution dictionaries
+                    subdict = json.loads( subdict_text )
+                    if not isinstance( subdict, dict ):
+                        raise TypeError( f"For query {queryinfo['queryid']}, query {query}, "
+                                         f"subdict is a {type(subdict)}, not a dict." )
+                    for key in subdict.keys():
+                        if isinstance( subdict[key], list ):
+                            subdict[key] = tuple( subdict[key] )
+                    self.logger.debug( f"For query request {queryinfo['queryid']}, running query: "
                                       f"{cursor.mogrify(query,subdict)}" )
                     cursor.execute( query, subdict )
                 except Exception as e:
-                    self.logger.exception( "Exception running query: {str(e)}" )
+                    self.logger.exception( f"Exception running query: {str(e)}" )
                     conn.rollback()
                     conn = None
                     qentry.finished = datetime.datetime.now( tz=datetime.timezone.utc )
