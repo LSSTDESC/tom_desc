@@ -24,23 +24,31 @@ _logger = logging.getLogger( "FastDB_API" )
 if not _logger.hasHandlers():
     _logout = logging.StreamHandler( sys.stderr )
     _logger.addHandler( _logout )
-    _formatter = logging.Formatter( f'[%(asctime)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S' )
+    _formatter = logging.Formatter( f'[%(asctime)s - %(levelname)s] - %(message)s', datefmt='%Y-%m-%d %H:%M:%S' )
     _logout.setFormatter( _formatter )
     _logger.setLevel( logging.INFO )
 
 
 class FASTDB(object):
 
-    def _retry_send( url, data=None, json=None, method="post", connecttext="to connect to" ):
+    def _retry_send( self, url, data=None, json=None, method="post", connecttext="to connect to" ):
         sleeptime = self.retrysleep
+        previous_fail = False
         for tries in range(self.retries):
             try:
                 if method=='post':
                     res = self.session.post( url, data=data, json=json )
+                elif method == 'get':
+                    res = self.session.get( url, data=data, json=json )
+                else:
+                    raise ValueError( f"Unknown method {method}, must be get or post" )
                 if res.status_code != 200:
                     raise RuntimeError( f"Got status {res.status_code} trying {connecttext} {url}" )
+                if previous_fail:
+                    _logger.info( f"Connection to {url} succeeded." )
                 return res
-            except Exceptipn:
+            except Exception:
+                previous_fail = True
                 if tries < self.retries - 1:
                     _logger.warning( f"Failed {connecttext} {url}, got status {res.status_code}; "
                                      f"sleeping {sleeptime} seconds and retrying" )

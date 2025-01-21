@@ -31,7 +31,8 @@ _logger.addHandler( _logout )
 _formatter = logging.Formatter( f'[%(asctime)s - %(levelname)s] - %(message)s',
                                     datefmt='%Y-%m-%d %H:%M:%S' )
 _logout.setFormatter( _formatter )
-_logger.setLevel( logging.DEBUG )
+# _logger.setLevel( logging.DEBUG )
+_logger.setLevel( logging.INFO )
 
 
 def _extract_queries( request ):
@@ -92,8 +93,8 @@ class RunSQLQuery(LoginRequiredMixin, django.views.View):
             cursor = dbconn.cursor()
 
             _logger.debug( "Starting query sequence" )
-            _logger.debug( "queries={queries}" )
-            _logger.debug( "subdicts={subdicts}" )
+            _logger.debug( f"queries={queries}" )
+            _logger.debug( f"subdicts={subdicts}" )
             for query, subdict in zip( queries, subdicts ):
                 _logger.debug( f'Query is {query}, subdict is {subdict}, dbuser is {dbuser}' )
                 cursor.execute( query, subdict )
