@@ -108,11 +108,11 @@ class RunSQLQuery(LoginRequiredMixin, django.views.View):
             rows = cursor.fetchall()
 
             if return_format == 0:
-                retval = { 'status': ok,
+                retval = { 'status': 'ok',
                            'rows': [ { c: r[i] for i, c in enumerate(columns) } for r in rows ]
                           }
             elif return_format == 1:
-                retval = { 'status': ok,
+                retval = { 'status': 'ok',
                            'data': { c: [ r[i] for r in rows ] for i, c in enumerate(columns) }
                           }
             else:
