@@ -71,8 +71,13 @@ def _extract_queries( request ):
             if isinstance( subdict[key], list ):
                 subdict[key] = tuple( subdict[key] )
 
-    return queries, subdicts, data
-    
+    # Look for a return format
+    return_format = 0
+    if 'format' in data:
+        return_format = int( data['format'] )
+
+    return queries, subdicts, data, return_format
+
 
 class RunSQLQuery(LoginRequiredMixin, django.views.View):
     raise_exception = True
@@ -85,8 +90,8 @@ class RunSQLQuery(LoginRequiredMixin, django.views.View):
             with open( pwfile ) as ifp:
                 password = ifp.readline().strip()
 
-            queries, subdicts, data = _extract_queries( request )
- 
+            queries, subdicts, data, return_format = _extract_queries( request )
+
             dbconn = psycopg2.connect( dbname=os.getenv('DB_NAME'), host=os.getenv('DB_HOST'),
                                        user=dbuser, password=password,
                                        cursor_factory=psycopg2.extras.RealDictCursor )
@@ -124,7 +129,7 @@ class SubmitLongSQLQuery(LoginRequiredMixin, django.views.View):
     def post( self, request, *args, **kwargs ):
 
         try:
-            queries, subdicts, data = _extract_queries( request )
+            queries, subdicts, data, return_format = _extract_queries( request )
 
             format = 'csv'
             if 'format' in data:

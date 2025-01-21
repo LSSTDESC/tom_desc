@@ -173,6 +173,11 @@ status:
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
+  annotations:
+    nersc.gov/clustername: production
+    nginx.ingress.kubernetes.io/preserve-trailing-slash: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: 500m
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
   name: tom-app
   namespace: desc-tom-buckley-dev
 spec:

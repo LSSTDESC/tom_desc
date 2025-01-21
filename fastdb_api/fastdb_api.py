@@ -36,6 +36,7 @@ class FASTDB(object):
         previous_fail = False
         for tries in range(self.retries):
             try:
+                t0 = time.perf_counter()
                 if method=='post':
                     res = self.session.post( url, data=data, json=json )
                 elif method == 'get':
@@ -45,17 +46,21 @@ class FASTDB(object):
                 if res.status_code != 200:
                     raise RuntimeError( f"Got status {res.status_code} trying {connecttext} {url}" )
                 if previous_fail:
-                    _logger.info( f"Connection to {url} succeeded." )
+                    dt = time.perf_counter() - t0
+                    _logger.info( f"Connection to {url} succeeded in {dt:.3f} seconds." )
                 return res
             except Exception:
                 previous_fail = True
+                dt = time.perf_counter() - t0
                 if tries < self.retries - 1:
-                    _logger.warning( f"Failed {connecttext} {url}, got status {res.status_code}; "
+                    _logger.warning( f"Failed {connecttext} {url} after {dt:.3f} seconds, "
+                                     f"got status {res.status_code}; "
                                      f"sleeping {sleeptime} seconds and retrying" )
                     time.sleep( sleeptime )
                     sleeptime += self.retrysleepinc
                 else:
-                    _logger.error( f"Failed {connecttext} {url} after {self.retries} tries, giving up." )
+                    _logger.error( f"Failed {connecttext} {url} after {self.retries} tries, "
+                                   f"last try took {dt:.3f} seconds.  Giving up." )
                     raise
 
 
