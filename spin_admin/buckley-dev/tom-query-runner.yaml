@@ -71,7 +71,7 @@ spec:
         - mountPath: /logs
           name: tom-logs
         command: [ 'python' ]
-        args: [ 'manage.py', 'long_query_runner', '-l', '-s', '5', '-n', '10' ]
+        args: [ 'manage.py', 'long_query_runner', '-l', '-s', '5', '-n', '1' ]
       dnsConfig: {}
       dnsPolicy: ClusterFirst
       restartPolicy: Always

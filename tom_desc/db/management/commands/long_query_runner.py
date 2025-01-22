@@ -1,3 +1,4 @@
+import os
 import sys
 import logging
 import datetime
@@ -16,6 +17,10 @@ from django.db import transaction
 from django.core.management.base import BaseCommand, CommandError
 from db.models import QueryQueue
 
+_logdir = pathlib.Path( os.getenv( 'LOGDIR', '/logs' ) )
+_loglevel = logging.INFO
+# _loglevel = logging.DEBUG
+
 class Command(BaseCommand):
     help = 'Run long database queries'
 
@@ -23,7 +28,6 @@ class Command(BaseCommand):
         super().__init__( *args, **kwargs )
 
         self.outdir = pathlib.Path( "/query_results" )
-        self.sleeptime = 10
 
         self.logger = logging.getLogger( "long_query_runner" )
         _logout = logging.StreamHandler( sys.stderr )
@@ -31,8 +35,7 @@ class Command(BaseCommand):
         _formatter = logging.Formatter( f'[%(asctime)s - %(levelname)s] - %(message)s', datefmt='%Y-%m-%d %H:%M:%S' )
         _logout.setFormatter( _formatter )
         self.logger.propagate = False
-        self.logger.setLevel( logging.INFO )
-        # self.logger.setLevel( logging.DEBUG )
+        self.logger.setLevel( _loglevel )
 
 
     def prune_old_query_results( self, days=7 ):
@@ -195,14 +198,24 @@ class Command(BaseCommand):
 
 
     def query_loop( self, sleeptime ):
-        while True:
-            while True:
-                queryinfo = self.get_queued_query()
-                if queryinfo is None:
-                    time.sleep( self.sleeptime )
-                    continue
+        sys.stderr.write( "HELLO WORLD!\n" )
+        me = multiprocessing.current_process()
+        self.logger = logging.getLogger( me.name )
+        logout = logging.FileHandler( _logdir / f'long-query-runner_{me.pid}.log' )
+        self.logger.addHandler( logout )
+        formatter = logging.Formatter( f'[%(asctime)s - {me.name} - %(levelname)s] - %(message)s',
+                                       datefmt='%Y-%m-%d %H:%M:%S' )
+        logout.setFormatter( formatter )
+        self.logger.setLevel( _loglevel )
 
-                self.run_query( queryinfo )
+        self.logger.info( f"Process {me.name} ({me.pid}) starting." )
+        while True:
+            queryinfo = self.get_queued_query()
+            if queryinfo is None:
+                time.sleep( sleeptime )
+                continue
+
+            self.run_query( queryinfo )
 
 
     def handle( self, *args, **options ):
@@ -225,14 +238,16 @@ class Command(BaseCommand):
                 raise ValueError( "num-runners must be >=1 and <= 20." )
             if options['num_runners'] == 1:
                 self.logger.info( f"Starting infinite loop to look for and run queries." )
-                self.query_loop( options['sleep-time'] )
+                self.query_loop( options['sleep_time'] )
             else:
                 self.logger.info( f"Starting {options['num_runners']} processes to go into infinite loops "
                                   f"looking for and running queries." )
                 pool = multiprocessing.Pool( options['num_runners'] )
                 for i in range( options['num_runners'] ):
-                    pool.apply_async( query_loop, [ options['sleep-time'] ] )
+                    self.logger.info( f"...starting job {i}...." )
+                    pool.apply_async( lambda args: self.query_loop(*args), [ options['sleep_time'] ] )
                 pool.close()
+                self.logger.info( "Done starting query runners, joining pool." )
                 pool.join()
 
 
