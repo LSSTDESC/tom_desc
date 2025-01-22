@@ -138,19 +138,22 @@ class TestSQLWebInterface:
         for f in direc.glob( '*' ):
             f.unlink()
 
-    # TODO : long query test with subdict
-    #   Also with a list parameter to make sure tuple conversion is working
+    # TODO
+    #   * long query test with subdict
+    #   * (also with a list parameter to make sure tuple conversion is working)
+    #   * a query runner in the background that does stuff
 
     @pytest.fixture( scope='class' )
     def run_long_query( self, submit_long_query ):
-        res = subprocess.run( [ 'python', 'manage.py', 'long_query_runner', '-o' ], cwd='/tom_desc' )
+        res = subprocess.run( [ 'python', '/tom_desc/db/management/utils/long_query_runner.py', '-o' ],
+                              cwd='/tom_desc', capture_output=True )
         assert res.returncode == 0
         yield True
 
     @pytest.fixture( scope='class' )
     def purge_long_queries( self, run_long_query ):
-        res = subprocess.run( [ 'python', 'manage.py', 'long_query_runner', '-p', '0.' ],
-                              cwd='/tom_desc' )
+        res = subprocess.run( [ 'python', '/tom_desc/db/management/utils/long_query_runner.py', '-p', '0.' ],
+                              cwd='/tom_desc', capture_output=True )
         assert res.returncode == 0
         yield True
 
