@@ -28,7 +28,7 @@ with open( "/secrets/django_secret_key" ) as ifp:
     SECRET_KEY = ifp.readline().strip()
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
 ALLOWED_HOSTS = ['*']
 
