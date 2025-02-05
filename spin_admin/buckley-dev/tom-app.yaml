@@ -124,7 +124,7 @@ spec:
           type: Directory
         name: tom-sample
       - hostPath:
-          path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/production/query_results
+          path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/tom_desc_fastdb_dev_query_results
           type: Directory
         name: tom-query-results
       - hostPath:

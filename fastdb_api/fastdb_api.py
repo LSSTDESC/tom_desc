@@ -27,6 +27,7 @@ if not _logger.hasHandlers():
     _formatter = logging.Formatter( f'[%(asctime)s - %(levelname)s] - %(message)s', datefmt='%Y-%m-%d %H:%M:%S' )
     _logout.setFormatter( _formatter )
     _logger.setLevel( logging.INFO )
+    _logger.propagate = False
 
 
 class FASTDB(object):
@@ -61,6 +62,8 @@ class FASTDB(object):
                 else:
                     _logger.error( f"Failed {connecttext} {url} after {self.retries} tries, "
                                    f"last try took {dt:.3f} seconds.  Giving up." )
+                    if res.status_code == 500:
+                        _logger.error( f"Body of 500 return: {res.text}" )
                     raise
 
 
