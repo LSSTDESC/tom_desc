@@ -20,9 +20,9 @@ spec:
     metadata:
       annotations:
         field.cattle.io/ports: '[[]]'
-        nersc.gov/collab_uids: 70268,99896
+        nersc.gov/collab_uids: "99895"
         nersc.gov/gid: "95089"
-        nersc.gov/gids: 95089,57177,60152,96414
+        nersc.gov/gids: 60152,57177,95089,96414,99895
         nersc.gov/roles: user
         nersc.gov/uid: "95089"
         nersc.gov/username: raknop
@@ -40,6 +40,36 @@ spec:
           value: fragile
         - name: DB_USER
           value: postgres
+        - name: MONGODB_ADMIN
+          valueFrom:
+            secretKeyRef:
+              name: tom-secrets
+              key: mongodb_admin
+        - name: MONGODB_ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: tom-secrets
+              key: mongodb_admin_passwd
+        - name: MONGODB_ALERT_WRITER
+          valueFrom:
+            secretKeyRef:
+              name: tom-secrets
+              key: mongodb_alert_writer
+        - name: MONGODB_ALERT_WRITER_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: tom-secrets
+              key: mongodb_alert_writer_password
+        - name: MONGODB_ALERT_READER
+          valueFrom:
+            secretKeyRef:
+              name: tom-secrets
+              key: mongodb_alert_reader
+        - name: MONGODB_ALERT_READER_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: tom-secrets
+              key: mongodb_alert_reader_password
         image: registry.nersc.gov/m1727/raknop/tom_server_bindmount
         imagePullPolicy: Always
         name: tom-query-runner
@@ -66,6 +96,8 @@ spec:
           name: tom-deployment
         - mountPath: /query_results
           name: tom-query-results
+        - mountPath: /logs
+          name: tom-logs
         command: [ 'python' ]
         args: [ 'manage.py', 'long_query_runner', '-l' ]
       dnsConfig: {}
@@ -91,6 +123,10 @@ spec:
           path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/rknop_dev/query_results
           type: Directory
         name: tom-query-results
+      - hostPath:
+          path: /global/cfs/cdirs/lsst/groups/TD/SOFTWARE/tom_deployment/rknop_dev/logs
+          type: Directory
+        name: tom-logs
 ---
 apiVersion: v1
 kind: Service

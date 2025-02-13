@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: tom-rknop-dev-postgres-pvc-20241030
+  name: tom-rknop-dev-postgres-pvc-20250213
   namespace: desc-tom-rknop-dev
 spec:
   accessModes:

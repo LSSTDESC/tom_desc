@@ -724,18 +724,13 @@ where you cut and paste the full ugly pod name from the output of `get all` or `
 
 #### <a name="prodscratch"></a> The steps necessary to create the production TOM from scratch:
 
-NOTE, THIS IS OUT OF DATE, NEEDS TO BE UDPATED FOR THE ADDITION OF MONGODB
-
-If you're making a new deployment somewhere (rather than just recreating
-desc_tom on the Spin production server), you *will* need to edit the YAML files before applying them
-(so that things like "namespace" and "workloadselector" are consistent
-with everything else you're doing).  Please keep the YAML files in the top `spin_admin` directory which committed to the git archive as the ones necessary for the default production installation.
+If you're making a new deployment somewhere (rather than just recreating desc_tom on the Spin production server), you *will* need to edit the YAML files before applying them (so that things like "namespace" and "workloadselector" are consistent with everything else you're doing).  Please keep the YAML files in the top `spin_admin` directory which committed to the git archive as the ones necessary for the default production installation.
 
 After each step, it's worth running a `rancher kubectl get...` command to make sure that the thing you created or started is working.  There are lots of reasons why things can fail, some of which aren't entirely under your control (e.g. servers that docker images are pulled from).
 
-- Create the two persistent volume claims.  There are two files, `tom-postgres-pvc.yaml` and `tom-cassandra-pvc.yaml` that describe these.  Be very careful with these files, as you stand a chance of blowing away the existing TOM database if you do the wrong thing.
+- Create the two persistent volume claims.  There are two files, `tom-postgres-pvc.yaml` and `tom-mongodb-pvc.yaml` that describe these.  Be very careful with these files, as you stand a chance of blowing away the existing TOM database if you do the wrong thing.
 
-- Create the cassandra deployment.  (As of this writing, the cassandra database is actually not actively used, but the TOM won't start up without it being available.)  The YAML file is `tom-cassandra.yaml`
+- Create the mongo deployment.  The YAML file is `tom-mongodb.yaml`
 
 - Create the postgres deployment.  The YAML file is `tom-postgres.yaml`
 
@@ -763,6 +758,13 @@ After each step, it's worth running a `rancher kubectl get...` command to make s
    >>> g.save()
    >>> exit()
    ```
+
+- Migrate static files.  Because we don't run the TOM in debug mode, it doesn't server static files dynamically out of where they come from.  Rather, it serves them as actual real static files.  But, these files have to be "built" (really, just copied) into the place where the server will look for them.  Do this by running, on the TOM,
+  ```
+  python manage.py collectstatic
+  kill -HUP 1
+  ```
+  The second command restarts the web server so it will actually find the static files you created.  If you do something that recreates static files, you may need to run this again.
 
 - You then probably want to do things to copy users and populate databases and things....
 
