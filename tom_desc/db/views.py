@@ -4,6 +4,7 @@ import json
 import uuid
 import datetime
 import logging
+import pathlib
 import psycopg2
 import psycopg2.extras
 from django.http import HttpResponse, JsonResponse
@@ -24,15 +25,13 @@ from db.models import QueryQueue
 # sure the postgres user postgres_ro is a readonly user.  Still scary,
 # but not Cthulhuesque.
 
-_logger = logging.getLogger( "db_views" )
-if not _logger.hasHandlers():
-    _logout = logging.StreamHandler( sys.stderr )
-    _logger.addHandler( _logout )
-    _formatter = logging.Formatter( f'[%(asctime)s - %(levelname)s] - %(message)s',
+_logger = logging.getLogger("db_views")
+_logout = logging.FileHandler( pathlib.Path( os.getenv('LOGDIR', "/logs" )) / "db_views.log" )
+_logger.addHandler( _logout )
+_formatter = logging.Formatter( f'[%(asctime)s - %(levelname)s] - %(message)s',
                                     datefmt='%Y-%m-%d %H:%M:%S' )
-    _logout.setFormatter( _formatter )
-    # _logger.setLevel( logging.INFO )
-    _logger.setLevel( logging.DEBUG )
+_logout.setFormatter( _formatter )
+_logger.setLevel( logging.DEBUG )
 
 
 def _extract_queries( request ):
@@ -55,12 +54,13 @@ def _extract_queries( request ):
     else:
         if isinstance( data['subdict'], list ):
             subdicts = data['subdict']
+            print(subdicts)
         elif not isinstance( data['subdict'], dict ):
-            raise TypeError( "query must be either a list of dicts or a dict" )
+            raise TypeError( "subdict must be either a list of dicts or a dict" )
         else:
             subdicts = [ data['subdict'] ]
-        if len(subdicts) != len(queries):
-            raise ValueError( "number of queries and subdicts must match" )
+        #if len(subdicts) != len(queries):
+        #    raise ValueError( "number of queries and subdicts must match" )
         if not all( [ isinstance(s, dict) for s in subdicts ] ):
             raise TypeError( "subdicts must all be dicts" )
 
@@ -85,7 +85,7 @@ class RunSQLQuery(LoginRequiredMixin, django.views.View):
                 password = ifp.readline().strip()
 
             queries, subdicts, data = _extract_queries( request )
-
+ 
             dbconn = psycopg2.connect( dbname=os.getenv('DB_NAME'), host=os.getenv('DB_HOST'),
                                        user=dbuser, password=password,
                                        cursor_factory=psycopg2.extras.RealDictCursor )

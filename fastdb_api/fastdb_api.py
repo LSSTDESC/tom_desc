@@ -102,7 +102,6 @@ class FASTDB(object):
 
         url = CHECK_LONG_SQL_QUERY_URL + queryid +'/'
         r = self.session.post(url)
-        print(r.status_code)
         if r.status_code == requests.codes.ok:
             return r.json()
         else:
@@ -113,10 +112,9 @@ class FASTDB(object):
 
         url = GET_LONG_SQL_QUERY_URL + queryid +'/'
         r = self.session.post(url)
-        print(r.status_code)
         ctype = r.headers['content-type']
         if r.status_code == requests.codes.ok:
-            if ctype == 'text/csv':
+            if ctype == 'text/csv; charset=utf-8':
                 return r.text
             elif ctype == 'application/octet-stream':
                 return r.content
@@ -124,7 +122,7 @@ class FASTDB(object):
             sys.stderr.write( f"Got an error: {r.status_code}\n" )
 
             
-    def data_insert(self,table,data):
+    def insert_data(self,table,data):
 
         query = {'insert':data}
         if table == 'dia_source':
@@ -134,7 +132,7 @@ class FASTDB(object):
             
         return r.json()
 
-    def data_update(self,table,data):
+    def update_data(self,table,data):
 
         query = {'update':data}
         if table == 'dia_source':
