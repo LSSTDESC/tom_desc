@@ -95,7 +95,7 @@ spec:
               key: mongodb_alert_reader_password
               name: tom-secrets
               optional: false
-        image: registry.nersc.gov/m1727/rknop/tom-mongodb:latest
+        image: registry.nersc.gov/m1727/raknop/tom-mongodb:rknop-dev
         imagePullPolicy: Always
         name: mongodb
         resources: {}

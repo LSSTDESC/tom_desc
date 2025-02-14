@@ -31,7 +31,7 @@ spec:
         workload.user.cattle.io/workloadselector: deployment-desc-tom-rknop-dev-fakebroker
     spec:
       containers:
-      - image: registry.nersc.gov/m1727/raknop/fakebroker
+      - image: registry.nersc.gov/m1727/raknop/fakebroker:rknop-dev
         imagePullPolicy: Always
         name: fakebroker
         resources: {}

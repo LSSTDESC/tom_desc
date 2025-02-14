@@ -62,7 +62,7 @@ spec:
                 secretKeyRef:
                   name: tom-secrets
                   key: mongodb_alert_reader_password
-            image: registry.nersc.gov/m1727/raknop/tom_server_bindmount
+            image: registry.nersc.gov/m1727/raknop/tom_server_bindmount:rknop-dev
             imagePullPolicy: Always
             name: tom-query-pruner
             resources: {}
