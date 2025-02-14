@@ -5,7 +5,7 @@
 #
 # Build one of those in the parent directory to this directory with 
 #
-#    docker build --target tom-server-bindmount -t <image_name> -f docker_server/Dockerfile .
+#    DOCKER_BUILDKIT=1 docker build --target tom-server-bindmount -t <image_name> -f docker_server/Dockerfile .
 #
 # You can also build a "dev" version, which is used in the tests, with target tom-server-bindmount-dev
 #

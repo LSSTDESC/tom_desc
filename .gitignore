@@ -144,13 +144,18 @@ tom_desc/elasticc2/static/elasticc2/alertsend
 logs/**
 !logs/.placeholder
 
+# query-results directory
+query-results/**
+!query-results/.placeholder
+
 # FastDB files
 tom_desc/fastdb_dev/management/commands/insert_last_time.sql
 fastdb_get_alerts/test*.py
 tom_desc/fastdb_dev/management/commands/test.py
 
 # Untarred test data
-tests/elasticc2_alert_test_data/
+tests/elasticc2_alert_test_data/**
+!tests/elasticc2_alert_test_data/.placeholder
 
 # Typcal locations of database dumps for devs using docker compose env
 tom_desc/admin_tools/elasticc2_dump_10obj.sql
