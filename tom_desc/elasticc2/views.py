@@ -1479,7 +1479,7 @@ class WhatSpectraAreWanted(PermissionRequiredMixin, django.views.View):
                                               - datetime.timedelta( days=detected_in_last_days ) ).mjd
 
             if 'no_spectra_in_last_days' in data.keys():
-                no_spectra_in_last_days = int( data['not_observed_in_last_days'] )
+                no_spectra_in_last_days = int( data['no_spectra_in_last_days'] )
             else:
                 no_spectra_in_last_days = 7
             nospecsince = astropy.time.Time( datetime.datetime.now()
